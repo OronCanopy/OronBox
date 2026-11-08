@@ -59,6 +59,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.system.exitProcess
 
 class MainActivity : FlutterActivity() {
     private class BondRemovalException(message: String) : IOException(message)
@@ -306,7 +307,11 @@ class MainActivity : FlutterActivity() {
         ).also { channel ->
             channel.setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "getInitialFile" -> result.success(pendingOpenFilePath)
+                    "getInitialFile" -> {
+                        val path = pendingOpenFilePath
+                        pendingOpenFilePath = null
+                        result.success(path)
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -2628,6 +2633,7 @@ class MainActivity : FlutterActivity() {
         sessionMarker = null
         XmsWearableBridge.detach(xmsWearableChannel)
         xmsWearableChannel = null
+        fileOpenChannel = null
         closeZeppSettings(notify = false)
         stopSppScan()
         sendExecutor.shutdownNow()
@@ -2648,5 +2654,10 @@ class MainActivity : FlutterActivity() {
         pendingBluetoothPermissionResult = null
         pendingBluetoothPermissionContinuation = null
         super.onDestroy()
+        if (isFinishing && !isChangingConfigurations) {
+            stopBackgroundServiceIfIdle()
+            Process.killProcess(Process.myPid())
+            exitProcess(0)
+        }
     }
 }

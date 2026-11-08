@@ -6049,6 +6049,37 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get globalAiTestStart => '开始测试';
+
+  @override
+  String get wasmUnsupportedTitle => '当前系统无法加载 Wasm 运行时';
+
+  @override
+  String get wasmUnsupportedMessage =>
+      '受 Android 8 系统内核安全策略限制\n实时语音流识别与创作者图片压缩处理不可用\n\n如需使用以上特性，请升级系统至 Android 9+\n或使用非 Android 8 系统的设备';
+
+  @override
+  String get doNotShowAgainThisSession => '本次运行期间不再提示';
+
+  @override
+  String get settingsMiAccountRegion => '服务器区域';
+
+  @override
+  String get settingsMiAccountRegionCn => '中国大陆 (CN)';
+
+  @override
+  String get settingsMiAccountRegionDe => '欧洲 (DE)';
+
+  @override
+  String get settingsMiAccountRegionRu => '俄罗斯 (RU)';
+
+  @override
+  String get settingsMiAccountRegionSg => '全球 / 新加坡 (SG)';
+
+  @override
+  String get settingsMiAccountRegionUs => '美洲 (US)';
+
+  @override
+  String get settingsMiAccountRegionIn => '印度 (IN)';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -11432,4 +11463,35 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String autoBackupStatusDetail(int value, String unit, String retentionText) {
     return '已開啟 · 每 $value $unit · 保留 $retentionText';
   }
+
+  @override
+  String get wasmUnsupportedTitle => '目前系統無法載入 Wasm 執行階段';
+
+  @override
+  String get wasmUnsupportedMessage =>
+      '受 Android 8 系統核心安全性原則限制\n即時語音串流辨識與創作者圖片壓縮處理不可用\n\n如需使用以上功能，請升級系統至 Android 9+\n或使用非 Android 8 系統的裝置';
+
+  @override
+  String get doNotShowAgainThisSession => '本次執行期間不再提示';
+
+  @override
+  String get settingsMiAccountRegion => '伺服器區域';
+
+  @override
+  String get settingsMiAccountRegionCn => '中國大陸 (CN)';
+
+  @override
+  String get settingsMiAccountRegionDe => '歐洲 (DE)';
+
+  @override
+  String get settingsMiAccountRegionRu => '俄羅斯 (RU)';
+
+  @override
+  String get settingsMiAccountRegionSg => '全球 / 新加坡 (SG)';
+
+  @override
+  String get settingsMiAccountRegionUs => '美洲 (US)';
+
+  @override
+  String get settingsMiAccountRegionIn => '印度 (IN)';
 }

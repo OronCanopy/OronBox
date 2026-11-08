@@ -135,6 +135,46 @@ void main() {
       expect((await service.loadStoredToken())?.toJson(), newToken.toJson());
     },
   );
+
+  test('MiAccountRegion generates correct endpoints and region tags', () {
+    expect(MiAccountService.deviceListUrl(MiAccountRegion.cn), 'https://hlth.io.mi.com/app/v1/source/get_source_list');
+    expect(MiAccountService.stsCallbackUrl(MiAccountRegion.cn), 'https://sts-hlth.io.mi.com/healthapp/sts');
+    expect(MiAccountService.serviceLoginUrl(MiAccountRegion.cn), 'https://account.xiaomi.com/pass/serviceLogin?sid=miothealth&_json=true');
+
+    expect(MiAccountService.deviceListUrl(MiAccountRegion.de), 'https://de.hlth.io.mi.com/app/v1/source/get_source_list');
+    expect(MiAccountService.stsCallbackUrl(MiAccountRegion.de), 'https://de.sts-hlth.io.mi.com/healthapp/sts');
+    expect(MiAccountService.serviceLoginUrl(MiAccountRegion.de), 'https://de.account.xiaomi.com/pass/serviceLogin?sid=miothealth&_json=true');
+
+    expect(MiAccountService.deviceListUrl(MiAccountRegion.ru), 'https://ru.hlth.io.mi.com/app/v1/source/get_source_list');
+    expect(MiAccountService.stsCallbackUrl(MiAccountRegion.ru), 'https://ru.sts-hlth.io.mi.com/healthapp/sts');
+
+    expect(MiAccountService.deviceListUrl(MiAccountRegion.sg), 'https://sg.hlth.io.mi.com/app/v1/source/get_source_list');
+    expect(MiAccountService.stsCallbackUrl(MiAccountRegion.sg), 'https://sg.sts-hlth.io.mi.com/healthapp/sts');
+
+    expect(MiAccountRegion.fromTag('sgp'), MiAccountRegion.sg);
+    expect(MiAccountRegion.fromTag('DE'), MiAccountRegion.de);
+    expect(MiAccountRegion.fromTag('unknown'), MiAccountRegion.cn);
+  });
+
+  test('MiAccountToken preserves region across JSON serialization', () {
+    const token = MiAccountToken(
+      userId: '10001',
+      deviceId: 'device-id',
+      ssecurity: _tokenValue,
+      serviceToken: 'service-token',
+      cUserId: 'c-user-id',
+      passToken: 'pass-token',
+      psecurity: 'psecurity',
+      region: MiAccountRegion.de,
+    );
+
+    final json = token.toJson();
+    expect(json['region'], 'de');
+
+    final restored = MiAccountToken.fromJson(json);
+    expect(restored, isNotNull);
+    expect(restored!.region, MiAccountRegion.de);
+  });
 }
 
 const _tokenValue = 'c2VjdXJpdHk=';

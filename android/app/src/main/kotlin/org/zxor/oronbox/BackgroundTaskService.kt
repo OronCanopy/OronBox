@@ -72,6 +72,12 @@ class BackgroundTaskService : Service() {
         stopSelf(startId)
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         super.onDestroy()

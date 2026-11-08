@@ -210,12 +210,17 @@ class MiAccountService {
   static const _sessionKey = PrivateAppState.miToken;
   static const _sdkVersion = 'accountsdk-18.8.15';
   static const _healthSid = 'miothealth';
-  static const _serviceLoginUrl =
-      'https://account.xiaomi.com/pass/serviceLogin?sid=$_healthSid&_json=true';
-  static const _serviceLoginAuthUrl =
-      'https://account.xiaomi.com/pass/serviceLoginAuth2';
-  static const _deviceListUrl =
-      'https://hlth.io.mi.com/app/v1/source/get_source_list';
+  static String serviceLoginUrl([MiAccountRegion region = MiAccountRegion.cn]) =>
+      'https://${region.hostPrefix}account.xiaomi.com/pass/serviceLogin?sid=$_healthSid&_json=true';
+  static String serviceLoginAuthUrl([
+    MiAccountRegion region = MiAccountRegion.cn,
+  ]) => 'https://${region.hostPrefix}account.xiaomi.com/pass/serviceLoginAuth2';
+  static String deviceListUrl([MiAccountRegion region = MiAccountRegion.cn]) =>
+      'https://${region.hostPrefix}hlth.io.mi.com/app/v1/source/get_source_list';
+  static String stsCallbackUrl([MiAccountRegion region = MiAccountRegion.cn]) =>
+      'https://${region.hostPrefix}sts-hlth.io.mi.com/healthapp/sts';
+  static String agpsUrl(MiAccountRegion region, {required bool online}) =>
+      'https://${region.hostPrefix}hlth.io.mi.com/healthapp/agps/${online ? 'get_online_file' : 'get_offline_file'}';
 
   static const defaultUserAgent =
       'Mozilla/5.0 (Linux; Android 13; OronBox) AppleWebKit/537.36 '
@@ -282,7 +287,7 @@ class MiAccountService {
     late final Response<String> response;
     try {
       response = await _dio.get<String>(
-        _serviceLoginUrl,
+        serviceLoginUrl(token.region),
         options: _requestOptions(userAgent, cookieJar),
       );
     } on DioException catch (error) {
@@ -315,6 +320,7 @@ class MiAccountService {
         userAgent: userAgent,
         deviceId: token.deviceId,
         cookieJar: cookieJar,
+        region: token.region,
       );
     } on DioException catch (error) {
       final status = error.response?.statusCode;
@@ -362,6 +368,7 @@ class MiAccountService {
     required String username,
     required String password,
     String userAgent = defaultUserAgent,
+    MiAccountRegion region = MiAccountRegion.cn,
   }) async {
     final deviceId = _randomDeviceId();
     final cookieJar = _CookieJar()
@@ -369,7 +376,7 @@ class MiAccountService {
       ..set('deviceId', deviceId);
 
     final step1 = await _dio.get<String>(
-      _serviceLoginUrl,
+      serviceLoginUrl(region),
       options: _requestOptions(userAgent, cookieJar),
     );
     cookieJar.mergeSetCookie(step1.headers);
@@ -382,6 +389,7 @@ class MiAccountService {
         userAgent: userAgent,
         deviceId: deviceId,
         cookieJar: cookieJar,
+        region: region,
       );
     }
 
@@ -392,7 +400,7 @@ class MiAccountService {
     final form = <String, String>{
       'sid': _healthSid,
       'hash': passwordHash,
-      'callback': 'https://sts-hlth.io.mi.com/healthapp/sts',
+      'callback': stsCallbackUrl(region),
       'qs': '%3Fsid%3Dmiothealth%26_json%3Dtrue',
       'user': username,
       '_sign': sign,
@@ -400,7 +408,7 @@ class MiAccountService {
     };
 
     final step2 = await _dio.post<String>(
-      _serviceLoginAuthUrl,
+      serviceLoginAuthUrl(region),
       data: form,
       options: _requestOptions(userAgent, cookieJar),
     );
@@ -415,6 +423,7 @@ class MiAccountService {
       userAgent: userAgent,
       deviceId: deviceId,
       cookieJar: cookieJar,
+      region: region,
     );
   }
 
@@ -424,7 +433,7 @@ class MiAccountService {
   }) async {
     final body = await _miServiceCallEncrypted(
       token: token,
-      url: _deviceListUrl,
+      url: deviceListUrl(token.region),
       paramsPlain: const {'data': '{"page_size":50,"status":1}'},
       userAgent: userAgent,
     );
@@ -459,9 +468,7 @@ class MiAccountService {
     required String model,
     String userAgent = defaultUserAgent,
   }) async {
-    final url = online
-        ? 'https://hlth.io.mi.com/healthapp/agps/get_online_file'
-        : 'https://hlth.io.mi.com/healthapp/agps/get_offline_file';
+    final url = agpsUrl(token.region, online: online);
     final body = await _miServiceCallEncrypted(
       token: token,
       url: url,
@@ -503,6 +510,7 @@ class MiAccountService {
     required MiAccountTwoFactorRequired challenge,
     required String cookieHeader,
     String userAgent = defaultUserAgent,
+    MiAccountRegion region = MiAccountRegion.cn,
   }) async {
     final deviceId =
         _extractCookieValue(cookieHeader, 'deviceId') ?? challenge.deviceId;
@@ -518,7 +526,7 @@ class MiAccountService {
       }
 
       final step1 = await _dio.get<String>(
-        _serviceLoginUrl,
+        serviceLoginUrl(region),
         options: _requestOptions(userAgent, cookieJar),
       );
       cookieJar.mergeSetCookie(step1.headers);
@@ -545,6 +553,7 @@ class MiAccountService {
         userAgent: userAgent,
         deviceId: deviceId,
         cookieJar: cookieJar,
+        region: region,
       );
     }
     throw StateError(
@@ -558,6 +567,7 @@ class MiAccountService {
     required String userAgent,
     required String deviceId,
     required _CookieJar cookieJar,
+    MiAccountRegion region = MiAccountRegion.cn,
   }) async {
     final code = _parseCode(authResp);
     final ssecurity = authResp['ssecurity']?.toString() ?? '';
@@ -606,6 +616,7 @@ class MiAccountService {
           authResp['passToken']?.toString() ??
           '',
       psecurity: authResp['psecurity']?.toString() ?? '',
+      region: region,
     );
   }
 
@@ -658,7 +669,7 @@ class MiAccountService {
           responseType: ResponseType.plain,
           headers: {
             'User-Agent': userAgent,
-            'region_tag': 'cn',
+            'region_tag': token.region.tag,
             'HandleParams': 'true',
             'Cookie': cookieParts.join('; '),
           },

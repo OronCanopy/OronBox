@@ -22,6 +22,7 @@ import 'package:oronbox/src/core/network/github_cdn.dart';
 import 'package:oronbox/src/core/providers/app_settings_providers.dart';
 import 'package:oronbox/src/core/utils/app_exit.dart';
 import 'package:oronbox/src/features/accounts/application/host_accounts.dart';
+import 'package:oronbox/src/features/accounts/models/mi_account_models.dart';
 import 'package:oronbox/src/features/accounts/services/mi_account_two_factor_resolver.dart';
 import 'package:oronbox/src/features/oobe/oobe_state.dart';
 import 'package:oronbox/src/features/settings/application/app_data_backup.dart';
@@ -1113,6 +1114,7 @@ Future<void> _showMiAccountLogin(BuildContext context, WidgetRef ref) async {
   final accounts = ref.read(hostAccountsProvider.notifier);
   final credentials = await accounts.rememberedCredentials('xiaomi');
   var rememberCredentials = credentials['remember'] == true;
+  var selectedRegion = MiAccountRegion.cn;
   var username = rememberCredentials
       ? credentials['username']?.toString() ?? ''
       : '';
@@ -1147,6 +1149,7 @@ Future<void> _showMiAccountLogin(BuildContext context, WidgetRef ref) async {
                   .loginXiaomi(
                     username: normalizedUsername,
                     password: password,
+                    region: selectedRegion.tag,
                   );
               await accounts.saveCredentials(
                 provider: 'xiaomi',
@@ -1184,6 +1187,7 @@ Future<void> _showMiAccountLogin(BuildContext context, WidgetRef ref) async {
                     .completeXiaomiTwoFactor(
                       challenge: e,
                       cookieHeader: cookieHeader,
+                      region: selectedRegion.tag,
                     );
                 await accounts.saveCredentials(
                   provider: 'xiaomi',
@@ -1227,6 +1231,27 @@ Future<void> _showMiAccountLogin(BuildContext context, WidgetRef ref) async {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  DropdownButtonFormField<MiAccountRegion>(
+                    initialValue: selectedRegion,
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsMiAccountRegion,
+                      prefixIcon: const Icon(Icons.public_outlined),
+                    ),
+                    items: MiAccountRegion.values.map((region) {
+                      return DropdownMenuItem(
+                        value: region,
+                        child: Text(region.localizedName(l10n)),
+                      );
+                    }).toList(),
+                    onChanged: running
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              setState(() => selectedRegion = value);
+                            }
+                          },
+                  ),
+                  const SizedBox(height: 12),
                   TextFormField(
                     initialValue: username,
                     onChanged: (value) => username = value,

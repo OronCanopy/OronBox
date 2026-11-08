@@ -6388,4 +6388,36 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get globalAiTestStart => 'Start Test';
+
+  @override
+  String get wasmUnsupportedTitle =>
+      'Среда выполнения Wasm недоступна в этой системе';
+
+  @override
+  String get wasmUnsupportedMessage =>
+      'Из-за ограничений безопасности ядра Android 8\nраспознавание голосового потока и сжатие изображений недоступны\n\nДля использования этих функций обновите систему до Android 9+\nили используйте устройство с другой версией ОС';
+
+  @override
+  String get doNotShowAgainThisSession => 'Не показывать снова в этой сессии';
+
+  @override
+  String get settingsMiAccountRegion => 'Регион сервера';
+
+  @override
+  String get settingsMiAccountRegionCn => 'Материковый Китай (CN)';
+
+  @override
+  String get settingsMiAccountRegionDe => 'Европа (DE)';
+
+  @override
+  String get settingsMiAccountRegionRu => 'Россия (RU)';
+
+  @override
+  String get settingsMiAccountRegionSg => 'Глобальный / Сингапур (SG)';
+
+  @override
+  String get settingsMiAccountRegionUs => 'США (US)';
+
+  @override
+  String get settingsMiAccountRegionIn => 'Индия (IN)';
 }

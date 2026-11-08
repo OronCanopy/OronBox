@@ -1,3 +1,83 @@
+import 'package:oronbox/src/app/generated/app_localizations.dart';
+
+enum MiAccountRegion {
+  cn(
+    tag: 'cn',
+    hostPrefix: '',
+    labelZh: '中国大陆 (CN)',
+    labelEn: 'China Mainland (CN)',
+  ),
+  de(
+    tag: 'de',
+    hostPrefix: 'de.',
+    labelZh: '欧洲 (DE)',
+    labelEn: 'Europe (DE)',
+  ),
+  ru(
+    tag: 'ru',
+    hostPrefix: 'ru.',
+    labelZh: '俄罗斯 (RU)',
+    labelEn: 'Russia (RU)',
+  ),
+  sg(
+    tag: 'sg',
+    hostPrefix: 'sg.',
+    labelZh: '全球 / 新加坡 (SG)',
+    labelEn: 'Global / Singapore (SG)',
+  ),
+  us(
+    tag: 'us',
+    hostPrefix: 'us.',
+    labelZh: '美洲 (US)',
+    labelEn: 'United States (US)',
+  ),
+  inRegion(
+    tag: 'in',
+    hostPrefix: 'in.',
+    labelZh: '印度 (IN)',
+    labelEn: 'India (IN)',
+  );
+
+  const MiAccountRegion({
+    required this.tag,
+    required this.hostPrefix,
+    required this.labelZh,
+    required this.labelEn,
+  });
+
+  final String tag;
+  final String hostPrefix;
+  final String labelZh;
+  final String labelEn;
+
+  static MiAccountRegion fromTag(String? tag) {
+    if (tag == null || tag.isEmpty) return MiAccountRegion.cn;
+    final normalized = tag.toLowerCase().trim();
+    if (normalized == 'sgp') return MiAccountRegion.sg;
+    for (final r in values) {
+      if (r.tag == normalized) return r;
+    }
+    return MiAccountRegion.cn;
+  }
+
+  String localizedName(AppLocalizations l10n) {
+    switch (this) {
+      case MiAccountRegion.cn:
+        return l10n.settingsMiAccountRegionCn;
+      case MiAccountRegion.de:
+        return l10n.settingsMiAccountRegionDe;
+      case MiAccountRegion.ru:
+        return l10n.settingsMiAccountRegionRu;
+      case MiAccountRegion.sg:
+        return l10n.settingsMiAccountRegionSg;
+      case MiAccountRegion.us:
+        return l10n.settingsMiAccountRegionUs;
+      case MiAccountRegion.inRegion:
+        return l10n.settingsMiAccountRegionIn;
+    }
+  }
+}
+
 class MiAccountToken {
   const MiAccountToken({
     required this.userId,
@@ -7,6 +87,7 @@ class MiAccountToken {
     required this.cUserId,
     required this.passToken,
     required this.psecurity,
+    this.region = MiAccountRegion.cn,
   });
 
   final String userId;
@@ -16,6 +97,7 @@ class MiAccountToken {
   final String cUserId;
   final String passToken;
   final String psecurity;
+  final MiAccountRegion region;
 
   bool get isValid => ssecurity.isNotEmpty && serviceToken.isNotEmpty;
 
@@ -27,6 +109,7 @@ class MiAccountToken {
     'c_user_id': cUserId,
     'pass_token': passToken,
     'psecurity': psecurity,
+    'region': region.tag,
   };
 
   static MiAccountToken? fromJson(Map<String, Object?> json) {
@@ -38,6 +121,7 @@ class MiAccountToken {
       cUserId: json['c_user_id']?.toString() ?? '',
       passToken: json['pass_token']?.toString() ?? '',
       psecurity: json['psecurity']?.toString() ?? '',
+      region: MiAccountRegion.fromTag(json['region']?.toString()),
     );
     return token.isValid ? token : null;
   }

@@ -11451,6 +11451,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Start Test'**
   String get globalAiTestStart;
+
+  /// No description provided for @wasmUnsupportedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Wasm Runtime Unavailable on This System'**
+  String get wasmUnsupportedTitle;
+
+  /// No description provided for @wasmUnsupportedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Due to Android 8 kernel security policy restrictions,\nreal-time voice streaming and creator image compression are unavailable\n\nTo use these features, update your system to Android 9+\nor use a device running a non-Android 8 system'**
+  String get wasmUnsupportedMessage;
+
+  /// No description provided for @doNotShowAgainThisSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Do not show again this session'**
+  String get doNotShowAgainThisSession;
+
+  /// No description provided for @settingsMiAccountRegion.
+  ///
+  /// In en, this message translates to:
+  /// **'Server Region'**
+  String get settingsMiAccountRegion;
+
+  /// No description provided for @settingsMiAccountRegionCn.
+  ///
+  /// In en, this message translates to:
+  /// **'China Mainland (CN)'**
+  String get settingsMiAccountRegionCn;
+
+  /// No description provided for @settingsMiAccountRegionDe.
+  ///
+  /// In en, this message translates to:
+  /// **'Europe (DE)'**
+  String get settingsMiAccountRegionDe;
+
+  /// No description provided for @settingsMiAccountRegionRu.
+  ///
+  /// In en, this message translates to:
+  /// **'Russia (RU)'**
+  String get settingsMiAccountRegionRu;
+
+  /// No description provided for @settingsMiAccountRegionSg.
+  ///
+  /// In en, this message translates to:
+  /// **'Global / Singapore (SG)'**
+  String get settingsMiAccountRegionSg;
+
+  /// No description provided for @settingsMiAccountRegionUs.
+  ///
+  /// In en, this message translates to:
+  /// **'United States (US)'**
+  String get settingsMiAccountRegionUs;
+
+  /// No description provided for @settingsMiAccountRegionIn.
+  ///
+  /// In en, this message translates to:
+  /// **'India (IN)'**
+  String get settingsMiAccountRegionIn;
 }
 
 class _AppLocalizationsDelegate

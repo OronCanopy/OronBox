@@ -49,7 +49,7 @@ class FileOpenHandler extends ConsumerStatefulWidget {
 
 class _FileOpenHandlerState extends ConsumerState<FileOpenHandler> {
   static const _channel = MethodChannel('oronbox/file_open');
-  final Set<String> _handledPaths = {};
+  final Set<String> _activeOpeningPaths = {};
   StreamSubscription<List<String>>? _launchArgumentsSubscription;
   bool _dragging = false;
 
@@ -101,8 +101,12 @@ class _FileOpenHandlerState extends ConsumerState<FileOpenHandler> {
     final file = XFile(path);
     final navigatorContext = rootNavigatorKey.currentContext;
     if (navigatorContext == null) return;
-    if (!_handledPaths.add(path)) return;
-    await _installFiles([file], navigatorContext);
+    if (!_activeOpeningPaths.add(path)) return;
+    try {
+      await _installFiles([file], navigatorContext);
+    } finally {
+      _activeOpeningPaths.remove(path);
+    }
   }
 
   Future<_PluginFileResult> _installPlugin(

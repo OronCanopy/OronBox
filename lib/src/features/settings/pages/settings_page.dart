@@ -21,6 +21,7 @@ import 'package:oronbox/src/features/resources/application/resource_catalog_prov
 import 'package:oronbox/src/features/resources/application/creator/creator_workspace_controller.dart';
 import 'package:oronbox/src/features/resources/pages/creator/creator_shared.dart';
 import 'package:oronbox/src/features/accounts/application/host_accounts.dart';
+import 'package:oronbox/src/features/accounts/models/mi_account_models.dart';
 import 'package:oronbox/src/features/accounts/services/mi_account_two_factor_resolver.dart';
 
 final _desktopExitBehaviorProvider = Provider<int?>((ref) {
@@ -712,6 +713,7 @@ class SettingsPage extends ConsumerWidget {
     final credentials = await accounts.rememberedCredentials('xiaomi');
     final existing = ref.read(hostAccountsProvider).xiaomi;
     var rememberCredentials = credentials['remember'] == true;
+    var selectedRegion = MiAccountRegion.cn;
     var username = rememberCredentials
         ? credentials['username']?.toString() ?? ''
         : '';
@@ -746,6 +748,7 @@ class SettingsPage extends ConsumerWidget {
                     .loginXiaomi(
                       username: normalizedUsername,
                       password: password,
+                      region: selectedRegion.tag,
                     );
                 await accounts.saveCredentials(
                   provider: 'xiaomi',
@@ -783,6 +786,7 @@ class SettingsPage extends ConsumerWidget {
                       .completeXiaomiTwoFactor(
                         challenge: e,
                         cookieHeader: cookieHeader,
+                        region: selectedRegion.tag,
                       );
                   await accounts.saveCredentials(
                     provider: 'xiaomi',
@@ -850,6 +854,27 @@ class SettingsPage extends ConsumerWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    DropdownButtonFormField<MiAccountRegion>(
+                      initialValue: selectedRegion,
+                      decoration: InputDecoration(
+                        labelText: l10n.settingsMiAccountRegion,
+                        prefixIcon: const Icon(Icons.public_outlined),
+                      ),
+                      items: MiAccountRegion.values.map((region) {
+                        return DropdownMenuItem(
+                          value: region,
+                          child: Text(region.localizedName(l10n)),
+                        );
+                      }).toList(),
+                      onChanged: running
+                          ? null
+                          : (value) {
+                              if (value != null) {
+                                setState(() => selectedRegion = value);
+                              }
+                            },
+                    ),
+                    const SizedBox(height: 12),
                     TextFormField(
                       initialValue: username,
                       onChanged: (value) => username = value,

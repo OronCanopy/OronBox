@@ -393,9 +393,7 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
       );
     } catch (error) {
       _log.severe('Command ${command.method} failed', error);
-      return CommandResult.failure(
-        CommandError('internal', error.toString()),
-      );
+      return CommandResult.failure(CommandError('internal', error.toString()));
     }
   }
 
@@ -2788,6 +2786,22 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     try {
       return await service.fetchBoundDevices(token: token);
     } on MiAccountSessionExpired catch (error) {
+      if (token.passToken.isNotEmpty) {
+        try {
+          _log.info(
+            'Xiaomi session expired, attempting refresh with passToken',
+          );
+          final refreshed = await service.refreshToken(token: token);
+          await service.persistToken(refreshed);
+          _xiaomiAccountToken = refreshed;
+          _xiaomiAccountSessionLoaded = true;
+          return await service.fetchBoundDevices(token: refreshed);
+        } on MiAccountSessionExpired {
+          // passToken refresh also expired, proceed to sign out
+        } catch (refreshErr) {
+          _log.warning('Xiaomi session refresh failed: $refreshErr');
+        }
+      }
       _log.warning('Xiaomi account session expired while fetching devices');
       _markXiaomiAccountSignedOut();
       throw CommandFailure(
@@ -2904,21 +2918,66 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
             .login(username: username, password: password);
         return _accountStatus('amazfit');
       case 'xiaomi':
+        final regionTag = params['region']?.toString();
+        final region = MiAccountRegion.fromTag(regionTag);
+        final service = container.read(miAccountServiceProvider);
+        await _restoreXiaomiAccountSession();
+        final currentToken = _xiaomiAccountToken;
+
+        final prefs = SharedPrefsService.instance;
+        final savedUsername =
+            prefs.getString('mi_account.username')?.trim() ?? '';
+        final isSameUser =
+            currentToken != null &&
+            (username.isEmpty ||
+                savedUsername.isEmpty ||
+                username == savedUsername ||
+                username == currentToken.userId);
+
+        if (currentToken != null &&
+            currentToken.isValid &&
+            currentToken.region == region &&
+            isSameUser) {
+          try {
+            final devices = await _fetchXiaomiBoundDevices(
+              service,
+              currentToken,
+            );
+            final imported = await _manager.importMiCloudDevices(devices);
+            return {
+              'provider': 'xiaomi',
+              'signedIn': true,
+              'importedDevices': imported,
+              'userId': _xiaomiAccountToken?.userId ?? currentToken.userId,
+            };
+          } on CommandFailure catch (e) {
+            if (e.code != 'xiaomi_account_session_expired') rethrow;
+            // Both AT and RT failed/expired, fall through to full login
+          }
+        }
+
         if (username.isEmpty || password.isEmpty) {
           throw const CommandFailure(
             'usage',
             'Xiaomi username and password are required',
           );
         }
-        final service = container.read(miAccountServiceProvider);
         late final MiAccountToken token;
         try {
-          token = await service.login(username: username, password: password);
+          token = await service.login(
+            username: username,
+            password: password,
+            region: region,
+          );
         } on MiAccountTwoFactorRequired catch (error) {
           throw CommandFailure(
             'two_factor_required',
             'Xiaomi account requires two-factor verification',
-            details: {'url': error.url, 'deviceId': error.deviceId},
+            details: {
+              'url': error.url,
+              'deviceId': error.deviceId,
+              'region': region.tag,
+            },
           );
         }
         await service.persistToken(token);
@@ -2942,12 +3001,15 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
 
   Future<Object?> _completeXiaomiLogin(Map<String, Object?> params) async {
     final service = container.read(miAccountServiceProvider);
+    final regionTag = params['region']?.toString();
+    final region = MiAccountRegion.fromTag(regionTag);
     final token = await service.completeTwoFactorLogin(
       challenge: MiAccountTwoFactorRequired(
         url: params['url']?.toString() ?? '',
         deviceId: params['deviceId']?.toString() ?? '',
       ),
       cookieHeader: params['cookieHeader']?.toString() ?? '',
+      region: region,
     );
     await service.persistToken(token);
     _xiaomiAccountToken = token;

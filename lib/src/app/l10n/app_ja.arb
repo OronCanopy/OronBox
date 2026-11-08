@@ -2463,5 +2463,15 @@
         "type": "String"
       }
     }
-  }
+  },
+  "wasmUnsupportedTitle": "現在のシステムでは Wasm ランタイムを読み込めません",
+  "wasmUnsupportedMessage": "Android 8 のカーネルセキュリティ制限により、\n音声ストリーミング認識と画像圧縮機能は利用できません\n\n上記機能を使用するには Android 9+ にアップデートするか、\nAndroid 8 以外のデバイスをご利用ください",
+  "doNotShowAgainThisSession": "今回の起動中は再表示しない",
+  "settingsMiAccountRegion": "サーバー地域",
+  "settingsMiAccountRegionCn": "中国本土 (CN)",
+  "settingsMiAccountRegionDe": "ヨーロッパ (DE)",
+  "settingsMiAccountRegionRu": "ロシア (RU)",
+  "settingsMiAccountRegionSg": "グローバル / シンガポール (SG)",
+  "settingsMiAccountRegionUs": "アメリカ (US)",
+  "settingsMiAccountRegionIn": "インド (IN)"
 }

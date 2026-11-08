@@ -6129,4 +6129,35 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get globalAiTestStart => 'Start Test';
+
+  @override
+  String get wasmUnsupportedTitle => '現在のシステムでは Wasm ランタイムを読み込めません';
+
+  @override
+  String get wasmUnsupportedMessage =>
+      'Android 8 のカーネルセキュリティ制限により、\n音声ストリーミング認識と画像圧縮機能は利用できません\n\n上記機能を使用するには Android 9+ にアップデートするか、\nAndroid 8 以外のデバイスをご利用ください';
+
+  @override
+  String get doNotShowAgainThisSession => '今回の起動中は再表示しない';
+
+  @override
+  String get settingsMiAccountRegion => 'サーバー地域';
+
+  @override
+  String get settingsMiAccountRegionCn => '中国本土 (CN)';
+
+  @override
+  String get settingsMiAccountRegionDe => 'ヨーロッパ (DE)';
+
+  @override
+  String get settingsMiAccountRegionRu => 'ロシア (RU)';
+
+  @override
+  String get settingsMiAccountRegionSg => 'グローバル / シンガポール (SG)';
+
+  @override
+  String get settingsMiAccountRegionUs => 'アメリカ (US)';
+
+  @override
+  String get settingsMiAccountRegionIn => 'インド (IN)';
 }

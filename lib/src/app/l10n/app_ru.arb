@@ -2470,5 +2470,15 @@
         "type": "String"
       }
     }
-  }
+  },
+  "wasmUnsupportedTitle": "Среда выполнения Wasm недоступна в этой системе",
+  "wasmUnsupportedMessage": "Из-за ограничений безопасности ядра Android 8\nраспознавание голосового потока и сжатие изображений недоступны\n\nДля использования этих функций обновите систему до Android 9+\nили используйте устройство с другой версией ОС",
+  "doNotShowAgainThisSession": "Не показывать снова в этой сессии",
+  "settingsMiAccountRegion": "Регион сервера",
+  "settingsMiAccountRegionCn": "Материковый Китай (CN)",
+  "settingsMiAccountRegionDe": "Европа (DE)",
+  "settingsMiAccountRegionRu": "Россия (RU)",
+  "settingsMiAccountRegionSg": "Глобальный / Сингапур (SG)",
+  "settingsMiAccountRegionUs": "США (US)",
+  "settingsMiAccountRegionIn": "Индия (IN)"
 }

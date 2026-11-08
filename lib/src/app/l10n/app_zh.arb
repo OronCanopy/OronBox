@@ -2799,5 +2799,15 @@
   "globalAiAsrDoubao": "火山豆包",
   "globalAiTestRequestLabel": "发送请求",
   "globalAiTestResponseLabel": "模型响应",
-  "globalAiTestStart": "开始测试"
+  "globalAiTestStart": "开始测试",
+  "wasmUnsupportedTitle": "当前系统无法加载 Wasm 运行时",
+  "wasmUnsupportedMessage": "受 Android 8 系统内核安全策略限制\n实时语音流识别与创作者图片压缩处理不可用\n\n如需使用以上特性，请升级系统至 Android 9+\n或使用非 Android 8 系统的设备",
+  "doNotShowAgainThisSession": "本次运行期间不再提示",
+  "settingsMiAccountRegion": "服务器区域",
+  "settingsMiAccountRegionCn": "中国大陆 (CN)",
+  "settingsMiAccountRegionDe": "欧洲 (DE)",
+  "settingsMiAccountRegionRu": "俄罗斯 (RU)",
+  "settingsMiAccountRegionSg": "全球 / 新加坡 (SG)",
+  "settingsMiAccountRegionUs": "美洲 (US)",
+  "settingsMiAccountRegionIn": "印度 (IN)"
 }

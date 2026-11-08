@@ -179,6 +179,7 @@ class HostAccountsNotifier extends Notifier<HostAccountsState> {
   Future<HostAccount> loginXiaomi({
     required String username,
     required String password,
+    String? region,
   }) => _mutate(
     'xiaomi',
     OronBoxCommand(
@@ -187,6 +188,7 @@ class HostAccountsNotifier extends Notifier<HostAccountsState> {
         'provider': 'xiaomi',
         'username': username,
         'password': password,
+        if (region != null && region.isNotEmpty) 'region': region,
       },
     ),
   );
@@ -194,6 +196,7 @@ class HostAccountsNotifier extends Notifier<HostAccountsState> {
   Future<HostAccount> completeXiaomiTwoFactor({
     required HostTwoFactorRequired challenge,
     required String cookieHeader,
+    String? region,
   }) => _mutate(
     'xiaomi',
     OronBoxCommand(
@@ -202,6 +205,7 @@ class HostAccountsNotifier extends Notifier<HostAccountsState> {
         'url': challenge.url,
         'deviceId': challenge.deviceId,
         'cookieHeader': cookieHeader,
+        if (region != null && region.isNotEmpty) 'region': region,
       },
     ),
   );

@@ -1,12 +1,68 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:wasm_run_flutter/wasm_run_flutter.dart';
 
+import 'wasm_unsupported_dialog.dart';
+
 typedef WasmInstanceConfigurator = void Function(WasmInstanceBuilder builder);
+
+final class WasmUnsupportedPlatformException implements Exception {
+  const WasmUnsupportedPlatformException([
+    this.message = 'WebAssembly runtime is not supported on this platform',
+  ]);
+
+  final String message;
+
+  @override
+  String toString() => 'WasmUnsupportedPlatformException: $message';
+}
 
 final class WasmRuntime {
   WasmRuntime._();
 
   static final WasmRuntime shared = WasmRuntime._();
+
+  static bool? _isPlatformSupported;
+
+  static bool get isPlatformSupported {
+    if (_isPlatformSupported != null) return _isPlatformSupported!;
+
+    if (!kIsWeb && Platform.isAndroid) {
+      final sdk = _getAndroidSdkInt();
+      // Android 8.0 (API 26) and 8.1 (API 27) seccomp rules omit __NR_membarrier
+      if (sdk != null && (sdk == 26 || sdk == 27)) {
+        _isPlatformSupported = false;
+        return false;
+      }
+    }
+    _isPlatformSupported = true;
+    return true;
+  }
+
+  @visibleForTesting
+  static void setPlatformSupportedForTesting(bool? supported) {
+    _isPlatformSupported = supported;
+  }
+
+  static int? _getAndroidSdkInt() {
+    try {
+      final file = File('/system/build.prop');
+      if (file.existsSync()) {
+        for (final line in file.readAsLinesSync()) {
+          if (line.startsWith('ro.build.version.sdk=')) {
+            final val = int.tryParse(
+              line.substring('ro.build.version.sdk='.length).trim(),
+            );
+            if (val != null) return val;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
 
   final Map<String, Future<WasmModule>> _compiledModules = {};
   Future<void>? _libraryInitialization;
@@ -17,6 +73,13 @@ final class WasmRuntime {
     Uint8List bytes, {
     required String? cacheKey,
   }) async {
+    if (!isPlatformSupported) {
+      unawaited(showWasmUnsupportedDialogIfNeeded());
+      throw const WasmUnsupportedPlatformException(
+        'WebAssembly JIT is disabled on Android 8.0/8.1 due to system seccomp policy',
+      );
+    }
+
     await _ensureLibraryInitialized();
 
     if (cacheKey == null) return compileWasmModule(bytes);
@@ -40,6 +103,12 @@ final class WasmRuntime {
   }
 
   Future<void> _ensureLibraryInitialized() async {
+    if (!isPlatformSupported) {
+      throw const WasmUnsupportedPlatformException(
+        'WebAssembly JIT is disabled on Android 8.0/8.1 due to system seccomp policy',
+      );
+    }
+
     final pending = _libraryInitialization;
     if (pending != null) {
       return pending;

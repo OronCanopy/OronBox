@@ -68,14 +68,6 @@ class GlobalVoiceAssistantService {
   }
 
   Future<void> _init() async {
-    try {
-      _decoder = await WasmOpusDecoder.create();
-    } catch (e) {
-      _log.warning(
-        'Failed to pre-create WasmOpusDecoder for global service: $e',
-      );
-    }
-
     final desired = AiSettingsStore.asrBackend;
     unawaited(
       _ref.read(voiceRecognitionProvider.notifier).ensureBackend(desired),

@@ -2463,5 +2463,15 @@
         "type": "String"
       }
     }
-  }
+  },
+  "wasmUnsupportedTitle": "目前系統無法載入 Wasm 執行階段",
+  "wasmUnsupportedMessage": "受 Android 8 系統核心安全性原則限制\n即時語音串流辨識與創作者圖片壓縮處理不可用\n\n如需使用以上功能，請升級系統至 Android 9+\n或使用非 Android 8 系統的裝置",
+  "doNotShowAgainThisSession": "本次執行期間不再提示",
+  "settingsMiAccountRegion": "伺服器區域",
+  "settingsMiAccountRegionCn": "中國大陸 (CN)",
+  "settingsMiAccountRegionDe": "歐洲 (DE)",
+  "settingsMiAccountRegionRu": "俄羅斯 (RU)",
+  "settingsMiAccountRegionSg": "全球 / 新加坡 (SG)",
+  "settingsMiAccountRegionUs": "美洲 (US)",
+  "settingsMiAccountRegionIn": "印度 (IN)"
 }

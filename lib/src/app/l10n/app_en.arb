@@ -2887,5 +2887,15 @@
   "globalAiAsrDoubao": "Volcengine Doubao",
   "globalAiTestRequestLabel": "Request Sent",
   "globalAiTestResponseLabel": "Model Response",
-  "globalAiTestStart": "Start Test"
+  "globalAiTestStart": "Start Test",
+  "wasmUnsupportedTitle": "Wasm Runtime Unavailable on This System",
+  "wasmUnsupportedMessage": "Due to Android 8 kernel security policy restrictions,\nreal-time voice streaming and creator image compression are unavailable\n\nTo use these features, update your system to Android 9+\nor use a device running a non-Android 8 system",
+  "doNotShowAgainThisSession": "Do not show again this session",
+  "settingsMiAccountRegion": "Server Region",
+  "settingsMiAccountRegionCn": "China Mainland (CN)",
+  "settingsMiAccountRegionDe": "Europe (DE)",
+  "settingsMiAccountRegionRu": "Russia (RU)",
+  "settingsMiAccountRegionSg": "Global / Singapore (SG)",
+  "settingsMiAccountRegionUs": "United States (US)",
+  "settingsMiAccountRegionIn": "India (IN)"
 }

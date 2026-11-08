@@ -6351,4 +6351,35 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get globalAiTestStart => 'Start Test';
+
+  @override
+  String get wasmUnsupportedTitle => 'Wasm Runtime Unavailable on This System';
+
+  @override
+  String get wasmUnsupportedMessage =>
+      'Due to Android 8 kernel security policy restrictions,\nreal-time voice streaming and creator image compression are unavailable\n\nTo use these features, update your system to Android 9+\nor use a device running a non-Android 8 system';
+
+  @override
+  String get doNotShowAgainThisSession => 'Do not show again this session';
+
+  @override
+  String get settingsMiAccountRegion => 'Server Region';
+
+  @override
+  String get settingsMiAccountRegionCn => 'China Mainland (CN)';
+
+  @override
+  String get settingsMiAccountRegionDe => 'Europe (DE)';
+
+  @override
+  String get settingsMiAccountRegionRu => 'Russia (RU)';
+
+  @override
+  String get settingsMiAccountRegionSg => 'Global / Singapore (SG)';
+
+  @override
+  String get settingsMiAccountRegionUs => 'United States (US)';
+
+  @override
+  String get settingsMiAccountRegionIn => 'India (IN)';
 }

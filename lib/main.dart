@@ -44,24 +44,11 @@ void main(List<String> args) async {
     );
   }
   await SharedPrefsService.instance.init();
-  try {
-    await PrivateAppState.instance.initialize();
-  } catch (_) {
-    // If keychain access requires user authorization or fails,
-    // PrivateStateGate handles the retry gate.
-  }
-  if (window.role == OronBoxWindowRole.main) {
-    await HealthStore().resetForStorageMigration();
-  }
+  unawaited(PrivateAppState.instance.initialize().catchError((_) {}));
   if (!await initializeWindowCoordinator(window, launchArguments: args)) return;
   if (window.role == OronBoxWindowRole.main) {
     await requestBluetoothPermissionOnStartup();
-    // The bundled documents are sufficient for startup. Refresh remote
-    // revisions after the first frame so a slow server cannot hold the app
-    // behind the legal-manifest request.
-    unawaited(LegalAgreements.refreshManifest());
   }
-  await LicenseRegistryService.registerThirdPartyLicenses();
   await initializeDesktopWindow(spec: window);
   runApp(
     ProviderScope(
@@ -80,6 +67,13 @@ void main(List<String> args) async {
       ),
     ),
   );
+  if (window.role == OronBoxWindowRole.main) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(HealthStore().resetForStorageMigration());
+      unawaited(LicenseRegistryService.registerThirdPartyLicenses());
+      unawaited(LegalAgreements.refreshManifest());
+    });
+  }
   startupStopwatch.stop();
   logDiagnostic(
     getLogger('Application'),
