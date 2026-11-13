@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:oronbox/src/device/core/connect_type.dart';
 import 'package:oronbox/src/device/core/device_kind.dart';
 import 'package:oronbox/src/device/core/device_profile.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_device_catalog.dart';
@@ -35,6 +36,35 @@ void main() {
       name: 'Xiaomi Smart Band 7 1A2B',
     );
     expect(profile.kind, DeviceKind.zepp);
+  });
+
+  for (final name in [
+    '小米手环7',
+    '小米手环7 NFC版',
+    'Xiaomi Smart Band 7 NFC',
+  ]) {
+    test('resolves imported $name to ZeppOS over BLE', () {
+      expect(zeppOsDeviceForBluetoothName(name)?.id, 'mi-band-7');
+      final profile = DeviceRegistry.resolveIdentity(name: name);
+      expect(profile.kind, DeviceKind.zepp);
+      expect(profile.preferredConnectType, ConnectType.ble);
+    });
+  }
+
+  test('does not classify other Xiaomi bands as Mi Band 7', () {
+    for (final name in [
+      '小米手环7 Pro',
+      'Xiaomi Smart Band 7 Pro',
+      '小米手环8',
+      '小米手环10 NFC',
+    ]) {
+      expect(zeppOsDeviceForBluetoothName(name), isNull, reason: name);
+      expect(
+        DeviceRegistry.resolveIdentity(name: name).kind,
+        DeviceKind.xiaomi,
+        reason: name,
+      );
+    }
   });
 
   test('records Gadgetbridge BOTH connection capability', () {

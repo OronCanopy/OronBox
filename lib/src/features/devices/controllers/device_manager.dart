@@ -1000,7 +1000,14 @@ class LocalDeviceManager extends DeviceManager {
   MiWearState _normalizeDeviceIdentity(MiWearState device) {
     final zeppDevice = zeppOsDeviceForBluetoothName(device.name);
     if (zeppDevice != null) {
-      return device.copyWith(codename: 'zepp:${zeppDevice.id}');
+      return device.copyWith(
+        codename: 'zepp:${zeppDevice.id}',
+        // Repair legacy imports that stored SPP for BLE-only ZeppOS models.
+        connectType:
+            zeppDevice.connectionCapability == ZeppOsConnectionCapability.ble
+            ? ConnectType.ble.name
+            : device.connectType,
+      );
     }
     final identity =
         xiaomiWearableIdentityForCodename(device.codename) ??
@@ -4176,11 +4183,13 @@ class LocalDeviceManager extends DeviceManager {
           : (existingIndex >= 0 ? updatedPaired[existingIndex] : null);
       final isCurrentReady =
           isCurrent && state.protocolState == ProtocolState.ready;
-      final imported = importedRaw.copyWith(
-        addr: existing?.addr ?? importedRaw.addr,
-        connectType: existing?.connectType ?? importedRaw.connectType,
-        codename: importedRaw.codename ?? existing?.codename,
-        disconnected: isCurrentReady ? false : (existing?.disconnected ?? true),
+      final imported = _normalizeDeviceIdentity(
+        importedRaw.copyWith(
+          addr: existing?.addr ?? importedRaw.addr,
+          connectType: existing?.connectType ?? importedRaw.connectType,
+          codename: importedRaw.codename ?? existing?.codename,
+          disconnected: isCurrentReady ? false : (existing?.disconnected ?? true),
+        ),
       );
       if (existingIndex >= 0) {
         updatedPaired[existingIndex] = imported;

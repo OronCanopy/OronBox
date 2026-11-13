@@ -91,7 +91,12 @@ const zeppOsDeviceCatalog = <ZeppOsDeviceCatalogEntry>[
   ),
   ZeppOsDeviceCatalogEntry(
     id: 'mi-band-7',
-    bluetoothNames: ['Xiaomi Smart Band 7'],
+    bluetoothNames: [
+      'Xiaomi Smart Band 7',
+      'Xiaomi Smart Band 7 NFC',
+      '小米手环7',
+      '小米手环7 NFC版',
+    ],
     illustration: ZeppOsDeviceIllustration.band,
   ),
   ZeppOsDeviceCatalogEntry(id: 'bip-5', bluetoothNames: ['Amazfit Bip 5']),

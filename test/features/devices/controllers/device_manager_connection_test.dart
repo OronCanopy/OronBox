@@ -98,6 +98,64 @@ void main() {
     );
   }
 
+  for (final existingType in [null, 'spp', 'ble']) {
+    test('imports Mi Band 7 NFC over BLE with existing $existingType', () async {
+      if (existingType != null) {
+        await PrivateAppState.instance.update({
+          PrivateAppState.pairedDevices: [
+            jsonEncode(
+              MiWearState(
+                name: '小米手环7 NFC版',
+                addr: 'AA:BB:CC:DD:EE:FF',
+                connectType: existingType,
+                authkey: '11111111111111111111111111111111',
+              ).toJson(),
+            ),
+          ],
+        });
+      }
+      final container = ProviderContainer(
+        overrides: [
+          bluetoothPlatformProvider.overrideWithValue(
+            _BlockingBluetoothPlatform(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final manager = container.read(deviceManagerProvider.notifier);
+      if (existingType != null) {
+        final saved = container.read(deviceManagerProvider).pairedDevices.single;
+        expect(saved.connectType, 'ble');
+        expect(saved.codename, 'zepp:mi-band-7');
+      }
+      final count = await manager.importMiCloudDevices(const [
+        MiCloudDevice(
+          name: '小米手环7 NFC版',
+          model: '',
+          mac: 'AA:BB:CC:DD:EE:FF',
+          authKey: '22222222222222222222222222222222',
+          firmwareVersion: '',
+          serialNumber: '',
+        ),
+      ]);
+      expect(count, 1);
+      final state = container.read(deviceManagerProvider);
+      expect(state.pairedDevices, hasLength(1));
+      expect(state.pairedDevices.single.name, '小米手环7 NFC版');
+      expect(state.pairedDevices.single.connectType, 'ble');
+      expect(state.pairedDevices.single.codename, 'zepp:mi-band-7');
+      expect(state.currentDevice?.connectType, 'ble');
+      final saved = PrivateAppState.instance.readStringList(
+        PrivateAppState.pairedDevices,
+      )!;
+      expect((jsonDecode(saved.single) as Map)['connectType'], 'ble');
+      expect(
+        (jsonDecode(saved.single) as Map)['authkey'],
+        '22222222222222222222222222222222',
+      );
+    });
+  }
+
   test(
     'cloud import repairs duplicate MAC records and preserves the endpoint',
     () async {
