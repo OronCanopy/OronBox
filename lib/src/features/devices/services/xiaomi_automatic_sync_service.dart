@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/core/services/status_surface_bridge.dart';
+import 'package:oronbox/src/device/core/device_kind.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 import 'package:oronbox/src/features/devices/health/health_models.dart';
 import 'package:oronbox/src/features/devices/models/xiaomi_device_features.dart';
@@ -49,15 +50,24 @@ class XiaomiAutomaticSyncService {
   /// sync also resets the per-device automatic-sync cooldown.
   Future<XiaomiHealthSyncResult> runHealthSync() async {
     _log.info('manual Xiaomi health synchronization requested');
+    _requireXiaomiDevice();
+    final deviceId = manager.state.currentDevice?.addr;
     XiaomiHealthSyncResult? result;
     // If a full sync cycle is already active, wait for it and then acquire the
     // lock again. The active cycle may not have health auto-sync enabled, so a
     // manual health request must not silently turn into a no-op.
     while (result == null) {
       await manager.runExclusiveSyncCycle(() async {
+        // The selected device can change while waiting for the cycle lock.
+        if (!_isSameXiaomiDevice(deviceId)) {
+          throw StateError(
+            'Xiaomi health synchronization device changed while waiting',
+          );
+        }
         _log.fine('manual Xiaomi health synchronization lock acquired');
         result = await manager.syncXiaomiHealth();
-        await manager.recordSuccessfulDeviceSync();
+        // Record against the device that was validated before the lock wait.
+        await manager.recordSuccessfulDeviceSync(deviceId);
       });
     }
     _log.info(
@@ -68,15 +78,34 @@ class XiaomiAutomaticSyncService {
     return result!;
   }
 
+  void _requireXiaomiDevice() {
+    if (manager.currentDeviceKind != DeviceKind.xiaomi) {
+      throw UnsupportedError(
+        'Xiaomi health synchronization is only available for Xiaomi devices',
+      );
+    }
+  }
+
+  bool _isSameXiaomiDevice(String? deviceId) {
+    final device = manager.state.currentDevice;
+    return manager.currentDeviceKind == DeviceKind.xiaomi &&
+        manager.state.protocolState == proto.ProtocolState.ready &&
+        device != null &&
+        !device.disconnected &&
+        device.addr == deviceId;
+  }
+
   Future<void> _run({required bool automatic}) async {
     final mode = automatic ? 'automatic' : 'manual';
+    final deviceId = manager.state.currentDevice?.addr;
+    final xiaomiAtStart = manager.currentDeviceKind == DeviceKind.xiaomi;
     Object? deviceSyncError;
     StackTrace? deviceSyncStackTrace;
 
     // Concurrently pre-fetch weather data over HTTP while device & health
     // synchronize over Bluetooth, completely overlapping the network latency.
     Future<XiaomiWeatherData>? weatherFetchTask;
-    final weatherEnabled = XiaomiSyncPreferences.weatherAutoSync;
+    final weatherEnabled = xiaomiAtStart && XiaomiSyncPreferences.weatherAutoSync;
     final city = XiaomiSyncPreferences.weatherLastCity?.trim();
     if (weatherEnabled && city != null && city.isNotEmpty) {
       final systemInfo = manager.systemInfo;
@@ -85,6 +114,19 @@ class XiaomiAutomaticSyncService {
         city,
         model: systemInfo?.model,
         firmwareVersion: systemInfo?.firmwareVersion,
+      );
+      // Observe failures even if a device switch makes this result obsolete.
+      unawaited(
+        weatherFetchTask!.then<void>(
+          (_) {},
+          onError: (Object error, StackTrace stackTrace) {
+            _log.fine(
+              'prefetched Xiaomi weather request failed',
+              error,
+              stackTrace,
+            );
+          },
+        ),
       );
     }
 
@@ -101,7 +143,16 @@ class XiaomiAutomaticSyncService {
       );
     }
 
-    await _syncEnabledXiaomiData(weatherFetchTask: weatherFetchTask);
+    // A manual/full device sync remains available on ZeppOS, but Xiaomi-only
+    // follow-up requests must never cross a device switch boundary.
+    if (xiaomiAtStart && _isSameXiaomiDevice(deviceId)) {
+      await _syncEnabledXiaomiData(
+        deviceId: deviceId,
+        weatherFetchTask: weatherFetchTask,
+      );
+    } else {
+      _log.fine('Xiaomi follow-up synchronization skipped: device changed');
+    }
 
     if (deviceSyncError != null) {
       Error.throwWithStackTrace(deviceSyncError, deviceSyncStackTrace!);
@@ -109,6 +160,7 @@ class XiaomiAutomaticSyncService {
   }
 
   Future<void> _syncEnabledXiaomiData({
+    required String? deviceId,
     Future<XiaomiWeatherData>? weatherFetchTask,
   }) async {
     final healthEnabled = XiaomiSyncPreferences.healthAutoSync;
@@ -117,7 +169,7 @@ class XiaomiAutomaticSyncService {
       'automatic Xiaomi data sync settings: '
       'health=$healthEnabled weather=$weatherEnabled',
     );
-    if (healthEnabled) {
+    if (healthEnabled && _isSameXiaomiDevice(deviceId)) {
       _log.info('automatic Xiaomi health synchronization started');
       try {
         final result = await manager.syncXiaomiHealth();
@@ -138,6 +190,10 @@ class XiaomiAutomaticSyncService {
       }
     }
 
+    if (!_isSameXiaomiDevice(deviceId)) {
+      _log.fine('automatic Xiaomi weather synchronization skipped: device changed');
+      return;
+    }
     final city = XiaomiSyncPreferences.weatherLastCity?.trim();
     if (!weatherEnabled) {
       _log.fine('automatic Xiaomi weather synchronization disabled');
@@ -156,6 +212,12 @@ class XiaomiAutomaticSyncService {
                 model: manager.systemInfo?.model,
                 firmwareVersion: manager.systemInfo?.firmwareVersion,
               ));
+      if (!_isSameXiaomiDevice(deviceId)) {
+        _log.fine(
+          'automatic Xiaomi weather synchronization skipped: device changed',
+        );
+        return;
+      }
       await manager.syncXiaomiWeather(weather);
       await XiaomiSyncPreferences.setWeatherLastCity(weather.cityName);
       await XiaomiSyncPreferences.setCachedWeather(weather, DateTime.now());

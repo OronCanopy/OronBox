@@ -67,6 +67,7 @@ import 'package:oronbox/src/device/xiaomi/systems/xiaomi_voice_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_watchface_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_voice_memos_system.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_btbr_transport.dart';
+import 'package:oronbox/src/device/zeppos/zeppos_capabilities.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_device_catalog.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_device_factory.dart';
 import 'package:oronbox/src/features/accounts/models/mi_account_models.dart';
@@ -144,6 +145,8 @@ abstract class DeviceManager extends Notifier<DeviceManagerState> {
   }
 
   SystemInfo? get systemInfo => state.systemInfo;
+
+  Future<Set<ZeppOsFeature>> fetchZeppOsFeatures() async => const {};
 
   /// The health protocol surface for the currently connected Xiaomi device.
   ///
@@ -2466,6 +2469,43 @@ class LocalDeviceManager extends DeviceManager {
   }
 
   @override
+  Future<Set<ZeppOsFeature>> fetchZeppOsFeatures() async {
+    final entity = _currentEntity;
+    final device = state.currentDevice;
+    if (entity == null ||
+        device == null ||
+        state.protocolState != ProtocolState.ready) {
+      return const {};
+    }
+    final discovery = entity.system<ZeppOsServicesSystem>();
+    if (discovery == null) return const {};
+    final services = await discovery.fetchSupportedServices().timeout(
+      const Duration(seconds: 8),
+    );
+    if (_currentEntity != entity ||
+        state.currentDevice?.addr != device.addr ||
+        state.protocolState != ProtocolState.ready) {
+      return const {};
+    }
+    return resolveZeppOsFeatures(
+      name: device.name,
+      codename: device.codename,
+      deviceSource: entity.system<ZeppOsDeviceInfoSystem>()?.deviceSource,
+      services: services.keys.toSet(),
+    );
+  }
+
+  Future<void> _requireZeppOsFeature(
+    ZeppOsFeature feature,
+    DeviceEntity entity,
+  ) async {
+    final features = await fetchZeppOsFeatures();
+    if (_currentEntity != entity || !features.contains(feature)) {
+      throw UnsupportedError('Zepp OS ${feature.name} is unavailable');
+    }
+  }
+
+  @override
   Future<void> setFindingZeppOsDevice(bool finding) async {
     final entity = _currentEntity;
     if (entity == null || state.protocolState != ProtocolState.ready) {
@@ -2474,6 +2514,10 @@ class LocalDeviceManager extends DeviceManager {
     final system = entity.system<ZeppOsFindDeviceSystem>();
     if (system == null) {
       throw UnsupportedError('Find device is only available for ZeppOS');
+    }
+    await _requireZeppOsFeature(ZeppOsFeature.findDevice, entity);
+    if (_currentEntity != entity || state.protocolState != ProtocolState.ready) {
+      throw ProtocolException('Device changed');
     }
     await system.setFinding(finding);
   }
@@ -2735,6 +2779,11 @@ class LocalDeviceManager extends DeviceManager {
       if (system == null) {
         throw UnsupportedError('Screenshot service unavailable');
       }
+      await _requireZeppOsFeature(ZeppOsFeature.screenshot, entity);
+      if (_currentEntity != entity ||
+          state.protocolState != ProtocolState.ready) {
+        throw ProtocolException('Device changed');
+      }
       return await system.requestScreenshot();
     } finally {
       _activeTransfers -= 1;
@@ -2755,6 +2804,11 @@ class LocalDeviceManager extends DeviceManager {
     }
     _activeTransfers += 1;
     try {
+      await _requireZeppOsFeature(ZeppOsFeature.voiceMemos, entity);
+      if (_currentEntity != entity ||
+          state.protocolState != ProtocolState.ready) {
+        throw ProtocolException('Device changed');
+      }
       return await system.downloadAll(onProgress: onProgress);
     } finally {
       _activeTransfers -= 1;
@@ -2808,6 +2862,11 @@ class LocalDeviceManager extends DeviceManager {
     }
     _activeTransfers += 1;
     try {
+      await _requireZeppOsFeature(ZeppOsFeature.maps, entity);
+      if (_currentEntity != entity ||
+          state.protocolState != ProtocolState.ready) {
+        throw ProtocolException('Device changed');
+      }
       await system.upload(bytes, fileName: fileName, onProgress: onProgress);
     } finally {
       _activeTransfers -= 1;
@@ -4215,3 +4274,18 @@ class LocalDeviceManager extends DeviceManager {
 
 final deviceManagerProvider =
     NotifierProvider<DeviceManager, DeviceManagerState>(LocalDeviceManager.new);
+
+final zeppOsFeaturesProvider = FutureProvider.autoDispose<Set<ZeppOsFeature>>((ref) {
+  ref.watch(
+    deviceManagerProvider.select(
+      (state) => (
+        state.currentDevice?.addr,
+        state.currentDevice?.name,
+        state.currentDevice?.codename,
+        state.protocolState,
+        state.systemInfo,
+      ),
+    ),
+  );
+  return ref.read(deviceManagerProvider.notifier).fetchZeppOsFeatures();
+});

@@ -81,9 +81,7 @@ class ZeppOsDeviceFactory implements DeviceEntityFactory {
         deviceInfoSystem.handlePayload(payload.payload);
       } else if (payload.endpoint == ZeppOsServicesSystem.endpoint) {
         servicesSystem.handlePayload(payload.payload);
-        unawaited(
-          screenshotSystem.initialize().catchError((Object _, StackTrace _) {}),
-        );
+        // Screenshot capabilities are queried lazily after model/service gates.
       } else if (payload.endpoint == ZeppOsTimeSystem.endpoint) {
         timeSystem.handlePayload(payload.payload);
       } else if (payload.endpoint == ZeppOsXiaoAiSystem.xiaoAiEndpoint ||
