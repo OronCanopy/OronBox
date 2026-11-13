@@ -144,6 +144,10 @@ abstract class DeviceManager extends Notifier<DeviceManagerState> {
     ).kind;
   }
 
+  MiWearState? get currentDevice => state.currentDevice;
+
+  bool get deviceReady => state.protocolState == ProtocolState.ready;
+
   SystemInfo? get systemInfo => state.systemInfo;
 
   Future<Set<ZeppOsFeature>> fetchZeppOsFeatures() async => const {};

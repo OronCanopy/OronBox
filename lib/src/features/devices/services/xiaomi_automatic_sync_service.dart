@@ -51,7 +51,7 @@ class XiaomiAutomaticSyncService {
   Future<XiaomiHealthSyncResult> runHealthSync() async {
     _log.info('manual Xiaomi health synchronization requested');
     _requireXiaomiDevice();
-    final deviceId = manager.state.currentDevice?.addr;
+    final deviceId = manager.currentDevice?.addr;
     XiaomiHealthSyncResult? result;
     // If a full sync cycle is already active, wait for it and then acquire the
     // lock again. The active cycle may not have health auto-sync enabled, so a
@@ -87,9 +87,9 @@ class XiaomiAutomaticSyncService {
   }
 
   bool _isSameXiaomiDevice(String? deviceId) {
-    final device = manager.state.currentDevice;
+    final device = manager.currentDevice;
     return manager.currentDeviceKind == DeviceKind.xiaomi &&
-        manager.state.protocolState == proto.ProtocolState.ready &&
+        manager.deviceReady &&
         device != null &&
         !device.disconnected &&
         device.addr == deviceId;
@@ -97,7 +97,7 @@ class XiaomiAutomaticSyncService {
 
   Future<void> _run({required bool automatic}) async {
     final mode = automatic ? 'automatic' : 'manual';
-    final deviceId = manager.state.currentDevice?.addr;
+    final deviceId = manager.currentDevice?.addr;
     final xiaomiAtStart = manager.currentDeviceKind == DeviceKind.xiaomi;
     Object? deviceSyncError;
     StackTrace? deviceSyncStackTrace;
@@ -117,7 +117,7 @@ class XiaomiAutomaticSyncService {
       );
       // Observe failures even if a device switch makes this result obsolete.
       unawaited(
-        weatherFetchTask!.then<void>(
+        weatherFetchTask.then<void>(
           (_) {},
           onError: (Object error, StackTrace stackTrace) {
             _log.fine(
