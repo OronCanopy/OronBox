@@ -49,6 +49,7 @@ import 'package:oronbox/src/device/xiaomi/systems/xiaomi_device_component.dart';
 import 'package:oronbox/src/device/xiaomi/xiaomi_device_factory.dart';
 import 'package:oronbox/src/device/xiaomi/xiaomi_time.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_auth_system.dart';
+import 'package:oronbox/src/device/zeppos/systems/zeppos_alarms_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_apps_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_app_install_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_app_side_system.dart';
@@ -151,6 +152,19 @@ abstract class DeviceManager extends Notifier<DeviceManagerState> {
   SystemInfo? get systemInfo => state.systemInfo;
 
   Future<Set<ZeppOsFeature>> fetchZeppOsFeatures() async => const {};
+
+  Stream<List<ZeppOsAlarm>> get zeppOsAlarmUpdates => const Stream.empty();
+
+  int? get zeppOsMaxAlarms => null;
+  Future<List<ZeppOsAlarm>> loadZeppOsAlarms() async =>
+      throw UnsupportedError('Zepp OS alarms are unavailable');
+  Future<void> addZeppOsAlarm(ZeppOsAlarm alarm) async =>
+      throw UnsupportedError('Zepp OS alarms are unavailable');
+  Future<void> updateZeppOsAlarm(ZeppOsAlarm alarm) async =>
+      throw UnsupportedError('Zepp OS alarms are unavailable');
+  Future<void> deleteZeppOsAlarm(int position) async =>
+      throw UnsupportedError('Zepp OS alarms are unavailable');
+
 
   /// The health protocol surface for the currently connected Xiaomi device.
   ///
@@ -264,6 +278,10 @@ abstract class DeviceManager extends Notifier<DeviceManagerState> {
   Future<void> refreshDeviceData();
   Future<void> setFindingZeppOsDevice(bool finding);
   Future<void> setFindingXiaomiPhone(bool finding);
+
+  Future<void> setFindingZeppOsPhone(bool finding) async {
+    throw UnsupportedError('Zepp OS phone finder is unavailable');
+  }
   Future<void> setFindingXiaomiWearable(bool finding);
   void setVoiceLabEnabled(bool enabled) {}
   void updateVoiceSystemState() {}
@@ -1778,6 +1796,10 @@ class LocalDeviceManager extends DeviceManager {
         );
       case XiaomiHealthStateUpdated(:final health):
         state = state.copyWith(health: health);
+      case ZeppOsFindPhoneRequested(:final finding):
+        state = state.copyWith(findingZeppOsPhone: finding);
+      case ZeppOsFindWearableRequested(:final finding):
+        state = state.copyWith(findingZeppOsWearable: finding);
       case XiaomiFindPhoneRequested(:final finding):
         _log.info(
           'event: wearable phone finder ${finding ? 'started' : 'stopped'}',
@@ -1893,6 +1915,8 @@ class LocalDeviceManager extends DeviceManager {
         clearHealth: true,
         clearSystemInfo: true,
         findingXiaomiWearable: false,
+        findingZeppOsWearable: false,
+        findingZeppOsPhone: false,
         clearError: true,
       );
       await _cleanupConnection();
@@ -1923,6 +1947,8 @@ class LocalDeviceManager extends DeviceManager {
       clearHealth: true,
       clearSystemInfo: true,
       findingXiaomiWearable: false,
+      findingZeppOsWearable: false,
+      findingZeppOsPhone: false,
       clearError: true,
     );
     if (!alreadyPersistedOffline) _savePairedDevices();
@@ -2073,6 +2099,8 @@ class LocalDeviceManager extends DeviceManager {
       clearHealth: true,
       clearSystemInfo: true,
       findingXiaomiWearable: false,
+      findingZeppOsWearable: false,
+      findingZeppOsPhone: false,
       clearError: true,
       clearConnectionTarget: true,
       clearConnectionPhase: true,
@@ -2147,6 +2175,8 @@ class LocalDeviceManager extends DeviceManager {
       clearHealth: true,
       clearSystemInfo: true,
       findingXiaomiWearable: false,
+      findingZeppOsWearable: false,
+      findingZeppOsPhone: false,
       clearConnectionTarget: true,
       clearConnectionPhase: true,
       clearError: true,
@@ -2524,6 +2554,63 @@ class LocalDeviceManager extends DeviceManager {
       throw ProtocolException('Device changed');
     }
     await system.setFinding(finding);
+  }
+
+  @override
+  Stream<List<ZeppOsAlarm>> get zeppOsAlarmUpdates =>
+      _currentEntity?.system<ZeppOsAlarmsSystem>()?.updates ?? const Stream.empty();
+
+  @override
+  int? get zeppOsMaxAlarms =>
+      _currentEntity?.system<ZeppOsAlarmsSystem>()?.maxAlarms;
+
+  Future<T> _withZeppOsAlarms<T>(
+    Future<T> Function(ZeppOsAlarmsSystem) operation,
+  ) async {
+    final entity = _currentEntity;
+    if (entity == null || !deviceReady) {
+      throw ProtocolException('Device not ready');
+    }
+    await _requireZeppOsFeature(ZeppOsFeature.alarms, entity);
+    if (_currentEntity != entity || !deviceReady || entity.isDisposed) {
+      throw ProtocolException('Device changed');
+    }
+    final system = entity.system<ZeppOsAlarmsSystem>();
+    if (system == null) throw UnsupportedError('Zepp OS alarms are unavailable');
+    final result = await operation(system);
+    if (_currentEntity != entity || !deviceReady || entity.isDisposed) {
+      throw ProtocolException('Device changed');
+    }
+    return result;
+  }
+
+  @override
+  Future<List<ZeppOsAlarm>> loadZeppOsAlarms() =>
+      _withZeppOsAlarms((system) => system.load());
+
+  @override
+  Future<void> addZeppOsAlarm(ZeppOsAlarm alarm) =>
+      _withZeppOsAlarms((system) => system.create(alarm));
+
+  @override
+  Future<void> updateZeppOsAlarm(ZeppOsAlarm alarm) =>
+      _withZeppOsAlarms((system) => system.update(alarm));
+
+  @override
+  Future<void> deleteZeppOsAlarm(int position) =>
+      _withZeppOsAlarms((system) => system.delete(position));
+
+  @override
+  Future<void> setFindingZeppOsPhone(bool finding) async {
+    final entity = _currentEntity;
+    if (entity == null || !deviceReady) {
+      throw ProtocolException('Device not ready');
+    }
+    await _requireZeppOsFeature(ZeppOsFeature.findDevice, entity);
+    if (_currentEntity != entity || !deviceReady) {
+      throw ProtocolException('Device changed');
+    }
+    await entity.system<ZeppOsFindDeviceSystem>()!.setFindingPhone(finding);
   }
 
   @override

@@ -100,6 +100,28 @@ final class XiaomiFindWearableRequested extends DeviceEvent {
   final bool finding;
 }
 
+/// Inbound Zepp OS phone finder state; mode changes keep [finding] true.
+final class ZeppOsFindPhoneRequested extends DeviceEvent {
+  const ZeppOsFindPhoneRequested({
+    required super.deviceId,
+    required this.finding,
+    required this.ring,
+  });
+
+  final bool finding;
+  final bool ring;
+}
+
+/// Finder state after a local command, watch-side stop, or session teardown.
+final class ZeppOsFindWearableRequested extends DeviceEvent {
+  const ZeppOsFindWearableRequested({
+    required super.deviceId,
+    required this.finding,
+  });
+
+  final bool finding;
+}
+
 final class XiaomiScreenshotReceived extends DeviceEvent {
   const XiaomiScreenshotReceived({
     required super.deviceId,

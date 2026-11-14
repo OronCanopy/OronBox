@@ -1,6 +1,6 @@
 import 'package:oronbox/src/device/zeppos/zeppos_device_catalog.dart';
 
-enum ZeppOsFeature { screenshot, maps, voiceMemos, findDevice, appSide }
+enum ZeppOsFeature { screenshot, maps, voiceMemos, findDevice, appSide, alarms }
 
 /// Service presence is a prerequisite, not proof of every format's support.
 Set<ZeppOsFeature> resolveZeppOsFeatures({
@@ -25,6 +25,7 @@ Set<ZeppOsFeature> resolveZeppOsFeatures({
     if (hasFiles && services.contains(0x00a0) && services.contains(0x0033))
       ZeppOsFeature.voiceMemos,
     if (services.contains(0x001a)) ZeppOsFeature.findDevice,
+    if (services.contains(0x000f)) ZeppOsFeature.alarms,
     if (services.contains(0x00a0)) ZeppOsFeature.appSide,
   });
 }

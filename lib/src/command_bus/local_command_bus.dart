@@ -53,12 +53,21 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
   LocalCommandBus(this.container) {
     _deviceManagerSubscription = container.listen<DeviceManagerState>(
       deviceManagerProvider,
-      (_, state) => _events.add(
-        CommandEvent(
-          'device.state',
-          data: {'state': _wireValue(_deviceStateJson(state))},
-        ),
-      ),
+      (previous, state) {
+        if (previous?.currentDevice?.addr != state.currentDevice?.addr ||
+            (previous?.protocolState == ProtocolState.ready &&
+                state.protocolState != ProtocolState.ready)) {
+          unawaited(PhoneFinder.setFinding(false).catchError((Object error) {
+            _log.warning('Failed to stop phone finder on device change', error);
+          }));
+        }
+        _events.add(
+          CommandEvent(
+            'device.state',
+            data: {'state': _wireValue(_deviceStateJson(state))},
+          ),
+        );
+      },
       fireImmediately: true,
     );
     _bandBbsAuthSubscription = container.listen<BandBbsAuthState>(
@@ -128,6 +137,17 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
             data: {'deviceId': event.deviceId, 'finding': finding},
           ),
         );
+      }
+      if (event case ZeppOsFindPhoneRequested(:final finding, :final ring)) {
+        unawaited(
+          PhoneFinder.setFinding(finding, ring: ring).catchError((Object error) {
+            _log.warning('ZeppOS phone finder playback failed', error);
+          }),
+        );
+        _events.add(CommandEvent(
+          'device.zeppos.find_phone',
+          data: {'deviceId': event.deviceId, 'finding': finding, 'ring': ring},
+        ));
       }
       if (event case XiaomiScreenshotReceived(:final bytes)) {
         _events.add(
@@ -482,6 +502,9 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     'device.xiaomi.recordings.download' => _downloadXiaomiRecordings(),
     'device.recordings.cancel' => _cancelRecordingSync(),
     'device.zeppos.find' => _setFindingZeppOsDevice(
+      command.params['finding'] == true,
+    ),
+    'device.zeppos.findPhone' => _setFindingZeppOsPhone(
       command.params['finding'] == true,
     ),
     'device.xiaomi.findPhone' => _setFindingXiaomiPhone(
@@ -1339,6 +1362,8 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     'xiaoAiFrameCount': state.xiaoAiFrameCount,
     'xiaoAiCapabilities': state.xiaoAiCapabilities,
     'findingXiaomiWearable': state.findingXiaomiWearable,
+    'findingZeppOsWearable': state.findingZeppOsWearable,
+    'findingZeppOsPhone': state.findingZeppOsPhone,
     'uploadBytesPerSecond': state.uploadBytesPerSecond,
     'downloadBytesPerSecond': state.downloadBytesPerSecond,
     if (state.error != null) 'error': state.error,
@@ -1859,6 +1884,12 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     await _ensureConnected(null);
     await _manager.setFindingZeppOsDevice(finding);
     return {'finding': finding};
+  }
+
+  Future<Object?> _setFindingZeppOsPhone(bool finding) async {
+    await _manager.setFindingZeppOsPhone(finding);
+    if (!finding) await PhoneFinder.setFinding(false);
+    return null;
   }
 
   Future<Object?> _setFindingXiaomiPhone(bool finding) async {
@@ -3054,6 +3085,11 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     await _rawBluetoothOutgoingSubscription.cancel();
     await _interconnectSubscription.cancel();
     await _deviceEventSubscription.cancel();
+    try {
+      await PhoneFinder.setFinding(false);
+    } catch (error) {
+      _log.warning('Failed to stop phone finder during shutdown', error);
+    }
     await _events.close();
   }
 }

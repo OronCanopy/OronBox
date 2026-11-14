@@ -331,7 +331,7 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "start" -> {
                     try {
-                        startPhoneFinder()
+                        startPhoneFinder(call.argument<Boolean>("ring") ?: true)
                         result.success(null)
                     } catch (error: Exception) {
                         result.error("PHONE_FINDER_START_FAILED", error.message, null)
@@ -2541,43 +2541,45 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun startPhoneFinder() {
+    private fun startPhoneFinder(ring: Boolean = true) {
         stopPhoneFinder()
-        val ringtoneUri = RingtoneManager.getActualDefaultRingtoneUri(
-            this,
-            RingtoneManager.TYPE_ALARM,
-        ) ?: RingtoneManager.getActualDefaultRingtoneUri(
-            this,
-            RingtoneManager.TYPE_RINGTONE,
-        ) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            ?: throw IOException("No default alarm sound is available")
-        val player = MediaPlayer()
-        try {
-            player.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build(),
-            )
-            player.setDataSource(this, ringtoneUri)
-            player.isLooping = true
-            player.setOnErrorListener { _, what, extra ->
-                writeNativeLog(
-                    File(filesDir, "logs/phone-finder.log"),
-                    "phone finder playback error what=$what extra=$extra\\n",
+        if (ring) {
+            val ringtoneUri = RingtoneManager.getActualDefaultRingtoneUri(
+                this,
+                RingtoneManager.TYPE_ALARM,
+            ) ?: RingtoneManager.getActualDefaultRingtoneUri(
+                this,
+                RingtoneManager.TYPE_RINGTONE,
+            ) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                ?: throw IOException("No default alarm sound is available")
+            val player = MediaPlayer()
+            try {
+                player.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
                 )
-                stopPhoneFinder()
-                true
+                player.setDataSource(this, ringtoneUri)
+                player.isLooping = true
+                player.setOnErrorListener { _, what, extra ->
+                    writeNativeLog(
+                        File(filesDir, "logs/phone-finder.log"),
+                        "phone finder playback error what=$what extra=$extra\\n",
+                    )
+                    stopPhoneFinder()
+                    true
+                }
+                phoneFinderPlayer = player
+                player.prepare()
+                player.setVolume(1f, 1f)
+                player.start()
+            } catch (error: Exception) {
+                phoneFinderPlayer = null
+                runCatching { player.release() }
+                throw error
             }
-            phoneFinderPlayer = player
-            player.prepare()
-            player.setVolume(1f, 1f)
-            player.start()
-        } catch (error: Exception) {
-            phoneFinderPlayer = null
-            runCatching { player.release() }
-            throw error
         }
 
         val vibrator = getSystemService(Vibrator::class.java)

@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_capabilities.dart';
 
 void main() {
-  const services = {0x000d, 0x00a0, 0x0046, 0x0001, 0x0033, 0x001a};
+  const services = {0x000d, 0x00a0, 0x0046, 0x0001, 0x0033, 0x001a, 0x000f};
 
   test('unknown or absent services do not enable operations', () {
     expect(resolveZeppOsFeatures(name: 'Amazfit GTR 4', services: {}), isEmpty);

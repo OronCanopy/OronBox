@@ -19,6 +19,7 @@ import 'package:oronbox/src/features/devices/pages/firmware/device_firmware_page
 import 'package:oronbox/src/features/devices/pages/info/device_info_page.dart';
 import 'package:oronbox/src/features/devices/pages/install/install_local_page.dart';
 import 'package:oronbox/src/features/devices/pages/tools/zeppos_more_features_page.dart';
+import 'package:oronbox/src/features/devices/pages/tools/zeppos_alarms_page.dart';
 import 'package:oronbox/src/features/settings/pages/labs/voice_assistant_page.dart';
 import 'package:oronbox/src/features/settings/pages/labs/feature_lab_page.dart';
 import 'package:oronbox/src/features/ai/pages/global_ai_page.dart';
@@ -511,6 +512,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     path: 'zeppos-more',
                     builder: (context, state) => const ZeppOsMoreFeaturesPage(),
                     routes: [
+                      GoRoute(
+                        path: 'alarms',
+                        builder: (context, state) => const ZeppOsAlarmsPage(),
+                      ),
                       GoRoute(
                         path: 'xiao-ai',
                         redirect: (context, state) =>

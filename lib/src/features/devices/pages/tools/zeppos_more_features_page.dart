@@ -30,7 +30,6 @@ class _ZeppOsMoreFeaturesPageState
     extends ConsumerState<ZeppOsMoreFeaturesPage> {
   static const _mirrorIntervalPreferenceKey = 'zeppos.mirror.frame_interval_ms';
 
-  bool _finding = false;
   bool _busy = false;
   bool _mirrorSettingsExpanded = false;
   int _mirrorIntervalMs = 10;
@@ -105,7 +104,6 @@ class _ZeppOsMoreFeaturesPageState
       await ref
           .read(deviceManagerProvider.notifier)
           .setFindingZeppOsDevice(finding);
-      if (mounted) setState(() => _finding = finding);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -288,11 +286,34 @@ class _ZeppOsMoreFeaturesPageState
                     : const Icon(Icons.vibration),
                 title: Text(l10n.zeppOsFindDevice),
                 description: Text(l10n.zeppOsFindDeviceDescription),
-                initialValue: _finding,
+                initialValue: state.findingZeppOsWearable,
                 enabled: ready &&
                     !_busy &&
                     features.contains(ZeppOsFeature.findDevice),
                 onToggle: (value) => _setFinding(value ?? false),
+              ),
+              if (state.findingZeppOsPhone)
+                SegmentedTile.navigation(
+                  leading: const Icon(Icons.smartphone),
+                  title: Text(l10n.stop),
+                  onPressed: (_) async {
+                    try {
+                      await ref.read(deviceManagerProvider.notifier)
+                          .setFindingZeppOsPhone(false);
+                    } catch (error) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(localizedErrorMessage(l10n, error)),
+                      ));
+                    }
+                  },
+                ),
+              SegmentedTile.navigation(
+                leading: const Icon(Icons.alarm),
+                title: Text(l10n.alarmManagementTitle),
+                description: Text(l10n.alarmManagementDescription),
+                enabled: ready && features.contains(ZeppOsFeature.alarms),
+                onPressed: (_) => context.push('/devices/zeppos-more/alarms'),
               ),
             ],
           ),

@@ -6,6 +6,7 @@ import 'package:oronbox/src/device/core/runtime.dart';
 import 'package:oronbox/src/device/core/system.dart';
 import 'package:oronbox/src/device/core/transport.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_auth_system.dart';
+import 'package:oronbox/src/device/zeppos/systems/zeppos_alarms_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_app_install_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_app_side_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_apps_system.dart';
@@ -54,6 +55,7 @@ class ZeppOsDeviceFactory implements DeviceEntityFactory {
     final deviceInfoSystem = ZeppOsDeviceInfoSystem();
     final servicesSystem = ZeppOsServicesSystem();
     final findDeviceSystem = ZeppOsFindDeviceSystem();
+    final alarmsSystem = ZeppOsAlarmsSystem();
     final xiaoAiSystem = ZeppOsXiaoAiSystem();
     final mapUploadSystem = ZeppOsMapUploadSystem();
     final musicUploadSystem = ZeppOsMusicUploadSystem();
@@ -75,12 +77,26 @@ class ZeppOsDeviceFactory implements DeviceEntityFactory {
             entity.emit(DeviceError(deviceId: id, error: error.toString()));
           }),
         );
+      } else if (payload.endpoint == ZeppOsAlarmsSystem.endpoint) {
+        alarmsSystem.handlePayload(payload.payload);
+      } else if (payload.endpoint == ZeppOsFindDeviceSystem.endpoint) {
+        findDeviceSystem.handlePayload(payload.payload);
       } else if (payload.endpoint == ZeppOsBatterySystem.endpoint) {
         batterySystem.handlePayload(payload.payload);
       } else if (payload.endpoint == ZeppOsDeviceInfoSystem.endpoint) {
         deviceInfoSystem.handlePayload(payload.payload);
       } else if (payload.endpoint == ZeppOsServicesSystem.endpoint) {
         servicesSystem.handlePayload(payload.payload);
+        final services = servicesSystem.supportedServices;
+        if (services != null && services.containsKey(ZeppOsAlarmsSystem.endpoint)) {
+          alarmsSystem.encrypted = services[ZeppOsAlarmsSystem.endpoint]!;
+        }
+        if (services != null && services.containsKey(ZeppOsFindDeviceSystem.endpoint)) {
+          findDeviceSystem.encrypted = services[ZeppOsFindDeviceSystem.endpoint]!;
+          unawaited(findDeviceSystem.initialize().catchError((Object error) {
+            entity.emit(DeviceError(deviceId: id, error: error.toString()));
+          }));
+        }
         // Screenshot capabilities are queried lazily after model/service gates.
       } else if (payload.endpoint == ZeppOsTimeSystem.endpoint) {
         timeSystem.handlePayload(payload.payload);
@@ -109,6 +125,7 @@ class ZeppOsDeviceFactory implements DeviceEntityFactory {
     entity.registerSystem(deviceInfoSystem);
     entity.registerSystem(servicesSystem);
     entity.registerSystem(findDeviceSystem);
+    entity.registerSystem(alarmsSystem);
     entity.registerSystem(xiaoAiSystem);
     entity.registerSystem(mapUploadSystem);
     entity.registerSystem(musicUploadSystem);
