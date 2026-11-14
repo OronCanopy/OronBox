@@ -105,6 +105,27 @@ void main() {
     await expectLater(invalid, throwsA(isA<FormatException>()));
   });
 
+  test('incoming repetition uses only defined weekday bits', () async {
+    for (final (wire, weekdays) in [(0x80, 0), (0xff, 127), (0x85, 5)]) {
+      final load = system.load();
+      await Future<void>.delayed(Duration.zero);
+      system.handlePayload(Uint8List.fromList([
+        10, 1, 4, 0, 7, 30, wire, 0, 0, 0, 0, 0,
+      ]));
+      expect((await load).single.repetition, weekdays);
+    }
+  });
+
+  test('outgoing repetition rejects bits outside the weekday mask', () async {
+    await expectLater(
+      system.create(const ZeppOsAlarm(
+        position: 0, hour: 7, minute: 30, repetition: 0x80,
+      )),
+      throwsRangeError,
+    );
+    expect(transport.sent, isEmpty);
+  });
+
   test('delete confirms that the alarm disappeared', () async {
     final future = system.delete(3);
     await Future<void>.delayed(Duration.zero);

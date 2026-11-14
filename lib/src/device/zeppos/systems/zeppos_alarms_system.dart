@@ -234,7 +234,9 @@ class ZeppOsAlarmsSystem extends System {
         position: payload[offset + 1],
         hour: payload[offset + 2],
         minute: payload[offset + 3],
-        repetition: payload[offset + 4],
+        // Only the seven weekday bits are defined; ignore reserved high bits
+        // some firmware versions return in the repetition byte.
+        repetition: payload[offset + 4] & 0x7f,
         enabled: flags & flagEnabled != 0,
         smartWakeup: flags & flagSmart != 0,
       );
