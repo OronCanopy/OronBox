@@ -6,8 +6,11 @@ class PhoneFinder {
 
   static const _channel = MethodChannel('oronbox/find_phone');
 
-  static Future<void> setFinding(bool finding) async {
+  static Future<void> setFinding(bool finding, {bool ring = true}) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
-    await _channel.invokeMethod<void>(finding ? 'start' : 'stop');
+    await _channel.invokeMethod<void>(
+      finding ? 'start' : 'stop',
+      finding ? {'ring': ring} : null,
+    );
   }
 }

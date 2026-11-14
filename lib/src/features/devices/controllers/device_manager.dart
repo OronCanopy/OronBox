@@ -49,6 +49,7 @@ import 'package:oronbox/src/device/xiaomi/systems/xiaomi_device_component.dart';
 import 'package:oronbox/src/device/xiaomi/xiaomi_device_factory.dart';
 import 'package:oronbox/src/device/xiaomi/xiaomi_time.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_auth_system.dart';
+import 'package:oronbox/src/device/zeppos/systems/zeppos_alarms_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_apps_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_app_install_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_app_side_system.dart';
@@ -67,6 +68,7 @@ import 'package:oronbox/src/device/xiaomi/systems/xiaomi_voice_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_watchface_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_voice_memos_system.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_btbr_transport.dart';
+import 'package:oronbox/src/device/zeppos/zeppos_capabilities.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_device_catalog.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_device_factory.dart';
 import 'package:oronbox/src/features/accounts/models/mi_account_models.dart';
@@ -143,7 +145,26 @@ abstract class DeviceManager extends Notifier<DeviceManagerState> {
     ).kind;
   }
 
+  MiWearState? get currentDevice => state.currentDevice;
+
+  bool get deviceReady => state.protocolState == ProtocolState.ready;
+
   SystemInfo? get systemInfo => state.systemInfo;
+
+  Future<Set<ZeppOsFeature>> fetchZeppOsFeatures() async => const {};
+
+  Stream<List<ZeppOsAlarm>> get zeppOsAlarmUpdates => const Stream.empty();
+
+  int? get zeppOsMaxAlarms => null;
+  Future<List<ZeppOsAlarm>> loadZeppOsAlarms() async =>
+      throw UnsupportedError('Zepp OS alarms are unavailable');
+  Future<void> addZeppOsAlarm(ZeppOsAlarm alarm) async =>
+      throw UnsupportedError('Zepp OS alarms are unavailable');
+  Future<void> updateZeppOsAlarm(ZeppOsAlarm alarm) async =>
+      throw UnsupportedError('Zepp OS alarms are unavailable');
+  Future<void> deleteZeppOsAlarm(int position) async =>
+      throw UnsupportedError('Zepp OS alarms are unavailable');
+
 
   /// The health protocol surface for the currently connected Xiaomi device.
   ///
@@ -257,6 +278,10 @@ abstract class DeviceManager extends Notifier<DeviceManagerState> {
   Future<void> refreshDeviceData();
   Future<void> setFindingZeppOsDevice(bool finding);
   Future<void> setFindingXiaomiPhone(bool finding);
+
+  Future<void> setFindingZeppOsPhone(bool finding) async {
+    throw UnsupportedError('Zepp OS phone finder is unavailable');
+  }
   Future<void> setFindingXiaomiWearable(bool finding);
   void setVoiceLabEnabled(bool enabled) {}
   void updateVoiceSystemState() {}
@@ -1771,6 +1796,10 @@ class LocalDeviceManager extends DeviceManager {
         );
       case XiaomiHealthStateUpdated(:final health):
         state = state.copyWith(health: health);
+      case ZeppOsFindPhoneRequested(:final finding):
+        state = state.copyWith(findingZeppOsPhone: finding);
+      case ZeppOsFindWearableRequested(:final finding):
+        state = state.copyWith(findingZeppOsWearable: finding);
       case XiaomiFindPhoneRequested(:final finding):
         _log.info(
           'event: wearable phone finder ${finding ? 'started' : 'stopped'}',
@@ -1886,6 +1915,8 @@ class LocalDeviceManager extends DeviceManager {
         clearHealth: true,
         clearSystemInfo: true,
         findingXiaomiWearable: false,
+        findingZeppOsWearable: false,
+        findingZeppOsPhone: false,
         clearError: true,
       );
       await _cleanupConnection();
@@ -1916,6 +1947,8 @@ class LocalDeviceManager extends DeviceManager {
       clearHealth: true,
       clearSystemInfo: true,
       findingXiaomiWearable: false,
+      findingZeppOsWearable: false,
+      findingZeppOsPhone: false,
       clearError: true,
     );
     if (!alreadyPersistedOffline) _savePairedDevices();
@@ -2066,6 +2099,8 @@ class LocalDeviceManager extends DeviceManager {
       clearHealth: true,
       clearSystemInfo: true,
       findingXiaomiWearable: false,
+      findingZeppOsWearable: false,
+      findingZeppOsPhone: false,
       clearError: true,
       clearConnectionTarget: true,
       clearConnectionPhase: true,
@@ -2140,6 +2175,8 @@ class LocalDeviceManager extends DeviceManager {
       clearHealth: true,
       clearSystemInfo: true,
       findingXiaomiWearable: false,
+      findingZeppOsWearable: false,
+      findingZeppOsPhone: false,
       clearConnectionTarget: true,
       clearConnectionPhase: true,
       clearError: true,
@@ -2466,6 +2503,43 @@ class LocalDeviceManager extends DeviceManager {
   }
 
   @override
+  Future<Set<ZeppOsFeature>> fetchZeppOsFeatures() async {
+    final entity = _currentEntity;
+    final device = state.currentDevice;
+    if (entity == null ||
+        device == null ||
+        state.protocolState != ProtocolState.ready) {
+      return const {};
+    }
+    final discovery = entity.system<ZeppOsServicesSystem>();
+    if (discovery == null) return const {};
+    final services = await discovery.fetchSupportedServices().timeout(
+      const Duration(seconds: 8),
+    );
+    if (_currentEntity != entity ||
+        state.currentDevice?.addr != device.addr ||
+        state.protocolState != ProtocolState.ready) {
+      return const {};
+    }
+    return resolveZeppOsFeatures(
+      name: device.name,
+      codename: device.codename,
+      deviceSource: entity.system<ZeppOsDeviceInfoSystem>()?.deviceSource,
+      services: services.keys.toSet(),
+    );
+  }
+
+  Future<void> _requireZeppOsFeature(
+    ZeppOsFeature feature,
+    DeviceEntity entity,
+  ) async {
+    final features = await fetchZeppOsFeatures();
+    if (_currentEntity != entity || !features.contains(feature)) {
+      throw UnsupportedError('Zepp OS ${feature.name} is unavailable');
+    }
+  }
+
+  @override
   Future<void> setFindingZeppOsDevice(bool finding) async {
     final entity = _currentEntity;
     if (entity == null || state.protocolState != ProtocolState.ready) {
@@ -2475,7 +2549,68 @@ class LocalDeviceManager extends DeviceManager {
     if (system == null) {
       throw UnsupportedError('Find device is only available for ZeppOS');
     }
+    await _requireZeppOsFeature(ZeppOsFeature.findDevice, entity);
+    if (_currentEntity != entity || state.protocolState != ProtocolState.ready) {
+      throw ProtocolException('Device changed');
+    }
     await system.setFinding(finding);
+  }
+
+  @override
+  Stream<List<ZeppOsAlarm>> get zeppOsAlarmUpdates =>
+      _currentEntity?.system<ZeppOsAlarmsSystem>()?.updates ?? const Stream.empty();
+
+  @override
+  int? get zeppOsMaxAlarms =>
+      _currentEntity?.system<ZeppOsAlarmsSystem>()?.maxAlarms;
+
+  Future<T> _withZeppOsAlarms<T>(
+    Future<T> Function(ZeppOsAlarmsSystem) operation,
+  ) async {
+    final entity = _currentEntity;
+    if (entity == null || !deviceReady) {
+      throw ProtocolException('Device not ready');
+    }
+    await _requireZeppOsFeature(ZeppOsFeature.alarms, entity);
+    if (_currentEntity != entity || !deviceReady || entity.isDisposed) {
+      throw ProtocolException('Device changed');
+    }
+    final system = entity.system<ZeppOsAlarmsSystem>();
+    if (system == null) throw UnsupportedError('Zepp OS alarms are unavailable');
+    final result = await operation(system);
+    if (_currentEntity != entity || !deviceReady || entity.isDisposed) {
+      throw ProtocolException('Device changed');
+    }
+    return result;
+  }
+
+  @override
+  Future<List<ZeppOsAlarm>> loadZeppOsAlarms() =>
+      _withZeppOsAlarms((system) => system.load());
+
+  @override
+  Future<void> addZeppOsAlarm(ZeppOsAlarm alarm) =>
+      _withZeppOsAlarms((system) => system.create(alarm));
+
+  @override
+  Future<void> updateZeppOsAlarm(ZeppOsAlarm alarm) =>
+      _withZeppOsAlarms((system) => system.update(alarm));
+
+  @override
+  Future<void> deleteZeppOsAlarm(int position) =>
+      _withZeppOsAlarms((system) => system.delete(position));
+
+  @override
+  Future<void> setFindingZeppOsPhone(bool finding) async {
+    final entity = _currentEntity;
+    if (entity == null || !deviceReady) {
+      throw ProtocolException('Device not ready');
+    }
+    await _requireZeppOsFeature(ZeppOsFeature.findDevice, entity);
+    if (_currentEntity != entity || !deviceReady) {
+      throw ProtocolException('Device changed');
+    }
+    await entity.system<ZeppOsFindDeviceSystem>()!.setFindingPhone(finding);
   }
 
   @override
@@ -2735,6 +2870,11 @@ class LocalDeviceManager extends DeviceManager {
       if (system == null) {
         throw UnsupportedError('Screenshot service unavailable');
       }
+      await _requireZeppOsFeature(ZeppOsFeature.screenshot, entity);
+      if (_currentEntity != entity ||
+          state.protocolState != ProtocolState.ready) {
+        throw ProtocolException('Device changed');
+      }
       return await system.requestScreenshot();
     } finally {
       _activeTransfers -= 1;
@@ -2755,6 +2895,11 @@ class LocalDeviceManager extends DeviceManager {
     }
     _activeTransfers += 1;
     try {
+      await _requireZeppOsFeature(ZeppOsFeature.voiceMemos, entity);
+      if (_currentEntity != entity ||
+          state.protocolState != ProtocolState.ready) {
+        throw ProtocolException('Device changed');
+      }
       return await system.downloadAll(onProgress: onProgress);
     } finally {
       _activeTransfers -= 1;
@@ -2808,6 +2953,11 @@ class LocalDeviceManager extends DeviceManager {
     }
     _activeTransfers += 1;
     try {
+      await _requireZeppOsFeature(ZeppOsFeature.maps, entity);
+      if (_currentEntity != entity ||
+          state.protocolState != ProtocolState.ready) {
+        throw ProtocolException('Device changed');
+      }
       await system.upload(bytes, fileName: fileName, onProgress: onProgress);
     } finally {
       _activeTransfers -= 1;
@@ -4215,3 +4365,18 @@ class LocalDeviceManager extends DeviceManager {
 
 final deviceManagerProvider =
     NotifierProvider<DeviceManager, DeviceManagerState>(LocalDeviceManager.new);
+
+final zeppOsFeaturesProvider = FutureProvider.autoDispose<Set<ZeppOsFeature>>((ref) {
+  ref.watch(
+    deviceManagerProvider.select(
+      (state) => (
+        state.currentDevice?.addr,
+        state.currentDevice?.name,
+        state.currentDevice?.codename,
+        state.protocolState,
+        state.systemInfo,
+      ),
+    ),
+  );
+  return ref.read(deviceManagerProvider.notifier).fetchZeppOsFeatures();
+});

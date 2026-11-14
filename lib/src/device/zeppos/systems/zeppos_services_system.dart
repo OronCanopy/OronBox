@@ -12,6 +12,8 @@ class ZeppOsServicesSystem extends System {
   Completer<Map<int, bool>>? _pending;
   Map<int, bool>? _services;
 
+  Map<int, bool>? get supportedServices => _services;
+
   Future<Map<int, bool>> fetchSupportedServices() async {
     final cached = _services;
     if (cached != null) return cached;

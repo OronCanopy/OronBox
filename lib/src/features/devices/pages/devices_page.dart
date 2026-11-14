@@ -18,6 +18,7 @@ import 'package:oronbox/src/core/models/bt_models.dart';
 import 'package:oronbox/src/core/models/device.dart';
 import 'package:oronbox/src/core/utils/layout.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_device_catalog.dart';
+import 'package:oronbox/src/device/zeppos/zeppos_capabilities.dart';
 import 'package:oronbox/src/device/core/event_bus.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 import 'package:oronbox/src/features/devices/services/xiaomi_automatic_sync_service.dart';
@@ -844,6 +845,10 @@ class _DeviceFeaturesPanelState extends ConsumerState<_DeviceFeaturesPanel> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final state = ref.watch(deviceManagerProvider);
+    final zeppFeatures = widget.isZeppOs
+        ? (ref.watch(zeppOsFeaturesProvider).asData?.value ??
+              const <ZeppOsFeature>{})
+        : const <ZeppOsFeature>{};
     final appCount = state.apps
         .where((app) => !app.packageName.startsWith('com.xiaomi.miwear.'))
         .length;
@@ -889,7 +894,8 @@ class _DeviceFeaturesPanelState extends ConsumerState<_DeviceFeaturesPanel> {
               SegmentedTile.navigation(
                 onPressed: (_) =>
                     context.push('/devices/zeppos-more/voice-memos'),
-                enabled: widget.enabled,
+                enabled: widget.enabled &&
+                    zeppFeatures.contains(ZeppOsFeature.voiceMemos),
                 leading: const Icon(Icons.mic_none),
                 title: Text(l10n.deviceRecordingsTitle),
                 description: Text(l10n.deviceRecordingsDescription),

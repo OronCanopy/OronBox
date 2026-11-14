@@ -31,6 +31,8 @@ class DeviceManagerState {
     this.xiaoAiFrameCount = 0,
     this.xiaoAiCapabilities = const {},
     this.findingXiaomiWearable = false,
+    this.findingZeppOsWearable = false,
+    this.findingZeppOsPhone = false,
     this.uploadBytesPerSecond = 0,
     this.downloadBytesPerSecond = 0,
     this.error,
@@ -55,6 +57,8 @@ class DeviceManagerState {
   final int xiaoAiFrameCount;
   final Map<String, Object?> xiaoAiCapabilities;
   final bool findingXiaomiWearable;
+  final bool findingZeppOsWearable;
+  final bool findingZeppOsPhone;
   final double uploadBytesPerSecond;
   final double downloadBytesPerSecond;
   final String? error;
@@ -79,6 +83,8 @@ class DeviceManagerState {
     int? xiaoAiFrameCount,
     Map<String, Object?>? xiaoAiCapabilities,
     bool? findingXiaomiWearable,
+    bool? findingZeppOsWearable,
+    bool? findingZeppOsPhone,
     double? uploadBytesPerSecond,
     double? downloadBytesPerSecond,
     String? error,
@@ -119,6 +125,9 @@ class DeviceManagerState {
       xiaoAiCapabilities: xiaoAiCapabilities ?? this.xiaoAiCapabilities,
       findingXiaomiWearable:
           findingXiaomiWearable ?? this.findingXiaomiWearable,
+      findingZeppOsPhone: findingZeppOsPhone ?? this.findingZeppOsPhone,
+      findingZeppOsWearable:
+          findingZeppOsWearable ?? this.findingZeppOsWearable,
       uploadBytesPerSecond: uploadBytesPerSecond ?? this.uploadBytesPerSecond,
       downloadBytesPerSecond:
           downloadBytesPerSecond ?? this.downloadBytesPerSecond,

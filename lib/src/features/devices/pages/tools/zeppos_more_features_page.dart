@@ -16,6 +16,7 @@ import 'package:oronbox/src/core/services/shared_prefs_service.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 import 'package:oronbox/src/features/devices/pages/tools/zeppos_map_transfer.dart';
 import 'package:oronbox/src/device/core/device_state.dart' as proto;
+import 'package:oronbox/src/device/zeppos/zeppos_capabilities.dart';
 
 class ZeppOsMoreFeaturesPage extends ConsumerStatefulWidget {
   const ZeppOsMoreFeaturesPage({super.key});
@@ -29,7 +30,6 @@ class _ZeppOsMoreFeaturesPageState
     extends ConsumerState<ZeppOsMoreFeaturesPage> {
   static const _mirrorIntervalPreferenceKey = 'zeppos.mirror.frame_interval_ms';
 
-  bool _finding = false;
   bool _busy = false;
   bool _mirrorSettingsExpanded = false;
   int _mirrorIntervalMs = 10;
@@ -104,7 +104,6 @@ class _ZeppOsMoreFeaturesPageState
       await ref
           .read(deviceManagerProvider.notifier)
           .setFindingZeppOsDevice(finding);
-      if (mounted) setState(() => _finding = finding);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -124,6 +123,9 @@ class _ZeppOsMoreFeaturesPageState
     final l10n = AppLocalizations.of(context)!;
     final state = ref.watch(deviceManagerProvider);
     final ready = state.protocolState == proto.ProtocolState.ready;
+    final capabilities = ref.watch(zeppOsFeaturesProvider);
+    final features = capabilities.asData?.value ?? const <ZeppOsFeature>{};
+    final canMirror = ready && features.contains(ZeppOsFeature.screenshot);
 
     return Scaffold(
       appBar: SysAppBar(secondary: true, title: Text(l10n.zeppOsMoreFeatures)),
@@ -134,6 +136,27 @@ class _ZeppOsMoreFeaturesPageState
           bottom: bottomContentPadding(context, extra: 16),
         ),
         sections: [
+          if (capabilities.isLoading)
+            SegmentedSection(
+              tiles: [
+                SegmentedTile(
+                  title: const LinearProgressIndicator(),
+                  enabled: false,
+                ),
+              ],
+            ),
+          if (capabilities.hasError)
+            SegmentedSection(
+              tiles: [
+                SegmentedTile.navigation(
+                  title: Text(l10n.retry),
+                  description: Text(
+                    localizedErrorMessage(l10n, capabilities.error!),
+                  ),
+                  onPressed: (_) => ref.invalidate(zeppOsFeaturesProvider),
+                ),
+              ],
+            ),
           SegmentedSection(
             title: Text(l10n.zeppOsDeviceFeaturesSection),
             tiles: [
@@ -160,7 +183,7 @@ class _ZeppOsMoreFeaturesPageState
                                     child: TextField(
                                       controller: _mirrorIntervalController,
                                       focusNode: _mirrorIntervalFocusNode,
-                                      enabled: ready,
+                                      enabled: canMirror,
                                       keyboardType: TextInputType.number,
                                       textInputAction: TextInputAction.done,
                                       textAlign: TextAlign.end,
@@ -220,14 +243,14 @@ class _ZeppOsMoreFeaturesPageState
                     child: const Icon(Icons.keyboard_arrow_down),
                   ),
                 ),
-                enabled: ready,
+                enabled: canMirror,
                 onPressed: (_) => _showMirror(),
               ),
               SegmentedTile.navigation(
                 leading: const Icon(Icons.map_outlined),
                 title: Text(l10n.zeppOsOfflineMaps),
                 description: Text(l10n.zeppOsOfflineMapsDescription),
-                enabled: ready,
+                enabled: ready && features.contains(ZeppOsFeature.maps),
                 onPressed: (_) => showZeppOsMapTransfer(context),
               ),
             ],
@@ -246,7 +269,7 @@ class _ZeppOsMoreFeaturesPageState
                 leading: const Icon(Icons.code),
                 title: Text(l10n.zeppOsAppDebug),
                 description: Text(l10n.zeppOsAppDebugDescription),
-                enabled: ready,
+                enabled: ready && features.contains(ZeppOsFeature.appSide),
                 onPressed: (_) => context.push('/devices/zeppos-more/app-side'),
               ),
             ],
@@ -263,9 +286,34 @@ class _ZeppOsMoreFeaturesPageState
                     : const Icon(Icons.vibration),
                 title: Text(l10n.zeppOsFindDevice),
                 description: Text(l10n.zeppOsFindDeviceDescription),
-                initialValue: _finding,
-                enabled: ready && !_busy,
+                initialValue: state.findingZeppOsWearable,
+                enabled: ready &&
+                    !_busy &&
+                    features.contains(ZeppOsFeature.findDevice),
                 onToggle: (value) => _setFinding(value ?? false),
+              ),
+              if (state.findingZeppOsPhone)
+                SegmentedTile.navigation(
+                  leading: const Icon(Icons.smartphone),
+                  title: Text(l10n.stop),
+                  onPressed: (_) async {
+                    try {
+                      await ref.read(deviceManagerProvider.notifier)
+                          .setFindingZeppOsPhone(false);
+                    } catch (error) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(localizedErrorMessage(l10n, error)),
+                      ));
+                    }
+                  },
+                ),
+              SegmentedTile.navigation(
+                leading: const Icon(Icons.alarm),
+                title: Text(l10n.alarmManagementTitle),
+                description: Text(l10n.alarmManagementDescription),
+                enabled: ready && features.contains(ZeppOsFeature.alarms),
+                onPressed: (_) => context.push('/devices/zeppos-more/alarms'),
               ),
             ],
           ),
