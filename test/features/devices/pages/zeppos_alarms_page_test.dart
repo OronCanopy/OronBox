@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:oronbox/src/core/services/shared_prefs_service.dart';
 import 'package:oronbox/src/app/app_localizations_delegates.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/widgets/app_state_view.dart';
@@ -87,9 +89,13 @@ Future<void> _pump(WidgetTester tester, _AlarmManager manager) async {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late _AlarmManager manager;
 
-  setUp(() {
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPrefsService.instance.init();
+    await SharedPrefsService.instance.reload();
     manager = _AlarmManager();
   });
   tearDown(() async {

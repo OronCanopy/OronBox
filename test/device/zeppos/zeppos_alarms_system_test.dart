@@ -38,7 +38,10 @@ void main() {
     );
     final future = system.create(alarm);
     await Future<void>.delayed(Duration.zero);
-    expect(transport.sent.single.sublist(11), [
+    expect([
+      ...transport.sent[0].sublist(11),
+      ...transport.sent[1].sublist(5),
+    ], [
       3, 1, 5, 1, 7, 5, 127, 0, 0, 0, 0, 0,
     ]);
     system.handlePayload(Uint8List.fromList([4, 0]));
@@ -60,7 +63,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     system.handlePayload(Uint8List.fromList([4, 0]));
     await Future<void>.delayed(Duration.zero);
-    expect(transport.sent, hasLength(2));
+    expect(transport.sent, hasLength(3));
     final rejected = expectLater(future, throwsStateError);
     system.handlePayload(Uint8List.fromList([10, 0]));
     await rejected;
@@ -132,8 +135,9 @@ void main() {
   test('dispose releases pending operation', () async {
     final future = system.load();
     await Future<void>.delayed(Duration.zero);
+    final rejected = expectLater(future, throwsStateError);
     await system.dispose();
-    await expectLater(future, throwsStateError);
+    await rejected;
   });
 
   test('load times out when no response arrives', () async {
