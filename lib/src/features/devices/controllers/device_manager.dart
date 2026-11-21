@@ -501,8 +501,9 @@ class LocalDeviceManager extends DeviceManager {
     if (entity == null ||
         entity.id != deviceId ||
         entity.isDisposed ||
-        state.protocolState != ProtocolState.ready)
+        state.protocolState != ProtocolState.ready) {
       return false;
+    }
     final zepp = entity.system<ZeppOsNotificationSystem>();
     if (zepp != null) {
       return zepp.send(item, removed: removed);

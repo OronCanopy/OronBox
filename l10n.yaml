@@ -3,5 +3,8 @@ template-arb-file: app_en.arb
 output-localization-file: app_localizations.dart
 output-class: AppLocalizations
 output-dir: lib/src/app/generated
+header: |
+  // Flutter's gen-l10n template emits deprecated SDK localization delegates.
+  // ignore_for_file: deprecated_member_use
 generate-nullable-getters: false
 untranslated-messages-file: .dart_tool/untranslated-messages.json

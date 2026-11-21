@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:oronbox/src/app/app_localizations_delegates.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/features/devices/health/health_models.dart';
 import 'package:oronbox/src/features/devices/health/pages/xiaomi_health_workout_page.dart';
@@ -8,39 +9,40 @@ import 'package:oronbox/src/features/devices/health/pages/xiaomi_health_workout_
 void main() {
   Widget buildTestWidget(Widget child) {
     return MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(
-        body: SingleChildScrollView(child: child),
-      ),
+      home: Scaffold(body: SingleChildScrollView(child: child)),
     );
   }
 
-  testWidgets('WorkoutRouteCard renders nothing when route has less than 2 points',
-      (tester) async {
-    await tester.pumpWidget(
-      buildTestWidget(
-        WorkoutRouteCard(
-          route: [
-            HealthWorkoutRoutePoint(
-              timestamp: DateTime(2026, 10, 1, 10, 0),
-              latitude: 31.2304,
-              longitude: 121.4737,
-            ),
-          ],
-          color: Colors.blue,
+  testWidgets(
+    'WorkoutRouteCard renders nothing when route has less than 2 points',
+    (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(
+          WorkoutRouteCard(
+            route: [
+              HealthWorkoutRoutePoint(
+                timestamp: DateTime(2026, 10, 1, 10, 0),
+                latitude: 31.2304,
+                longitude: 121.4737,
+              ),
+            ],
+            color: Colors.blue,
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byType(FlutterMap), findsNothing);
-    expect(find.text('起'), findsNothing);
-    expect(find.text('终'), findsNothing);
-  });
+      expect(find.byType(FlutterMap), findsNothing);
+      expect(find.text('起'), findsNothing);
+      expect(find.text('终'), findsNothing);
+    },
+  );
 
-  testWidgets('WorkoutRouteCard renders FlutterMap with route and markers',
-      (tester) async {
+  testWidgets('WorkoutRouteCard renders FlutterMap with route and markers', (
+    tester,
+  ) async {
     final route = [
       HealthWorkoutRoutePoint(
         timestamp: DateTime(2026, 10, 1, 10, 0),
@@ -60,12 +62,7 @@ void main() {
     ];
 
     await tester.pumpWidget(
-      buildTestWidget(
-        WorkoutRouteCard(
-          route: route,
-          color: Colors.deepOrange,
-        ),
-      ),
+      buildTestWidget(WorkoutRouteCard(route: route, color: Colors.deepOrange)),
     );
     await tester.pump();
 
@@ -77,8 +74,9 @@ void main() {
     expect(find.text('终'), findsOneWidget);
   });
 
-  testWidgets('WorkoutRouteCard toggles between street map and vector route',
-      (tester) async {
+  testWidgets('WorkoutRouteCard toggles between street map and vector route', (
+    tester,
+  ) async {
     final route = [
       HealthWorkoutRoutePoint(
         timestamp: DateTime(2026, 10, 1, 10, 0),
@@ -93,12 +91,7 @@ void main() {
     ];
 
     await tester.pumpWidget(
-      buildTestWidget(
-        WorkoutRouteCard(
-          route: route,
-          color: Colors.green,
-        ),
-      ),
+      buildTestWidget(WorkoutRouteCard(route: route, color: Colors.green)),
     );
     await tester.pump();
 

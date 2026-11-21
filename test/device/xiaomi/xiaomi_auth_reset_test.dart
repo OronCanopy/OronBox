@@ -15,7 +15,6 @@ import 'package:oronbox/src/device/xiaomi/protocol/packet/l2_packet.dart';
 import 'package:oronbox/src/device/xiaomi/systems/auth_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/bind_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/xiaomi_device_component.dart';
-import 'package:oronbox/src/device/xiaomi/utils/auth_utils.dart';
 import 'package:oronbox/src/device/xiaomi/xiaomi_device_factory.dart';
 
 void main() {

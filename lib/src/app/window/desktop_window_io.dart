@@ -14,7 +14,6 @@ import 'package:window_manager/window_manager.dart'
     show SizeToNative, OffsetToNative;
 import 'package:path_provider/path_provider.dart';
 import 'package:tray_manager/tray_manager.dart';
-import 'package:window_manager/legacy.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
 import 'package:oronbox/src/app/router/app_router.dart';
@@ -23,18 +22,26 @@ import 'package:oronbox/src/app/window/window_launch_spec.dart';
 import 'package:oronbox/src/core/services/shared_prefs_service.dart';
 import 'package:oronbox/src/host/application_host_provider.dart';
 
+nativeapi.Window? _mainWindow;
 nativeapi.Window? _secondaryWindow;
 Future<void> Function()? _closeSecondary;
 
-Future<void> closeDesktopWindow() =>
-    _secondaryWindow != null ? closeSecondaryWindow() : windowManager.close();
+Future<void> closeDesktopWindow() async {
+  if (_secondaryWindow != null) {
+    await closeSecondaryWindow();
+  } else if (_mainWindow case final window?) {
+    if (nativeapi.Window.isCloseSupported()) {
+      window.close();
+    } else {
+      _onUnsupportedWindowClose?.call();
+    }
+  }
+}
+
+VoidCallback? _onUnsupportedWindowClose;
 
 void dragDesktopWindow() {
-  if (_secondaryWindow case final window?) {
-    window.startDragging();
-  } else {
-    unawaited(windowManager.startDragging());
-  }
+  (_secondaryWindow ?? _mainWindow)?.startDragging();
 }
 
 Future<void> initializeDesktopWindow({
@@ -55,8 +62,10 @@ Future<void> initializeDesktopWindow({
       throw StateError('Secondary window unavailable');
     }
   } else {
-    await windowManager.ensureInitialized();
+    _mainWindow = nativeapi.WindowManager.instance.getCurrent();
   }
+  final window = _secondaryWindow ?? _mainWindow;
+  if (window == null) return;
   final secondary = spec.isSecondary;
   final role = spec.storageKey;
   final prefs = SharedPrefsService.instance;
@@ -72,44 +81,37 @@ Future<void> initializeDesktopWindow({
     OronBoxWindowRole.debug => const Size(640, 520),
     _ => const Size(720, 520),
   };
-  final options = WindowOptions(
-    size: savedWidth != null && savedHeight != null
-        ? Size(savedWidth, savedHeight)
-        : defaultSize,
-    minimumSize: minimumSize,
-    center: true,
-    title: switch (spec.role) {
-      OronBoxWindowRole.debug => 'OronBox Debug',
-      OronBoxWindowRole.plugin => 'OronBox Plugin',
-      OronBoxWindowRole.webview => 'OronBox',
-      OronBoxWindowRole.main => 'OronBox',
-    },
-    titleBarStyle: secondary ? TitleBarStyle.normal : TitleBarStyle.hidden,
-    windowButtonVisibility: secondary ? true : Platform.isMacOS,
-  );
-  if (_secondaryWindow case final window?) {
-    window.setSize(options.size!.toNative(), false);
-    window.minimumSize = minimumSize.toNative();
-    window.titleBarStyle = nativeapi.TitleBarStyle.normal;
-    window.title = options.title!;
-    final x = prefs.getDouble('window.$role.x');
-    final y = prefs.getDouble('window.$role.y');
-    if (x != null && y != null) {
-      window.position = Offset(x, y).toNative();
-    } else {
-      window.center();
-    }
-    window.show();
-    window.focus();
-    return;
+  final wasFrameless = !secondary && Platform.isMacOS && window.isFrameless;
+  window.titleBarStyle = secondary
+      ? nativeapi.TitleBarStyle.normal
+      : nativeapi.TitleBarStyle.hidden;
+  if (!secondary) {
+    window.isWindowControlButtonsVisible = Platform.isMacOS;
+    if (wasFrameless) window.hasShadow = true;
+    if (window.isFullScreen) window.isFullScreen = false;
+    if (window.isMaximized) window.unmaximize();
+    if (window.isMinimized) window.restore();
   }
-  await windowManager.waitUntilReadyToShow(options, () async {
-    final x = prefs.getDouble('window.$role.x');
-    final y = prefs.getDouble('window.$role.y');
-    if (x != null && y != null) await windowManager.setPosition(Offset(x, y));
-    await windowManager.show();
-    await windowManager.focus();
-  });
+  final size = savedWidth != null && savedHeight != null
+      ? Size(savedWidth, savedHeight)
+      : defaultSize;
+  window.setSize(size.toNative(), false);
+  window.minimumSize = minimumSize.toNative();
+  window.title = switch (spec.role) {
+    OronBoxWindowRole.debug => 'OronBox Debug',
+    OronBoxWindowRole.plugin => 'OronBox Plugin',
+    OronBoxWindowRole.webview || OronBoxWindowRole.main => 'OronBox',
+  };
+  final x = prefs.getDouble('window.$role.x');
+  final y = prefs.getDouble('window.$role.y');
+  if (x != null && y != null) {
+    window.position = Offset(x, y).toNative();
+  } else {
+    window.center();
+  }
+  if (window.isMinimized) window.restore();
+  window.show();
+  window.focus();
 }
 
 class DesktopWindowHost extends ConsumerStatefulWidget {
@@ -120,13 +122,13 @@ class DesktopWindowHost extends ConsumerStatefulWidget {
   ConsumerState<DesktopWindowHost> createState() => _DesktopWindowHostState();
 }
 
-class _DesktopWindowHostState extends ConsumerState<DesktopWindowHost>
-    with WindowListener {
+class _DesktopWindowHostState extends ConsumerState<DesktopWindowHost> {
   static const _exitBehaviorKey = 'desktop.exit_behavior';
   bool _initialized = false;
   bool _showingDialog = false;
   bool _exiting = false;
   AppLifecycleListener? _lifecycleListener;
+  nativeapi.ListenerId? _windowListenerId;
   TrayIcon? _trayIcon;
   Image? _trayImage;
   Menu? _trayMenu;
@@ -163,8 +165,13 @@ class _DesktopWindowHostState extends ConsumerState<DesktopWindowHost>
 
   Future<void> _initialize() async {
     final l10n = AppLocalizations.of(context)!;
-    windowManager.addListener(this);
-    await windowManager.setPreventClose(true);
+    _onUnsupportedWindowClose = _onWindowClose;
+    _windowListenerId = _mainWindow?.addListener((event) {
+      if (event is nativeapi.WindowCloseRequestedEvent) {
+        event.request.cancel();
+        _onWindowClose();
+      }
+    });
     final icon = switch (Platform.operatingSystem) {
       'macos' => 'assets/images/tray_icon_macos.png',
       'windows' => 'assets/images/tray_icon.ico',
@@ -219,7 +226,10 @@ class _DesktopWindowHostState extends ConsumerState<DesktopWindowHost>
   void dispose() {
     _lifecycleListener?.dispose();
     if (_isDesktop) {
-      windowManager.removeListener(this);
+      if (_windowListenerId case final listener?) {
+        _mainWindow?.removeListener(listener);
+      }
+      _onUnsupportedWindowClose = null;
       _disposeTray();
     }
     super.dispose();
@@ -255,9 +265,11 @@ class _DesktopWindowHostState extends ConsumerState<DesktopWindowHost>
   }
 
   Future<void> _showWindow() async {
-    await windowManager.show();
-    if (await windowManager.isMinimized()) await windowManager.restore();
-    await windowManager.focus();
+    final window = _mainWindow;
+    if (window == null) return;
+    if (window.isMinimized) window.restore();
+    window.show();
+    window.focus();
   }
 
   Future<void> _exitApplication() async {
@@ -266,7 +278,7 @@ class _DesktopWindowHostState extends ConsumerState<DesktopWindowHost>
     final host = ref.read(applicationHostProvider);
     final forcedExit = Timer(const Duration(seconds: 8), () => exit(0));
     try {
-      await windowManager.hide().timeout(const Duration(seconds: 1));
+      _mainWindow?.hide();
     } catch (_) {}
     try {
       await shutdownSecondaryWindows().timeout(const Duration(seconds: 5));
@@ -279,15 +291,14 @@ class _DesktopWindowHostState extends ConsumerState<DesktopWindowHost>
     exit(0);
   }
 
-  @override
-  void onWindowClose() {
+  void _onWindowClose() {
     final behavior = SharedPrefsService.instance.getInt(_exitBehaviorKey);
     if (behavior == 0) {
       unawaited(_exitApplication());
     } else if (behavior == 1) {
-      windowManager.hide();
+      _mainWindow?.hide();
     } else {
-      _askCloseBehavior();
+      unawaited(_askCloseBehavior());
     }
   }
 
@@ -295,7 +306,7 @@ class _DesktopWindowHostState extends ConsumerState<DesktopWindowHost>
     if (_showingDialog || !mounted) return;
     final navigatorContext = rootNavigatorKey.currentContext;
     if (navigatorContext == null) {
-      await windowManager.hide();
+      _mainWindow?.hide();
       return;
     }
     _showingDialog = true;
@@ -339,7 +350,7 @@ class _DesktopWindowHostState extends ConsumerState<DesktopWindowHost>
                   await SharedPrefsService.instance.setInt(_exitBehaviorKey, 1);
                 }
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
-                await windowManager.hide();
+                _mainWindow?.hide();
               },
               child: Text(l10n.desktopCloseToTray),
             ),

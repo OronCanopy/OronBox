@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  FLUTTER_VERSION: 3.50.0
+  FLUTTER_VERSION: 3.50.1
   ORONBOX_RETRY_ATTEMPTS: 3
   ORONBOX_RETRY_DELAY_SECONDS: 10
 
@@ -238,7 +238,7 @@ jobs:
           retry_cmd sudo apt-get update
           retry_cmd sudo apt-get install -y libsecret-1-dev \
             clang cmake ninja-build pkg-config zip curl \
-            libgtk-3-dev libblkid-dev liblzma-dev libasound2-dev \
+            libgtk-3-dev libx11-dev libxi-dev libblkid-dev liblzma-dev libasound2-dev \
             libwebkit2gtk-4.1-dev \
             libbluetooth-dev libayatana-appindicator3-dev \
             dpkg-dev rpm flatpak flatpak-builder

@@ -200,8 +200,9 @@ class _GlobalModalHostState extends ConsumerState<GlobalModalHost> {
         _isShowing = false;
         _currentShowingId = null;
         _currentRoute = null;
-        if (!preempted)
+        if (!preempted) {
           ref.read(globalModalCoordinatorProvider.notifier).dismiss(modal.id);
+        }
         final next = ref.read(globalModalCoordinatorProvider).activeModal;
         if (next != null) _presentModal(next);
       }),

@@ -130,7 +130,7 @@ class _DeviceNotificationAppsPageState
           Expanded(
             child: installed.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => Center(
+              error: (_, _) => Center(
                 child: TextButton(
                   onPressed: () => ref.invalidate(notificationAppsProvider),
                   child: Text(l10n.retry),
@@ -148,8 +148,9 @@ class _DeviceNotificationAppsPageState
                           item.key.toLowerCase().contains(_query),
                     )
                     .toList();
-                if (matching.isEmpty)
+                if (matching.isEmpty) {
                   return Center(child: Text(l10n.deviceNotificationAppsEmpty));
+                }
                 return Align(
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(

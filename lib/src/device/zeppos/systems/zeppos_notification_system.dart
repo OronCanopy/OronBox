@@ -84,16 +84,18 @@ class ZeppOsNotificationSystem extends System {
       if (data.length < 8) return;
       offset = 8 + (data[6] | (data[7] << 8));
     }
-    if (data.length < offset || (version >= 5 && data.length < offset + 2))
+    if (data.length < offset || (version >= 5 && data.length < offset + 2)) {
       return;
+    }
     _capabilities = (
       version: version,
       pictures: version >= 5 && data[offset] != 0,
       key: version >= 5 && data[offset + 1] != 0,
     );
     final pending = _pending;
-    if (pending != null && !pending.isCompleted)
+    if (pending != null && !pending.isCompleted) {
       pending.complete(_capabilities);
+    }
   }
 
   @override

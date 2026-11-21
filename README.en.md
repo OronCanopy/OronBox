@@ -45,8 +45,8 @@ OronBox is a cross-platform wearable device management tool that connects to and
 
 | Device / family | Status |
 |-----------------|--------|
-| Xiaomi Smart Band 8 Pro / 9 / 9 Pro / 10 / 10 Pro | ✅ Supported |
-| Xiaomi Watch S1 Pro / S3 series / S4 series / S5 | ✅ Supported |
+| Xiaomi Smart Band 8 Pro / 9 / 9 Pro / 10 / 10 Pro / 11 | ✅ Supported |
+| Xiaomi Watch S1 Pro / S3 series / S4 series / S5 series | ✅ Supported |
 | REDMI Watch 4 / 5 / 5 eSIM / 6 | ✅ Supported |
 
 ### ZeppOS
@@ -62,13 +62,17 @@ OronBox is a cross-platform wearable device management tool that connects to and
 |---------|-------------|
 | Connect VelaOS and ZeppOS devices | Manage paired devices and their connection state |
 | View device status and resource overview | Show battery, storage, apps and watch face information |
-| Install watch face and app resources | Install watch faces and apps on the device |
+| Install device resources | Install watch faces, apps, and resource packs |
+| Manage Canopus modules | Install, enable, disable, and uninstall modules |
 | Adjust device app order | Change the app order in the device launcher |
 | Set the device app layout | Adjust how the device app list is displayed |
 | Manage device alarms | Add, edit and delete device alarms |
 | Find devices in both directions | Let the wearable ring the phone, or make the wearable ring or vibrate from the phone |
 | Check or install device firmware | Download and install full or incremental packages, or install local firmware |
+| Automatically check for updates and notify users | Covers device firmware, apps, watch faces, and plugins |
+| MiWear engineering mode | Switch device modes and update firmware on devices in engineering mode |
 | Schedule background data synchronization | Check every 15 minutes and synchronize every hour |
+| Sync notifications to the device | Forward notifications from selected Android apps to the wearable |
 | Sync music to the device | Transfer MP3 files to the device music library |
 | Sync and export device recordings | Retrieve and save recordings from the device |
 | Receive and save watch screenshots | Save screenshots to the user's Pictures directory |
@@ -78,11 +82,14 @@ OronBox is a cross-platform wearable device management tool that connects to and
 | Wi-Fi credential synchronization | Respond to watch Wi-Fi scan and auth requests for quick network setup |
 | Assisted phone location sync | Stream real-time location fixes from the phone for watches without standalone GPS |
 | Sign in to Xiaomi accounts with 2FA | Download GNSS ephemeris data and obtain the device authkey |
+| Pair Xiaomi devices | Pair locally or use a Xiaomi account |
 | Read authkey from Xiaomi Fitness logs | Parse local Xiaomi Fitness app logs to retrieve the device authkey |
 | Sync Xiaomi device GNSS ephemeris | Support watch-initiated ephemeris updates; Xiaomi account required |
-| Access AstroBox-Repo and BandBBS resources | Browse and obtain community resources |
+| Browse community resources | Browse OronBox, AstroBox-Repo, BandBBS, and the Amazfit app store |
 | Sign in to BandBBS with OAuth | Obtain BandBBS community resources |
 | Publish resources from the creator center | Publish to BandBBS and AstroBox-Repo |
+| Install and run plugins | Install and run OronBox and AstroBox-NG plugins |
+| Back up and restore app data | Export and restore device pairing information, settings, and other app data |
 | Local API Server | Provide a local HTTP and SSE API server for external tools, featuring mDNS broadcast and Ed25519 challenge authentication |
 
 ## CLI Tool
@@ -117,11 +124,17 @@ Debian / Ubuntu dependencies:
 
 ```sh
 sudo apt install libsecret-1-dev clang cmake ninja-build pkg-config zip curl \
-  libgtk-3-dev libblkid-dev liblzma-dev libasound2-dev libwebkit2gtk-4.1-dev \
+  libgtk-3-dev libx11-dev libxi-dev libblkid-dev liblzma-dev libasound2-dev libwebkit2gtk-4.1-dev \
   libbluetooth-dev libayatana-appindicator3-dev dpkg-dev rpm flatpak flatpak-builder
 ```
 
-Other distributions: install the equivalents under their own package names (gtk3, webkit2gtk-4.1, bluez, libblkid, libasound2, xz) plus the packaging tools you need (dpkg-deb / rpmbuild / makepkg / linuxdeploy / appimagetool / flatpak-builder)
+aarch64 also requires these packages:
+
+```sh
+sudo apt install libflac-dev libogg-dev libopus-dev libvorbis-dev
+```
+
+On other distributions, install the equivalents of the packages above and the tools for your package formats (`dpkg-deb`, `rpmbuild`, `makepkg`, `linuxdeploy`, `appimagetool`, or `flatpak-builder`).
 
 Windows: Visual Studio 2022 (Desktop development with C++); the WebView2 SDK is managed by the `webview_all` plugin
 
@@ -155,7 +168,7 @@ tool/build_linux.sh [--format tar.gz|deb|rpm|arch|appimage|flatpak|all] [--abi x
 ```
 
 - By default builds all available formats; `--abi` defaults to the host architecture
-- Cross-building Linux aarch64 from an x86_64 host requires `ORONBOX_LINUX_ARM64_SYSROOT` pointing to an arm64 sysroot with the gtk3/webkit2gtk/alsa/flac/ogg/opus/vorbis development packages; cross mode only produces tar.gz / deb / rpm / arch packages
+- To cross-build Linux aarch64 on x86_64, point `ORONBOX_LINUX_ARM64_SYSROOT` to an arm64 sysroot. A Debian / Ubuntu sysroot needs `libgtk-3-dev`, `libx11-dev`, `libxi-dev`, `libwebkit2gtk-4.1-dev`, `libasound2-dev`, `libflac-dev`, `libogg-dev`, `libopus-dev`, and `libvorbis-dev`. Cross-builds produce tar.gz / deb / rpm / arch packages.
 
 #### macOS (macOS hosts only)
 

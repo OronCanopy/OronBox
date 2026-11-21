@@ -10,6 +10,8 @@ import 'package:oronbox/src/features/plugins/storage/plugin_storage.dart';
 import 'package:oronbox/src/features/plugins/storage/plugin_storage_io.dart';
 import 'package:wasm_abp/wasm_abp.dart';
 
+import '../../../support/wasm_abp_fixtures.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -90,8 +92,7 @@ void main() {
           pluginVersion: '1',
           runtimeVersion: '1',
           apiLevel: api,
-          entryBytes: File('../wasm_abp/native/tests/fixtures/sync_host.wasm')
-              .readAsBytesSync(),
+          entryBytes: readWasmAbpFixture('sync_host.wasm'),
           hostCall: (method, arguments) {
             reachedHost.complete();
             return response.future;
@@ -116,8 +117,7 @@ void main() {
 
   test('failed startup releases its worker and can be retried', () async {
     final runtime = WasmPluginRuntime(storage: const _DummyPluginStorage());
-    final bytes = File('../wasm_abp/native/tests/fixtures/ui_notification.wasm')
-        .readAsBytesSync();
+    final bytes = readWasmAbpFixture('ui_notification.wasm');
     await expectLater(
       runtime.start(
         pluginId: 'retry',
@@ -149,9 +149,7 @@ void main() {
         pluginName: 'Notification',
         pluginVersion: '1',
         runtimeVersion: '1',
-        entryBytes: File(
-          '../wasm_abp/native/tests/fixtures/ui_notification.wasm',
-        ).readAsBytesSync(),
+        entryBytes: readWasmAbpFixture('ui_notification.wasm'),
         hostCall: (method, arguments) {
           if (method == 'ui.render' && !rendered.isCompleted) {
             rendered.complete(arguments.single as String);
@@ -177,9 +175,7 @@ void main() {
         pluginVersion: '1',
         runtimeVersion: '1',
         apiLevel: 4,
-        entryBytes: File(
-          '../wasm_abp/native/tests/fixtures/wasi_p3_environment.wasm',
-        ).readAsBytesSync(),
+        entryBytes: readWasmAbpFixture('wasi_p3_environment.wasm'),
         hostCall: (_, _) => null,
       );
       expect(runtime.diagnostics['instantiated'], isTrue);

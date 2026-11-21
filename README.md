@@ -46,8 +46,8 @@ OronBox 是一款跨平台可穿戴设备管理工具，无需官方客户端，
 
 | 设备/系列 | 状态 |
 |----------|------|
-| Xiaomi Smart Band 8 Pro / 9 / 9 Pro / 10 / 10 Pro | ✅ 已支持 |
-| Xiaomi Watch S1 Pro / S3系列 / S4系列 / S5 | ✅ 已支持 |
+| Xiaomi Smart Band 8 Pro / 9 / 9 Pro / 10 / 10 Pro / 11 | ✅ 已支持 |
+| Xiaomi Watch S1 Pro / S3 系列 / S4 系列 / S5 系列 | ✅ 已支持 |
 | REDMI Watch 4 / 5 / 5 eSIM / 6 | ✅ 已支持 |
 
 ### ZeppOS
@@ -63,13 +63,17 @@ OronBox 是一款跨平台可穿戴设备管理工具，无需官方客户端，
 |------|------|
 | 连接 VelaOS 与 ZeppOS 设备 | 管理已配对设备及其连接状态 |
 | 查看设备状态与资源概览 | 展示电量、存储空间、应用和表盘信息 |
-| 安装表盘和应用资源 | 将表盘、应用安装到设备 |
+| 安装设备资源 | 安装表盘、应用和资源包 |
+| 管理 Canopus 模块 | 安装、启用、停用和卸载模块 |
 | 调整设备应用顺序 | 修改设备启动器中的应用排列 |
 | 设置设备应用布局 | 调整设备应用列表的展示方式 |
 | 管理设备闹钟 | 支持新增、编辑和删除 |
 | 双向查找设备 | 支持穿戴设备发起找手机响铃和手机发起查找设备使穿戴设备响铃或震动 |
 | 检查或安装设备固件 | 支持完整/增量包下载安装和本地固件安装 |
+| 自动检查并提醒更新 | 涵盖设备固件、应用、表盘和插件 |
+| MiWear 工程模式 | 切换设备模式并更新工程模式设备的固件 |
 | 后台定时同步数据 | 每15分钟检查一次，每1小时同步一次 |
+| 同步通知到设备 | 在 Android 上将所选应用的通知转发到设备 |
 | 同步音乐到设备 | 将 MP3 文件传输到设备音乐 |
 | 同步并导出设备录音 | 从设备取回录音并保存 |
 | 接收并保存手表截图 | 保存到用户图片目录 |
@@ -79,11 +83,14 @@ OronBox 是一款跨平台可穿戴设备管理工具，无需官方客户端，
 | Wi-Fi 凭据协同同步 | 响应手表 Wi-Fi 扫描与网络认证请求，完成设备 Wi-Fi 快速配网 |
 | 手机辅助定位协同 | 手机后台为无独立 GPS 设备实时下发定位数据，辅助轨迹记录 |
 | 登录小米账号并支持 2FA | 提供 GNSS 星历数据下载和设备 authkey 获取能力 |
+| 绑定小米设备 | 支持本地绑定或使用小米账号绑定 |
 | 从小米运动健康日志读取 authkey | 从本地小米运动健康应用日志中解析并读取设备 authkey |
 | 同步小米设备 GNSS 星历 | 支持手表发起星历更新请求，需要登录小米账号 |
-| 访问 AstroBox-Repo 与米坛资源 | 浏览和获取社区资源 |
+| 浏览社区资源 | 支持 OronBox、AstroBox-Repo、米坛社区和华米应用商店 |
 | 通过 OAuth 登录米坛社区 | 获取米坛社区资源 |
 | 从创作者中心发布资源 | 支持同步发布到米坛和 AstroBox-Repo |
+| 安装和运行插件 | 安装并运行 OronBox 和 AstroBox-NG 插件 |
+| 备份与恢复应用数据 | 导出和恢复设备配对信息、设置及其他应用数据 |
 | 本地 API 服务 | 为外部开发与自动化工具提供局域网 HTTP / SSE 服务，支持 mDNS 自动发现与 Ed25519 签名质询认证 |
 
 ## CLI 工具
@@ -118,11 +125,17 @@ Debian / Ubuntu 依赖：
 
 ```sh
 sudo apt install libsecret-1-dev clang cmake ninja-build pkg-config zip curl \
-  libgtk-3-dev libblkid-dev liblzma-dev libasound2-dev libwebkit2gtk-4.1-dev \
+  libgtk-3-dev libx11-dev libxi-dev libblkid-dev liblzma-dev libasound2-dev libwebkit2gtk-4.1-dev \
   libbluetooth-dev libayatana-appindicator3-dev dpkg-dev rpm flatpak flatpak-builder
 ```
 
-其他发行版按对应包名安装同等依赖与打包工具：gtk3、webkit2gtk-4.1、bluez、libblkid、libasound2、xz，以及 dpkg-deb / rpmbuild / makepkg / linuxdeploy / appimagetool / flatpak-builder
+aarch64 另需以下依赖：
+
+```sh
+sudo apt install libflac-dev libogg-dev libopus-dev libvorbis-dev
+```
+
+其他发行版请按上面的清单安装对应的软件包，并按打包格式准备 `dpkg-deb`、`rpmbuild`、`makepkg`、`linuxdeploy`、`appimagetool` 或 `flatpak-builder`
 
 Windows：Visual Studio 2022（C++ 桌面工作负载）；WebView2 SDK 由 `webview_all` 插件管理
 
@@ -156,7 +169,7 @@ tool/build_linux.sh [--format tar.gz|deb|rpm|arch|appimage|flatpak|all] [--abi x
 ```
 
 - 缺省时打包全部可用格式，`--abi` 缺省取宿主架构
-- 交叉编译 aarch64（x86_64 宿主）需将 `ORONBOX_LINUX_ARM64_SYSROOT` 指向包含 gtk3/webkit2gtk/alsa/flac/ogg/opus/vorbis 等开发包的 arm64 sysroot；交叉模式产出 tar.gz / deb / rpm / arch
+- 在 x86_64 上交叉编译 aarch64 时，将 `ORONBOX_LINUX_ARM64_SYSROOT` 指向 arm64 sysroot。Debian / Ubuntu 的 sysroot 需包含 `libgtk-3-dev`、`libx11-dev`、`libxi-dev`、`libwebkit2gtk-4.1-dev`、`libasound2-dev`、`libflac-dev`、`libogg-dev`、`libopus-dev`、`libvorbis-dev`。交叉模式产出 tar.gz / deb / rpm / arch
 
 #### macOS（仅 macOS 宿主）
 

@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: 3.50.0
+  FLUTTER_VERSION: 3.50.1
 
 jobs:
   test:
@@ -30,7 +30,11 @@ jobs:
           cache: true
 
       - name: Install dependencies
-        run: flutter pub get --enforce-lockfile
+        run: |
+          source tool/build_common.sh
+          retry_cmd sudo apt-get update
+          retry_cmd sudo apt-get install -y pkg-config libgtk-3-dev libx11-dev libxi-dev
+          flutter pub get --enforce-lockfile
 
       - name: Check first-party naming
         run: python3 tool/check_naming.py

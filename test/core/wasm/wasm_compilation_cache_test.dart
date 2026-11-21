@@ -6,6 +6,8 @@ import 'package:oronbox/src/core/wasm/wasm_compilation_cache.dart';
 import 'package:oronbox/src/core/wasm/wasm_runtime.dart';
 import 'package:wasm_abp/wasm_abp.dart';
 
+import '../../support/wasm_abp_fixtures.dart';
+
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -67,8 +69,7 @@ void main() {
       await WasmCompilationCache.prepare();
       for (final api in [3, 4]) {
         final component = AbpComponent.compile(
-          File('../wasm_abp/native/tests/fixtures/ui_notification.wasm')
-              .readAsBytesSync(),
+          readWasmAbpFixture('ui_notification.wasm'),
           apiLevel: api,
         );
         components.add(component);

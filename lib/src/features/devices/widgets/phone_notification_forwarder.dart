@@ -38,8 +38,9 @@ class _PhoneNotificationForwarderState
     if (!mounted || _generation != generation) return;
     final device = ref.read(deviceManagerProvider);
     if (device.currentDevice?.addr != address ||
-        device.protocolState != ProtocolState.ready)
+        device.protocolState != ProtocolState.ready) {
       return;
+    }
     final preferences = ref.read(
       deviceNotificationPreferencesProvider(address),
     );
@@ -50,8 +51,9 @@ class _PhoneNotificationForwarderState
     if (package is! String) return;
     final previous = _sent[key];
     if ((removed && previous == null) ||
-        (!removed && !preferences.apps.contains(package)))
+        (!removed && !preferences.apps.contains(package))) {
       return;
+    }
     final item = removed
         ? previous!
         : PhoneNotification(
@@ -67,8 +69,9 @@ class _PhoneNotificationForwarderState
           );
     if (!removed &&
         previous?.title == item.title &&
-        previous?.body == item.body)
+        previous?.body == item.body) {
       return;
+    }
     try {
       if (await ref
               .read(deviceManagerProvider.notifier)
@@ -78,8 +81,9 @@ class _PhoneNotificationForwarderState
         if (removed) {
           _sent.remove(key);
         } else {
-          if (_sent.length >= 128 && !_sent.containsKey(key))
+          if (_sent.length >= 128 && !_sent.containsKey(key)) {
             _sent.remove(_sent.keys.first);
+          }
           _sent[key] = item;
         }
       }

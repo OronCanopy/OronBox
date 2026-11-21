@@ -16,6 +16,8 @@ import 'package:oronbox/src/features/accounts/services/mi_account_service.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/wasm_abp_fixtures.dart';
+
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -51,9 +53,7 @@ void main() {
       Future<CommandResult>? opening;
       Future<CommandResult>? closing;
       try {
-        final bytes = File(
-          '../wasm_abp/native/tests/fixtures/ui_notification.wasm',
-        ).readAsBytesSync();
+        final bytes = readWasmAbpFixture('ui_notification.wasm');
         final manifest = utf8.encode(
           jsonEncode({
             'id': 'org.example.commands',
