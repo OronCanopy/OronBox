@@ -1,3 +1,5 @@
+import 'package:oronbox/src/features/devices/widgets/phone_notification_forwarder.dart';
+import 'package:oronbox/src/features/settings/widgets/update_reminder_scheduler.dart';
 import 'package:oronbox/src/core/services/phone_location_sessions.dart';
 import 'package:oronbox/src/features/accounts/services/activity_reporter.dart';
 import 'package:material_ui/material_ui.dart';
@@ -11,6 +13,7 @@ import 'package:oronbox/src/app/theme/system_accent_color.dart';
 import 'package:oronbox/src/app/app_localizations_delegates.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/core/providers/theme_locale_providers.dart';
+import 'package:oronbox/src/device/xiaomi/xiaomi_device_catalog.dart';
 import 'package:oronbox/src/features/devices/services/xiaomi_automatic_sync_service.dart';
 import 'package:oronbox/src/app/integrations/app_link_handler.dart';
 import 'package:oronbox/src/app/integrations/file_open_handler.dart';
@@ -44,6 +47,9 @@ class OronBoxApp extends ConsumerWidget {
     final themeSettings = ref.watch(themeSettingsProvider);
     final localeSettings = ref.watch(localeSettingsProvider);
     PhoneLocationSessions.instance.locale = localeSettings.materialLocale;
+    LocaleSettings.currentActiveLocale = localeSettings.materialLocale;
+    XiaomiDeviceCatalog.activeLocaleResolver =
+        LocaleSettings.resolveActiveLocale;
     final desktopAccentColor = ref
         .watch(_desktopAccentColorProvider)
         .maybeWhen(data: (color) => color, orElse: () => null);
@@ -81,10 +87,14 @@ class OronBoxApp extends ConsumerWidget {
                         child: UpdateCheckHandler(
                           child: FileOpenHandler(
                             child: XiaomiAutomaticSyncScheduler(
-                              child: AutoBackupScheduler(
-                                child: AppLinkHandler(
-                                  child: ActivityReportHandler(
-                                    child: child ?? const SizedBox.shrink(),
+                              child: UpdateReminderScheduler(
+                                child: PhoneNotificationForwarder(
+                                  child: AutoBackupScheduler(
+                                    child: AppLinkHandler(
+                                      child: ActivityReportHandler(
+                                        child: child ?? const SizedBox.shrink(),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),

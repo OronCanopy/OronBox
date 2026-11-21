@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:oronbox/src/app/device_maintenance_tick.dart';
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/core/services/status_surface_bridge.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
@@ -191,7 +192,6 @@ class XiaomiAutomaticSyncScheduler extends ConsumerStatefulWidget {
 class _XiaomiAutomaticSyncSchedulerState
     extends ConsumerState<XiaomiAutomaticSyncScheduler>
     with WidgetsBindingObserver {
-  Timer? _timer;
   bool _cycleRunning = false;
   bool _checkQueued = false;
 
@@ -201,19 +201,14 @@ class _XiaomiAutomaticSyncSchedulerState
     WidgetsBinding.instance.addObserver(this);
     XiaomiAutomaticSyncService._log.info(
       'automatic Xiaomi synchronization scheduler started: '
-      'interval=${XiaomiSyncPreferences.automaticSyncCheckInterval.inMinutes}m, '
+      'interval=${deviceMaintenanceInterval.inMinutes}m, '
       'cooldown=${XiaomiSyncPreferences.automaticSyncCooldown.inMinutes}m',
-    );
-    _timer = Timer.periodic(
-      XiaomiSyncPreferences.automaticSyncCheckInterval,
-      (_) => _queueCheck(),
     );
     scheduleMicrotask(_queueCheck);
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     XiaomiAutomaticSyncService._log.info(
       'automatic Xiaomi synchronization scheduler stopped',
@@ -300,12 +295,31 @@ class _XiaomiAutomaticSyncSchedulerState
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<DeviceManagerState>(deviceManagerProvider, (previous, next) {
-      if (next.protocolState == proto.ProtocolState.ready) _queueCheck();
+    ref.listen(deviceMaintenanceTickProvider, (_, next) {
+      if (next.hasValue) _queueCheck();
     });
-    ref.listen<InstallQueueState>(installQueueProvider, (previous, next) {
-      if (next.loaded && !next.hasActiveTasks) _queueCheck();
-    });
+    ref.listen(
+      deviceManagerProvider.select(
+        (state) => (
+          state.protocolState,
+          state.currentDevice?.addr,
+          state.currentDevice?.disconnected,
+        ),
+      ),
+      (_, next) {
+        if (next.$1 == proto.ProtocolState.ready && next.$3 == false) {
+          _queueCheck();
+        }
+      },
+    );
+    ref.listen(
+      installQueueProvider.select(
+        (state) => state.loaded && !state.hasActiveTasks,
+      ),
+      (_, idle) {
+        if (idle) _queueCheck();
+      },
+    );
     return widget.child;
   }
 }

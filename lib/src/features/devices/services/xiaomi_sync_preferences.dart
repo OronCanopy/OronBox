@@ -8,7 +8,6 @@ abstract final class XiaomiSyncPreferences {
   static const weatherAutoSyncKey = 'xiaomi.weather.auto_sync';
   static const weatherLastCityKey = 'xiaomi.weather.last_city';
   static const weatherSnapshotKey = 'xiaomi.weather.snapshot';
-  static const automaticSyncCheckInterval = Duration(minutes: 15);
   static const automaticSyncCooldown = Duration(hours: 1);
   static const _lastSuccessfulDeviceSyncKeyPrefix =
       'xiaomi.device.last_successful_sync.';

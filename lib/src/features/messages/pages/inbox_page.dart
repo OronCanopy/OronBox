@@ -1,3 +1,4 @@
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/app/widgets/inline_markdown_text.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,7 +30,7 @@ class InboxPage extends ConsumerWidget {
                         .read(messageCenterProvider.notifier)
                         .clear();
                     if (!cleared && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      appScaffoldMessengerOf(context).showSnackBar(
                         SnackBar(content: Text(l10n.inboxClearFailed)),
                       );
                     }
@@ -59,7 +60,7 @@ class InboxPage extends ConsumerWidget {
                         height: MediaQuery.sizeOf(context).height * .65,
                         child: EmptyStateView(
                           icon: Icons.notifications_none_rounded,
-                          message: l10n.inboxEmpty,
+                          title: l10n.inboxEmpty,
                         ),
                       ),
                     ),
@@ -141,7 +142,7 @@ class InboxPage extends ConsumerWidget {
                                             .loadMore();
                                       } catch (error) {
                                         if (context.mounted) {
-                                          ScaffoldMessenger.of(context)
+                                          appScaffoldMessengerOf(context)
                                               .showSnackBar(
                                                 SnackBar(
                                                   content: Text(

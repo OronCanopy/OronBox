@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oronbox/src/commands/command_protocol.dart';
 import 'package:oronbox/src/core/network/dio_provider.dart';
+import 'package:oronbox/src/core/network/github_cdn.dart';
 import 'package:oronbox/src/core/providers/app_settings_providers.dart';
 import 'package:oronbox/src/data/astrobox/astrobox_repo_resource_provider.dart';
 import 'package:oronbox/src/data/bandbbs/bandbbs_resource_provider.dart';
@@ -30,6 +31,11 @@ final localCommunityCatalogProviderForSource =
         CommunitySourceId.oronBox => OronBoxResourceCatalog(dio: dio),
         CommunitySourceId.astroboxRepo => AstroBoxRepoCatalog(
           dio: dio,
+          useServerMetadata: ref.watch(
+            appSettingsProvider.select(
+              (settings) => settings.cdn == GitHubCdn.auto,
+            ),
+          ),
           cdn: ref.watch(
             appSettingsProvider.select((settings) => settings.effectiveCdn),
           ),
