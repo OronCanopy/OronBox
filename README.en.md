@@ -165,8 +165,11 @@ tool/build_linux.sh [--format tar.gz|deb|rpm|arch|appimage|flatpak|all] [--abi x
 #### macOS (macOS hosts only)
 
 ```sh
-tool/build_macos.sh
+fvm exec tool/build_macos.sh [--format zip|dmg|all] [--abi arm64|x86_64|universal]
 ```
+
+- Builds both ZIP and DMG by default, with a separate symbol archive
+- `--abi` defaults to the host architecture and accepts `aarch64` as an alias for `arm64`
 
 #### Windows
 

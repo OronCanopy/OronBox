@@ -166,8 +166,11 @@ tool/build_linux.sh [--format tar.gz|deb|rpm|arch|appimage|flatpak|all] [--abi x
 #### macOS（仅 macOS 宿主）
 
 ```sh
-tool/build_macos.sh
+fvm exec tool/build_macos.sh [--format zip|dmg|all] [--abi arm64|x86_64|universal]
 ```
+
+- 缺省生成 ZIP 和 DMG，另附符号包
+- `--abi` 缺省取宿主架构，也接受 `aarch64` 作为 `arm64` 的别名
 
 #### Windows
 

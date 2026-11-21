@@ -4,29 +4,103 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/build_common.sh"
 
-init_build "$@"
-log_info "Building macOS release package for version ${VERSION}"
+FORMAT="all"
+ABI="$(uname -m)"
+
+print_help() {
+  cat <<EOF
+Usage: $(basename "$0") [options]
+
+Options:
+  --format <zip|dmg|all>  Only build the given package format (default: all)
+  --abi <abi>             Target architecture: arm64 (aarch64), x86_64, universal (default: host)
+  --dev                   Allow a dirty worktree and append git metadata to the package version
+  --skip-clean-check
+                          Skip the clean-worktree check
+  -h, --help              Show this help
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --format)
+      FORMAT="${2:?--format requires a value}"
+      shift 2
+      ;;
+    --format=*)
+      FORMAT="${1#*=}"
+      shift
+      ;;
+    --abi)
+      ABI="${2:?--abi requires a value}"
+      shift 2
+      ;;
+    --abi=*)
+      ABI="${1#*=}"
+      shift
+      ;;
+    -h|--help)
+      print_help
+      exit 0
+      ;;
+    *)
+      parse_common_args "$1"
+      shift
+      ;;
+  esac
+done
+
+case "${FORMAT}" in
+  zip|dmg|all) ;;
+  *)
+    log_error "Unknown format: ${FORMAT} (expected zip, dmg or all)"
+    exit 1
+    ;;
+esac
+
+case "${ABI}" in
+  aarch64) ABI="arm64" ;;
+  arm64|x86_64|universal) ;;
+  *)
+    log_error "Unknown ABI: ${ABI} (expected arm64, x86_64 or universal)"
+    exit 1
+    ;;
+esac
 
 if [[ "$(host_os)" != "macos" ]]; then
   log_error "macOS packages can only be built on macOS"
   exit 1
 fi
 
+init_build
+log_info "Building macOS release packages for version ${VERSION} (format=${FORMAT}, abi=${ABI})"
+
 require_flutter
-require_command zip
+if [[ "${FORMAT}" != "dmg" ]]; then
+  require_command zip
+fi
+if [[ "${FORMAT}" == "dmg" ]]; then
+  require_command hdiutil
+fi
 ensure_release_dir
 
 MACOS_APP_NAME="OronBox"
+
+if [[ "${ABI}" == "universal" ]]; then
+  TARGET_ARCHS=(arm64 x86_64)
+else
+  TARGET_ARCHS=("${ABI}")
+fi
 
 DART_DEFINES=()
 while IFS= read -r define; do
   DART_DEFINES+=("${define}")
 done < <(flutter_release_defines)
 
-run_cmd flutter build macos \
+FLUTTER_MACOS_ARM64_ONLY=false FLUTTER_XCODE_ARCHS="${TARGET_ARCHS[*]}" run_cmd flutter build macos \
   --release \
   --obfuscate \
-  --split-debug-info=symbols/macos \
+  --split-debug-info="symbols/macos/${ABI}" \
   "${DART_DEFINES[@]}"
 
 APP_BUNDLE="${PROJECT_ROOT}/build/macos/Build/Products/Release/${MACOS_APP_NAME}.app"
@@ -35,13 +109,23 @@ if [[ ! -d "${APP_BUNDLE}" ]]; then
   exit 1
 fi
 
-archive_zip "${APP_BUNDLE}" "${RELEASE_DIR}/${APP_NAME}-${VERSION}-macos-universal.zip"
-archive_symbols_if_present \
-  "${PROJECT_ROOT}/symbols/macos" \
-  "${RELEASE_DIR}/${APP_NAME}-${VERSION}-macos-universal.symbols.tar.gz"
+SHERPA_LIBRARY="${APP_BUNDLE}/Contents/Frameworks/libsherpa-onnx-c-api.dylib"
+if [[ "${ABI}" != "universal" && -f "${SHERPA_LIBRARY}" ]]; then
+  SHERPA_ARCHS="$(lipo -archs "${SHERPA_LIBRARY}")"
+  if [[ "${SHERPA_ARCHS}" != "${ABI}" ]]; then
+    run_cmd lipo "${SHERPA_LIBRARY}" -thin "${ABI}" -output "${SHERPA_LIBRARY}"
+  fi
+fi
 
-if command -v hdiutil >/dev/null 2>&1; then
-  DMG_DST="${RELEASE_DIR}/${APP_NAME}-${VERSION}-macos-universal.dmg"
+if [[ "${FORMAT}" != "dmg" ]]; then
+  archive_zip "${APP_BUNDLE}" "${RELEASE_DIR}/${APP_NAME}-${VERSION}-macos-${ABI}.zip"
+fi
+archive_symbols_if_present \
+  "${PROJECT_ROOT}/symbols/macos/${ABI}" \
+  "${RELEASE_DIR}/${APP_NAME}-${VERSION}-macos-${ABI}.symbols.tar.gz"
+
+if [[ "${FORMAT}" != "zip" ]] && command -v hdiutil >/dev/null 2>&1; then
+  DMG_DST="${RELEASE_DIR}/${APP_NAME}-${VERSION}-macos-${ABI}.dmg"
   DMG_WORK_DIR="$(mktemp -d "${PROJECT_ROOT}/build/macos/dmg.XXXXXX")"
   DMG_STAGE="${DMG_WORK_DIR}/stage"
   DMG_BUILD="${DMG_WORK_DIR}/$(basename "${DMG_DST}")"
@@ -100,7 +184,7 @@ APPLESCRIPT
   cleanup_dmg
   trap - EXIT
   log_info "Produced ${DMG_DST}"
-else
+elif [[ "${FORMAT}" != "zip" ]]; then
   log_warn "hdiutil not found; skipped DMG package"
 fi
 

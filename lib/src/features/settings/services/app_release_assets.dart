@@ -25,7 +25,12 @@ Future<String?> resolveAppReleaseAsset(
   final suffixes = switch (platform) {
     'android' => ['-android-$arch.apk'],
     'windows' => ['-windows-$arch-setup.exe', '-windows-$arch.zip'],
-    'macos' => ['-macos-universal.dmg', '-macos-universal.zip'],
+    'macos' => [
+      '-macos-$arch.dmg',
+      '-macos-$arch.zip',
+      '-macos-universal.dmg',
+      '-macos-universal.zip',
+    ],
     'linux' => ['-linux-$arch.AppImage'],
     _ => <String>[],
   };

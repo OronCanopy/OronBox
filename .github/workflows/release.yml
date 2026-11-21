@@ -330,8 +330,12 @@ jobs:
           python -c "from pathlib import Path; [Path(p).unlink(missing_ok=True) for p in ('build/integrity_defines.json', 'config/integrity_defines.local.json')]"
 
   build-macos:
-    name: Build macOS
+    name: Build macOS (${{ matrix.abi }})
     needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64, x86_64, universal]
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -381,11 +385,11 @@ jobs:
       - name: Build macOS packages
         run: |
           source tool/build_common.sh
-          retry_cmd tool/build_macos.sh
+          retry_cmd tool/build_macos.sh --abi "${{ matrix.abi }}"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: packages-macos
+          name: packages-macos-${{ matrix.abi }}
           path: build/release/*
           if-no-files-found: error
           retention-days: 1
