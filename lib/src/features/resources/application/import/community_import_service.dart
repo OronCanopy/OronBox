@@ -12,7 +12,7 @@ import 'package:oronbox/src/commands/command_protocol.dart';
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/core/network/dio_provider.dart';
 import 'package:oronbox/src/data/community/community_source.dart';
-import 'package:oronbox/src/device/core/xiaomi_wearable_catalog.dart';
+import 'package:oronbox/src/device/xiaomi/xiaomi_device_catalog.dart';
 import 'package:oronbox/src/features/resources/application/resource_catalog_providers.dart';
 import 'package:oronbox/src/features/resources/domain/community_resource.dart';
 import 'package:oronbox/src/features/resources/domain/creator_workspace.dart';
@@ -213,7 +213,7 @@ class CommunityImportPlan {
 
   CreatorResourceKind? get kind => switch (primary.type) {
     CommunityResourceType.watchface => CreatorResourceKind.watchface,
-    CommunityResourceType.canopus => CreatorResourceKind.watchface,
+    CommunityResourceType.canopus => CreatorResourceKind.canopus,
     CommunityResourceType.quickApp ||
     CommunityResourceType.miniprogram => CreatorResourceKind.quickApp,
     _ => null,
@@ -655,9 +655,11 @@ class CommunityImportService {
             () => _execute('creator.create', {
               'slug': slug,
               'name': _truncateRunes(plan.title, communityImportMaxNameRunes),
-              'kind': kind == CreatorResourceKind.watchface
-                  ? 'watchface'
-                  : 'quickapp',
+              'kind': switch (kind) {
+                CreatorResourceKind.watchface => 'watchface',
+                CreatorResourceKind.canopus => 'canopus',
+                CreatorResourceKind.quickApp => 'quickapp',
+              },
             }),
           ),
         ),
@@ -1011,13 +1013,19 @@ class CommunityImportService {
       );
       final isApp = analysis?.type == LocalDeviceInstallType.app;
       final isWatchface = analysis?.type == LocalDeviceInstallType.watchface;
+      final isCanopus = analysis?.type == LocalDeviceInstallType.canopus;
       if (analysis == null ||
           analysis.platform != ResourcePlatform.vela ||
-          (!isApp && !isWatchface)) {
+          (!isApp && !isWatchface && !isCanopus)) {
         warnings.add('${file.label}: invalidPackage');
         continue;
       }
-      if ((kind == CreatorResourceKind.quickApp) != isApp) {
+      final kindMatches = switch (kind) {
+        CreatorResourceKind.quickApp => isApp,
+        CreatorResourceKind.watchface => isWatchface,
+        CreatorResourceKind.canopus => isCanopus,
+      };
+      if (!kindMatches) {
         warnings.add('${file.label}: kindMismatch');
         continue;
       }
@@ -1039,7 +1047,15 @@ class CommunityImportService {
       final artifact = CommunityImportArtifact(
         name: file.fileName,
         payload: analysis.payload,
-        type: isApp ? 'velaos_quickapp' : 'velaos_watchface',
+        type: switch (analysis.type) {
+          LocalDeviceInstallType.app => 'velaos_quickapp',
+          LocalDeviceInstallType.watchface => 'velaos_watchface',
+          LocalDeviceInstallType.canopus => 'velaos_canopus',
+          LocalDeviceInstallType.resPack => throw StateError(
+            'Resource packs cannot be published',
+          ),
+          LocalDeviceInstallType.firmware => 'velaos_firmware',
+        },
         packageId: analysis.identifier ?? '',
         version: analysis.version ?? file.version,
         deviceIds: deviceIds,
@@ -1221,6 +1237,7 @@ Uint8List buildCommunityImportBundle({
   required CreatorResourceKind kind,
   required String name,
   required String summary,
+  String description = '',
   CommunityPaidType paidType = CommunityPaidType.free,
   required List<Map<String, String>> links,
   required List<CommunityImportArtifact> artifacts,
@@ -1231,6 +1248,14 @@ Uint8List buildCommunityImportBundle({
   Uri? purchaseLink,
   double? purchasePrice,
 }) {
+  final effectiveDescription = description.trim().isNotEmpty
+      ? description.trim()
+      : summary.trim();
+  final effectiveSummary = summary.trim().isNotEmpty
+      ? summary.trim()
+      : (effectiveDescription.isNotEmpty
+            ? effectiveDescription.split('\n').first
+            : '');
   final archive = Archive();
   void addFile(String path, Uint8List bytes) =>
       archive.addFile(ArchiveFile(path, bytes.length, bytes));
@@ -1263,11 +1288,15 @@ Uint8List buildCommunityImportBundle({
   final manifest = utf8.encode(
     jsonEncode({
       'version': 1,
-      'kind': kind == CreatorResourceKind.watchface ? 'watchface' : 'quickapp',
+      'kind': switch (kind) {
+        CreatorResourceKind.watchface => 'watchface',
+        CreatorResourceKind.canopus => 'canopus',
+        CreatorResourceKind.quickApp => 'quickapp',
+      },
       'name': name,
-      'description': summary,
+      'summary': effectiveSummary,
+      'description': effectiveDescription,
       'description_format': 'markdown',
-      'summary': '',
       'paid_type': communityPaidTypeToWire(paidType),
       if (purchaseLink != null) 'purchase_link': purchaseLink.toString(),
       if (purchaseLink != null && purchasePrice != null)

@@ -43,6 +43,7 @@ class _CreatorCreateWizardState extends ConsumerState<CreatorCreateWizard> {
   var _kind = CreatorResourceKind.quickApp;
   final _name = TextEditingController();
   final _summary = TextEditingController();
+  final _description = TextEditingController();
   var _creating = false;
 
   // Import selection.
@@ -69,6 +70,7 @@ class _CreatorCreateWizardState extends ConsumerState<CreatorCreateWizard> {
   void dispose() {
     _name.dispose();
     _summary.dispose();
+    _description.dispose();
     super.dispose();
   }
 
@@ -557,9 +559,11 @@ class _CreatorCreateWizardState extends ConsumerState<CreatorCreateWizard> {
             queryParameters: {
               'name': name,
               'summary': summary,
-              'kind': _kind == CreatorResourceKind.watchface
-                  ? 'watchface'
-                  : 'quickapp',
+              'kind': switch (_kind) {
+                CreatorResourceKind.watchface => 'watchface',
+                CreatorResourceKind.canopus => 'canopus',
+                CreatorResourceKind.quickApp => 'quickapp',
+              },
             },
           ).toString(),
         );
@@ -582,11 +586,13 @@ class _CreatorCreateWizardState extends ConsumerState<CreatorCreateWizard> {
           name,
           _kind,
         );
+        final description = _description.text.trim();
         await controller.saveDraft(
           bundle: buildCommunityImportBundle(
             kind: _kind,
             name: name,
             summary: summary,
+            description: description.isNotEmpty ? description : summary,
             links: const [],
             artifacts: const [],
           ),
@@ -728,6 +734,11 @@ class _CreatorCreateWizardState extends ConsumerState<CreatorCreateWizard> {
                 label: Text(l10n.watchface),
                 icon: const Icon(Icons.watch_outlined),
               ),
+              ButtonSegment(
+                value: CreatorResourceKind.canopus,
+                label: Text(l10n.module),
+                icon: const Icon(Icons.memory_outlined),
+              ),
             ],
             selected: {_kind},
             onSelectionChanged: (value) => setState(() => _kind = value.single),
@@ -748,15 +759,33 @@ class _CreatorCreateWizardState extends ConsumerState<CreatorCreateWizard> {
         ),
         TextField(
           controller: _summary,
-          minLines: 4,
-          maxLines: 8,
+          maxLength: 120,
+          textInputAction: isCollection
+              ? TextInputAction.done
+              : TextInputAction.next,
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
             labelText: isCollection
                 ? l10n.creatorCollectionSummary
                 : l10n.creatorResourceSummary,
+            helperText: l10n.creatorSummaryHint,
+            helperMaxLines: 2,
           ),
         ),
+        if (!isCollection) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _description,
+            minLines: 4,
+            maxLines: 8,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: l10n.description,
+              helperText: l10n.creatorDescriptionHint,
+              helperMaxLines: 2,
+            ),
+          ),
+        ],
         if (!isCollection &&
             (_name.text.trim().isEmpty || _summary.text.trim().isEmpty))
           Padding(

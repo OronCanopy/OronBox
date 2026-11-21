@@ -1,3 +1,5 @@
+import 'package:oronbox/src/core/storage/managed_temporary_files.dart';
+
 import 'dart:typed_data';
 
 import 'package:cross_file/cross_file.dart';
@@ -22,17 +24,13 @@ Future<Uint8List> _readLimited(XFile file, int maximum) async {
 
 bool get shouldLoadPickedFileData => kIsWeb;
 
-/// The small piece of file-picker state the app needs after selection.
-///
-/// `file_picker` 12 returns platform files directly and loads their contents
-/// asynchronously. Keeping that detail here prevents every feature page from
-/// depending on the package's platform representation.
+/// Picked bytes remain usable after releasing the picker temporary copy.
 class PickedFileData {
-  const PickedFileData({required this.name, this.path, this.bytes});
+  PickedFileData({required this.name, this.path, this.bytes});
 
   final String name;
-  final String? path;
-  final Uint8List? bytes;
+  String? path;
+  Uint8List? bytes;
 
   XFile? get xFile {
     if (bytes != null) return XFile.fromData(bytes!, name: name);
@@ -50,7 +48,13 @@ class PickedFileData {
     final filePath = path;
     if (filePath == null) return null;
     final file = XFile(filePath, name: name);
-    return maxBytes == null ? file.readAsBytes() : _readLimited(file, maxBytes);
+    final data = await (maxBytes == null
+        ? file.readAsBytes()
+        : _readLimited(file, maxBytes));
+    bytes = data;
+    await ManagedTemporaryFiles.releaseImport(filePath);
+    path = null;
+    return data;
   }
 }
 
@@ -58,6 +62,7 @@ Future<List<PickedFileData>> pickFilesData({
   FileType type = FileType.any,
   List<String>? allowedExtensions,
   String? dialogTitle,
+  String? initialDirectory,
   bool allowMultiple = false,
   bool loadBytes = false,
   int? maxBytes,
@@ -65,12 +70,14 @@ Future<List<PickedFileData>> pickFilesData({
   final files = allowMultiple
       ? await FilePicker.pickFiles(
           dialogTitle: dialogTitle,
+          initialDirectory: initialDirectory,
           type: type,
           allowedExtensions: allowedExtensions,
         )
       : [
           if (await FilePicker.pickFile(
                 dialogTitle: dialogTitle,
+                initialDirectory: initialDirectory,
                 type: type,
                 allowedExtensions: allowedExtensions,
               )
@@ -79,17 +86,31 @@ Future<List<PickedFileData>> pickFilesData({
         ];
   return Future.wait(
     files.map((file) async {
-      final knownSize = maxBytes == null ? null : file.lengthSync();
-      if (maxBytes != null && knownSize != null && knownSize > maxBytes) {
-        throw const PickedFileTooLarge();
+      try {
+        final knownSize = maxBytes == null ? null : file.lengthSync();
+        if (maxBytes != null && knownSize != null && knownSize > maxBytes) {
+          throw const PickedFileTooLarge();
+        }
+        Uint8List? bytes;
+        if (loadBytes || file.path == null || maxBytes != null) {
+          bytes = maxBytes == null
+              ? await file.readAsBytes()
+              : await _readLimited(file.xFile, maxBytes);
+        }
+        if (bytes != null && file.path != null) {
+          await ManagedTemporaryFiles.releaseImport(file.path!);
+        }
+        return PickedFileData(
+          name: file.name,
+          path: bytes == null ? file.path : null,
+          bytes: bytes,
+        );
+      } catch (_) {
+        if (file.path != null) {
+          await ManagedTemporaryFiles.releaseImport(file.path!);
+        }
+        rethrow;
       }
-      Uint8List? bytes;
-      if (loadBytes || file.path == null || maxBytes != null) {
-        bytes = maxBytes == null
-            ? await file.readAsBytes()
-            : await _readLimited(file.xFile, maxBytes);
-      }
-      return PickedFileData(name: file.name, path: file.path, bytes: bytes);
     }),
   );
 }

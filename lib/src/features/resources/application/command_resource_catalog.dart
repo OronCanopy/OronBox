@@ -49,6 +49,7 @@ class CommandResourceCatalog implements CommunityResourceCatalog {
               CommunityResourceType.quickApp => 'quickapp',
               CommunityResourceType.miniprogram => 'miniprogram',
               CommunityResourceType.canopus => 'canopus',
+              CommunityResourceType.resPack => 'res_pack',
               _ => query.type!.name,
             },
           'hidePaid': query.hidePaid,

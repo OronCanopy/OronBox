@@ -1,13 +1,17 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/utils/error_localization.dart';
+import 'package:oronbox/src/app/utils/picked_file.dart';
 import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:oronbox/src/app/widgets/page_container.dart';
 import 'package:oronbox/src/app/widgets/sys_app_bar.dart';
 import 'package:oronbox/src/core/constants/style_constants.dart';
 import 'package:oronbox/src/core/models/bt_models.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
+import 'package:oronbox/src/features/resources/services/resource_payload_analyzer.dart';
+import 'package:oronbox/src/features/resources/widgets/resource_install_confirmation.dart';
 import 'package:oronbox/src/device/core/device_state.dart' as proto;
 
 class DeviceWatchfacesPage extends ConsumerStatefulWidget {
@@ -42,6 +46,21 @@ class _DeviceWatchfacesPageState extends ConsumerState<DeviceWatchfacesPage> {
     }
   }
 
+  Future<void> _install() async {
+    final file = await pickFileData(
+      type: FileType.any,
+      loadBytes: shouldLoadPickedFileData,
+    );
+    final selected = file?.xFile;
+    if (selected == null || !mounted) return;
+    await confirmAndEnqueueResourceFile(
+      context: context,
+      ref: ref,
+      file: selected,
+      selectedType: LocalDeviceInstallType.watchface,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -53,6 +72,11 @@ class _DeviceWatchfacesPageState extends ConsumerState<DeviceWatchfacesPage> {
         secondary: true,
         title: Text(l10n.watchfaceManagementTitle),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: ready ? _install : null,
+            tooltip: l10n.deviceFeaturesInstallWatchface,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _refresh,

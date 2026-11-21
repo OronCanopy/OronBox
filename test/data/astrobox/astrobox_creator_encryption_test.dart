@@ -10,25 +10,25 @@ void main() {
   group('AstroBox Creator Console encryption marker', () {
     test('requires the exact boolean manifest extension', () {
       expect(
-        astroBoxManifestUsesCreatorEncryption(
+        astroBoxManifestUsesCreatorFeatures(
           _manifest({'enableAstroBoxCreatorFeatures': true}),
         ),
         isTrue,
       );
       expect(
-        astroBoxManifestUsesCreatorEncryption(
+        astroBoxManifestUsesCreatorFeatures(
           _manifest({'enableAstroBoxCreatorFeatures': false}),
         ),
         isFalse,
       );
       expect(
-        astroBoxManifestUsesCreatorEncryption(
+        astroBoxManifestUsesCreatorFeatures(
           _manifest({'enableAstroBoxCreatorFeatures': 'true'}),
         ),
         isFalse,
       );
       expect(
-        astroBoxManifestUsesCreatorEncryption(
+        astroBoxManifestUsesCreatorFeatures(
           _manifest({
             'trialDownloads': {'watch': 'trial.rpk'},
           }),
@@ -37,38 +37,6 @@ void main() {
       );
     });
   });
-
-  test(
-    'preserves the unsupported download restriction in the detail codec',
-    () {
-      const detail = CommunityResourceDetail(
-        ref: ResourceRef(source: CommunitySourceId.astroboxRepo, id: 'sample'),
-        name: 'Sample',
-        type: CommunityResourceType.quickApp,
-        paidType: CommunityPaidType.paid,
-        authors: [CommunityResourceAuthor(name: 'Author')],
-        supportedDevices: {},
-        content: CommunityResourceContent(
-          format: ResourceContentFormat.plainText,
-          value: 'Description',
-        ),
-        files: [],
-        canDownload: false,
-        downloadRestriction:
-            CommunityResourceDownloadRestriction.astroBoxCreatorEncrypted,
-      );
-
-      final json = communityResourceDetailToJson(detail);
-      expect(json['downloadRestriction'], 'astrobox_creator_encrypted');
-
-      final decoded = communityResourceDetailFromJson(json);
-      expect(
-        decoded.downloadRestriction,
-        CommunityResourceDownloadRestriction.astroBoxCreatorEncrypted,
-      );
-      expect(decoded.canDownload, isFalse);
-    },
-  );
 
   test('round-trips canopus resources and encrypted files', () {
     final item = AstroBoxIndexItem.fromJson({
@@ -102,6 +70,7 @@ void main() {
           fileName: 'p67.bin',
           version: '1',
           encrypted: true,
+          purchaseRequired: true,
           supportedDevices: {'p67'},
         ),
       ],
@@ -111,6 +80,32 @@ void main() {
     );
     expect(decoded.type, CommunityResourceType.canopus);
     expect(decoded.files.single.encrypted, isTrue);
+    expect(decoded.files.single.purchaseRequired, isTrue);
+    final previous = {
+      ...communityResourceDetailToJson(detail),
+      'ref': const ResourceRef(
+        source: CommunitySourceId.astroboxRepo,
+        id: 'sample',
+      ).key,
+      'canDownload': false,
+      'downloadRestriction': 'astrobox_creator_encrypted',
+    };
+    expect(communityResourceDetailFromJson(previous).canDownload, isTrue);
+    previous['ref'] = detail.ref.key;
+    expect(communityResourceDetailFromJson(previous).canDownload, isFalse);
+  });
+
+  test('reads res_pack from the AstroBox manifest', () {
+    final item = AstroBoxManifestItem.fromJson({
+      'id': 'sample',
+      'restype': 'res_pack',
+      'name': 'Sample',
+      'description': 'Description',
+      'icon': 'icon.png',
+      'cover': 'cover.png',
+    });
+    expect(item.restype, AstroBoxResourceType.resPack);
+    expect(item.toJson()['restype'], 'res_pack');
   });
 
   test('uses product names for Xiaomi queue targets', () {

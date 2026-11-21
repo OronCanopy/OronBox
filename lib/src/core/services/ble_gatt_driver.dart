@@ -236,9 +236,8 @@ class BleConnection {
       await _connectionController.close();
     }
     try {
-      await UniversalBle.disconnect(
-        deviceId,
-      ).timeout(const Duration(seconds: 3));
+      await UniversalBle.disconnect(deviceId)
+          .timeout(const Duration(seconds: 3));
     } on TimeoutException catch (e) {
       _log.warning('[$deviceId] disconnect timed out (ignored)', e);
     } catch (e) {
@@ -291,12 +290,15 @@ class BleGattDriver {
         );
         if (!matches) return;
       }
+      final (pdId, xiaomiRegistered) = _parseXiaomiAdvertisement(device);
       final scanned = BluetoothEndpoint(
         name: name.isEmpty ? 'Unknown device' : name,
         address: device.deviceId,
         connectType: ConnectType.ble,
         rssi: device.rssi,
         serviceUuids: List<String>.from(device.services),
+        pdId: pdId,
+        xiaomiRegistered: xiaomiRegistered,
       );
       final previous = _scanResults[device.deviceId];
       final shouldLog =
@@ -515,9 +517,8 @@ class BleGattDriver {
     if (attemptPair && !kIsWeb) {
       try {
         _log.info('[$effectiveDeviceId] attempting pair');
-        await UniversalBle.pair(
-          effectiveDeviceId,
-        ).timeout(const Duration(seconds: 5));
+        await UniversalBle.pair(effectiveDeviceId)
+            .timeout(const Duration(seconds: 5));
         _log.info('[$effectiveDeviceId] pair succeeded or not needed');
       } catch (e) {
         _log.warning('[$deviceId] pair failed (ignored)', e);
@@ -680,4 +681,27 @@ class BleGattDriver {
   }
 
   static const xiaomiRequiredCharacteristics = xiaomiRequiredBleCharacteristics;
+}
+
+(int?, bool?) _parseXiaomiAdvertisement(BleDevice device) {
+  try {
+    for (final entry in device.serviceData.entries) {
+      final key = entry.key.toLowerCase().replaceAll('-', '');
+      if (key != 'fe95' && key != '0000fe9500001000800000805f9b34fb') {
+        continue;
+      }
+      final bytes = entry.value;
+      if (bytes.length < 4) continue;
+      final productId = bytes[2] | (bytes[3] << 8);
+      final minimumSize =
+          5 +
+          ((bytes[0] & 0x10) != 0 ? 6 : 0) +
+          ((bytes[0] & 0x20) != 0 ? 1 : 0);
+      final registered = bytes.length >= minimumSize && productId != 0
+          ? (bytes[1] & 0x01) != 0
+          : null;
+      return (productId, registered);
+    }
+  } catch (_) {}
+  return (null, null);
 }

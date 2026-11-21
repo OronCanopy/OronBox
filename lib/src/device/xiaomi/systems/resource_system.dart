@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/device/xiaomi/systems/xiaomi_system.dart';
-import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart' as pb;
+import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart'
+    as pb;
 import 'package:oronbox/src/device/xiaomi/protocol/generated/wear_thirdparty_app.pb.dart'
     as pb_thirdparty;
 import 'package:oronbox/src/device/xiaomi/protocol/generated/wear_watch_face.pb.dart'
@@ -13,21 +14,56 @@ class XiaomiResourceSystem extends XiaomiPbSystem {
 
   final _watchfaceWaiters = <Completer<List<pb_watchface.WatchFaceItem>>>[];
   final _quickAppWaiters = <Completer<List<pb_thirdparty.AppItem>>>[];
+  Future<List<pb_thirdparty.AppItem>>? _quickAppRequest;
+  bool _disposed = false;
 
-  Future<List<pb_watchface.WatchFaceItem>> fetchInstalledWatchfaces() async {
+  Future<List<pb_watchface.WatchFaceItem>> fetchInstalledWatchfaces() {
     _log.fine('[${entity.id}] fetching installed watchfaces');
-    final completer = Completer<List<pb_watchface.WatchFaceItem>>();
-    _watchfaceWaiters.add(completer);
-    await component.sendPbPacket(_buildWatchfaceGetInstalled());
-    return completer.future.timeout(const Duration(seconds: 10));
+    return _fetchInstalled(_watchfaceWaiters, _buildWatchfaceGetInstalled());
   }
 
-  Future<List<pb_thirdparty.AppItem>> fetchInstalledQuickApps() async {
+  Future<List<pb_thirdparty.AppItem>> fetchInstalledQuickApps() =>
+      _quickAppRequest ??= _fetchQuickApps().whenComplete(
+        () => _quickAppRequest = null,
+      );
+
+  Future<List<pb_thirdparty.AppItem>> _fetchQuickApps() {
     _log.fine('[${entity.id}] fetching installed quick apps');
-    final completer = Completer<List<pb_thirdparty.AppItem>>();
-    _quickAppWaiters.add(completer);
-    await component.sendPbPacket(_buildThirdpartyAppGetInstalled());
-    return completer.future.timeout(const Duration(seconds: 10));
+    return _fetchInstalled(_quickAppWaiters, _buildThirdpartyAppGetInstalled());
+  }
+
+  Future<List<T>> _fetchInstalled<T>(
+    List<Completer<List<T>>> waiters,
+    pb.WearPacket request,
+  ) async {
+    if (_disposed) throw StateError('Resource system disposed');
+    final completer = Completer<List<T>>();
+    waiters.add(completer);
+    try {
+      // Listen for cancellation while the transport is still sending.
+      final results = await Future.wait<Object?>([
+        Future.sync(() => component.sendPbPacket(request)),
+        completer.future,
+      ], eagerError: true).timeout(const Duration(seconds: 10));
+      return results[1] as List<T>;
+    } finally {
+      waiters.remove(completer);
+    }
+  }
+
+  void abortPending(Object error) {
+    for (final waiter in [..._watchfaceWaiters, ..._quickAppWaiters]) {
+      if (!waiter.isCompleted) waiter.completeError(error);
+    }
+    _watchfaceWaiters.clear();
+    _quickAppWaiters.clear();
+  }
+
+  @override
+  Future<void> dispose() async {
+    _disposed = true;
+    abortPending(StateError('Resource system disposed'));
+    await super.dispose();
   }
 
   @override

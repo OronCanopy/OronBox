@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -19,7 +20,7 @@ void main() {
         section('sherpa_onnx'),
         contains('version: "${AsrRuntimeSpec.version}"'),
       );
-      for (final spec in androidAsrRuntimes) {
+      for (final spec in downloadedAsrRuntimes.values) {
         expect(
           section(spec.package),
           contains('version: "${AsrRuntimeSpec.version}"'),
@@ -30,7 +31,10 @@ void main() {
   );
   test('rejects an unpinned archive before extraction', () {
     expect(
-      () => extractAsrRuntimeArchive(Uint8List.fromList([1, 2, 3])),
+      () => extractAsrRuntimeArchive(
+        Uint8List.fromList([1, 2, 3]),
+        abi: Abi.androidArm64,
+      ),
       throwsA(isA<AsrFailure>()),
     );
   });

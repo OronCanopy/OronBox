@@ -1,4 +1,5 @@
 #include "my_application.h"
+#include <cstdint>
 
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
@@ -9,9 +10,7 @@
 #include "file_open_channel.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "desktop_multi_window/desktop_multi_window_plugin.h"
-#include "mi_account_2fa_channel.h"
 #include "window_setup.h"
-#include "zeppos_app_settings_channel.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -20,17 +19,34 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+static void register_window_handle_channel(FlPluginRegistry* registry) {
+  g_autoptr(FlPluginRegistrar) registrar =
+      fl_plugin_registry_get_registrar_for_plugin(registry, "OronBoxWindowHandle");
+  FlView* view = fl_plugin_registrar_get_view(registrar);
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  g_autoptr(FlMethodChannel) channel = fl_method_channel_new(
+      fl_plugin_registrar_get_messenger(registrar), "org.oroncanopy.oronbox/window_handle",
+      FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(
+      channel, [](FlMethodChannel*, FlMethodCall* call, gpointer data) {
+        g_autoptr(FlMethodResponse) response = nullptr;
+        if (g_strcmp0(fl_method_call_get_name(call), "get") == 0) {
+          GtkWidget* window = gtk_widget_get_toplevel(GTK_WIDGET(data));
+          g_autoptr(FlValue) value = fl_value_new_int(
+              static_cast<int64_t>(reinterpret_cast<intptr_t>(window)));
+          response = FL_METHOD_RESPONSE(fl_method_success_response_new(value));
+        } else {
+          response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+        }
+        fl_method_call_respond(call, response, nullptr);
+      }, view, nullptr);
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
-// Native overlays such as the account and ZeppOS settings WebViews can own
-// GTK's keyboard focus. Once an overlay is closed (or the app regains focus
-// after opening a browser), Flutter may still receive pointer events without
-// its FlView receiving key events. Restore the native focus whenever the user
-// clicks back into the Flutter surface. Returning FALSE keeps the event
-// available to Flutter for its normal hit testing and text-field focus.
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
@@ -89,10 +105,7 @@ static void my_application_activate(GApplication* application) {
   g_signal_connect(view, "button-press-event",
                    G_CALLBACK(oronbox_restore_flutter_focus), nullptr);
   gtk_widget_show(GTK_WIDGET(view));
-  GtkOverlay* overlay = GTK_OVERLAY(gtk_overlay_new());
-  gtk_widget_show(GTK_WIDGET(overlay));
-  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(overlay));
-  gtk_container_add(GTK_CONTAINER(overlay), GTK_WIDGET(view));
+  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
 
   // Show the window when Flutter renders.
   // Requires the view to be realized so we can start rendering.
@@ -101,15 +114,13 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  register_window_handle_channel(FL_PLUGIN_REGISTRY(view));
   desktop_multi_window_plugin_set_window_created_callback([](FlPluginRegistry* registry) {
     fl_register_plugins(registry);
+    register_window_handle_channel(registry);
   });
   classic_spp_channel_register(fl_engine_get_binary_messenger(fl_view_get_engine(view)));
   file_open_channel_register(fl_engine_get_binary_messenger(fl_view_get_engine(view)));
-  mi_account_2fa_channel_register(
-      fl_engine_get_binary_messenger(fl_view_get_engine(view)), overlay);
-  zeppos_app_settings_channel_register(
-      fl_engine_get_binary_messenger(fl_view_get_engine(view)), overlay);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

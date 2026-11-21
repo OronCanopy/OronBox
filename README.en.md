@@ -107,10 +107,11 @@ For more details, see the [OronBox-CLI repository](https://github.com/OronCanopy
 
 ### Prerequisites
 
-Flutter stable and Rust stable are required on every platform:
+Install the Flutter version specified in `.fvmrc` with [FVM](https://fvm.app), then fetch the project dependencies.
 
-- Flutter stable: version pinned in `.fvmrc`, install with [fvm](https://fvm.app), then `flutter pub get`
-- Rust stable: install with rustup; the WASM runtime is compiled from source on the first build
+```sh
+fvm flutter pub get --enforce-lockfile
+```
 
 Debian / Ubuntu dependencies:
 
@@ -120,15 +121,9 @@ sudo apt install libsecret-1-dev clang cmake ninja-build pkg-config zip curl \
   libbluetooth-dev libayatana-appindicator3-dev dpkg-dev rpm flatpak flatpak-builder
 ```
 
-ARM64 additionally needs the audio libraries (the Xiph `.so` files bundled with `flutter_soloud` are amd64-only, so ARM64 uses system libraries):
-
-```sh
-sudo apt install libflac-dev libogg-dev libopus-dev libvorbis-dev
-```
-
 Other distributions: install the equivalents under their own package names (gtk3, webkit2gtk-4.1, bluez, libblkid, libasound2, xz) plus the packaging tools you need (dpkg-deb / rpmbuild / makepkg / linuxdeploy / appimagetool / flatpak-builder)
 
-Windows: Visual Studio 2022 (Desktop development with C++); the WebView2 SDK can be installed with `windows/scripts/install_webview2_sdk.ps1`
+Windows: Visual Studio 2022 (Desktop development with C++); the WebView2 SDK is managed by the `webview_all` plugin
 
 macOS: Xcode, macOS hosts only
 
@@ -174,7 +169,7 @@ fvm exec tool/build_macos.sh [--format zip|dmg|all] [--abi arm64|x86_64|universa
 #### Windows
 
 ```powershell
-powershell -File tool/build_windows.ps1 [-Dev] [-SkipWebView2Sdk] [-WebView2SdkVersion <version>]
+powershell -File tool/build_windows.ps1 [-Dev]
 ```
 
 Or run the batch script in CMD:

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:oronbox/src/core/network/app_http_transport.dart';
 import 'package:oronbox/src/features/settings/services/app_release_assets.dart';
 
@@ -179,8 +180,8 @@ class UpdateAvailableDialog extends ConsumerWidget {
         ] else
           FilledButton(
             onPressed: () async {
-              final messenger = ScaffoldMessenger.of(context);
-              Navigator.of(context).pop();
+              final navigator = Navigator.of(context);
+              navigator.pop();
               if (kIsWeb) {
                 await _openUrl(release.sourceUrl);
                 return;
@@ -194,10 +195,9 @@ class UpdateAvailableDialog extends ConsumerWidget {
                 if (url == null) throw StateError(l10n.updateAssetUnavailable);
                 await _openUrl(url);
               } catch (error) {
-                if (messenger.mounted) {
-                  messenger.showSnackBar(
-                    SnackBar(content: Text(error.toString())),
-                  );
+                if (navigator.mounted) {
+                  appScaffoldMessengerOf(navigator.context)
+                      .showSnackBar(SnackBar(content: Text(error.toString())));
                 }
               } finally {
                 dio.close(force: true);

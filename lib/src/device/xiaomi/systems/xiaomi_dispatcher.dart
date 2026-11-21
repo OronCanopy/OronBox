@@ -34,6 +34,13 @@ class XiaomiDispatcher extends Dispatcher {
   void dispatch(Uint8List data) {
     if (_component.sppV1) {
       for (final packet in _component.decodeSppV1(data)) {
+        if (packet.dataType == XiaomiSppV1Packet.encrypted &&
+            _component.authKeys == null) {
+          _log.warning(
+            'Ignoring encrypted SPP v1 payload before authentication',
+          );
+          continue;
+        }
         switch (packet.channel) {
           case XiaomiSppV1Channel.version:
             _component.completeSppV1Hello();
@@ -156,6 +163,12 @@ class XiaomiDispatcher extends Dispatcher {
   }
 
   void onL2Payload(Uint8List l2Bytes) {
+    if (l2Bytes.length >= 2 &&
+        l2Bytes[1] == L2OpCode.writeEnc.value &&
+        _component.authKeys == null) {
+      _log.warning('Ignoring encrypted L2 payload before authentication');
+      return;
+    }
     final L2Packet l2;
     try {
       l2 = L2Packet.fromBytes(l2Bytes, cipher: _component.authKeys?.cipher);

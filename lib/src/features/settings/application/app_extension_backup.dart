@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:oronbox/src/device/zeppos/app_side/zeppos_app_side_storage.dart';
 import 'package:oronbox/src/features/plugins/domain/plugin_package.dart';
+import 'package:oronbox/src/features/plugins/domain/plugin_permission.dart';
 import 'package:oronbox/src/features/plugins/storage/plugin_storage.dart';
 import 'package:oronbox/src/features/plugins/storage/plugin_storage_factory.dart';
 
@@ -75,7 +76,12 @@ class AppExtensionBackupStore {
       plugins[id] = {
         'version': plugin.manifest.version,
         'config': plugin.config,
-        'permissions': (await storage.readPermissionGrants(id)).toList(),
+        'permissions': (await storage.readPermissionGrants(id))
+            .where((key) => !isRetiredPluginPermissionKey(key))
+            .toList(),
+        'hostSettings': _withoutRetiredPermissions(
+          await storage.readHostSettings(id),
+        ),
       };
     }
 
@@ -168,6 +174,7 @@ class AppExtensionBackupStore {
       final config = (value['config'] as Map? ?? {}).cast<String, Object?>();
       final permissions = (value['permissions'] as List? ?? [])
           .map((p) => p.toString())
+          .where((key) => !isRetiredPluginPermissionKey(key))
           .toSet();
 
       final pkgFiles = packageFilesByPlugin[id];
@@ -183,6 +190,14 @@ class AppExtensionBackupStore {
       } else if (installedMap[id] != null) {
         await storage.writeConfig(id, config);
         await storage.writePermissionGrants(id, permissions);
+      }
+
+      if (value['hostSettings'] case final Map hostSettings
+          when pkgFiles != null || installedMap.containsKey(id)) {
+        await storage.writeHostSettings(
+          id,
+          _withoutRetiredPermissions(hostSettings.cast<String, Object?>()),
+        );
       }
 
       for (final file in await storage.listDirectory(
@@ -231,7 +246,8 @@ void validateExtensionBackup(Map<String, Object?> data) {
     final value = entry.value as Map;
     if (value['version'] is! String ||
         value['config'] is! Map ||
-        (value.containsKey('permissions') && value['permissions'] is! List)) {
+        (value.containsKey('permissions') && value['permissions'] is! List) ||
+        (value.containsKey('hostSettings') && value['hostSettings'] is! Map)) {
       throw const FormatException('Invalid plugin backup');
     }
   }
@@ -242,4 +258,17 @@ void validateExtensionBackup(Map<String, Object?> data) {
     }
     (entry.value as Map).cast<String, String>().forEach((key, value) {});
   }
+}
+
+Map<String, Object?> _withoutRetiredPermissions(Map<String, Object?> settings) {
+  final policies = settings['permissionPolicies'];
+  if (policies is! Map) return settings;
+  return {
+    ...settings,
+    'permissionPolicies': {
+      for (final entry in policies.entries)
+        if (!isRetiredPluginPermissionPolicy(entry.key.toString(), entry.value))
+          entry.key: entry.value,
+    },
+  };
 }

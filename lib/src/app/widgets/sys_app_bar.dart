@@ -5,8 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:window_manager/window_manager.dart';
-import 'package:oronbox/src/app/window/debug_window_preference.dart';
+import 'package:oronbox/src/app/window/desktop_window.dart';
 import 'package:oronbox/src/core/utils/layout.dart';
 
 class SysAppBar extends ConsumerWidget implements PreferredSizeWidget {
@@ -17,6 +16,7 @@ class SysAppBar extends ConsumerWidget implements PreferredSizeWidget {
     this.elevation,
     this.actions,
     this.leading,
+    this.automaticallyImplyLeading = true,
     this.bottom,
     this.secondary = false,
     this.fullWindow = false,
@@ -27,6 +27,7 @@ class SysAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final double? elevation;
   final List<Widget>? actions;
   final Widget? leading;
+  final bool automaticallyImplyLeading;
   final PreferredSizeWidget? bottom;
   final bool secondary;
 
@@ -55,7 +56,9 @@ class SysAppBar extends ConsumerWidget implements PreferredSizeWidget {
             padding: const EdgeInsets.only(left: 12, top: 20),
             child:
                 leading ??
-                (Navigator.canPop(context) ? const BackButton() : null),
+                (automaticallyImplyLeading && Navigator.canPop(context)
+                    ? const BackButton()
+                    : null),
           )
         : leading;
     final resolvedTitle = title;
@@ -92,7 +95,7 @@ class SysAppBar extends ConsumerWidget implements PreferredSizeWidget {
       titleSpacing: macOSSecondary ? 16 : null,
       centerTitle: macOSSecondary ? false : null,
       toolbarHeight: compactMacOS ? 72 : null,
-      automaticallyImplyLeading: !macOSSecondary,
+      automaticallyImplyLeading: automaticallyImplyLeading && !macOSSecondary,
       actions: [
         ...?resolvedActions,
         if (showDebugEntry)
@@ -101,7 +104,7 @@ class SysAppBar extends ConsumerWidget implements PreferredSizeWidget {
             tooltip: 'DevTools',
             onPressed: () => context.push('/debug'),
           ),
-        if (customClose) CloseButton(onPressed: () => windowManager.close()),
+        if (customClose) const CloseButton(onPressed: closeDesktopWindow),
         if (desktop) const SizedBox(width: 4),
       ],
       bottom: bottom,
@@ -121,7 +124,7 @@ class SysAppBar extends ConsumerWidget implements PreferredSizeWidget {
     if (!desktop) return appBar;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onPanStart: (_) => windowManager.startDragging(),
+      onPanStart: (_) => dragDesktopWindow(),
       child: appBar,
     );
   }

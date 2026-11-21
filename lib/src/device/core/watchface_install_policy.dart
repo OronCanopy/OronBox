@@ -9,18 +9,40 @@ bool isRestrictedWatchfaceId(String? id) {
       normalized.startsWith(restrictedWatchfaceIdPrefix);
 }
 
-/// Reads the embedded Vela watchface ID from a raw watchface payload.
+const _velaWatchfaceIdOffset = 0x28;
+const _velaWatchfaceIdEnd = 0x68;
+final _velaWatchfaceIdPattern = RegExp(r'^[A-Za-z0-9_-]{1,63}$');
+
+bool isValidVelaWatchfaceId(String? id) =>
+    id != null &&
+    _velaWatchfaceIdPattern.hasMatch(id) &&
+    id.codeUnits.any((byte) => byte != 0x30);
+
+/// Reads the NUL-terminated identifier before the Vela watchface title.
 String? extractVelaWatchfaceId(List<int> bytes) {
-  const idOffset = 0x28;
-  const idLength = 12;
-  if (bytes.length < idOffset + idLength) return null;
-  final raw = bytes.sublist(idOffset, idOffset + idLength);
-  final result = raw
-      .takeWhile((byte) => byte != 0)
-      .map(String.fromCharCode)
-      .join()
-      .trim();
-  return result.isEmpty ? null : result;
+  if (bytes.length < _velaWatchfaceIdEnd) return null;
+  var end = _velaWatchfaceIdOffset;
+  while (end < _velaWatchfaceIdEnd && bytes[end] != 0) {
+    end++;
+  }
+  if (end == _velaWatchfaceIdOffset || end == _velaWatchfaceIdEnd) return null;
+  return String.fromCharCodes(bytes, _velaWatchfaceIdOffset, end);
+}
+
+bool isZeroVelaWatchfaceId(List<int> bytes) {
+  if (bytes.length < _velaWatchfaceIdEnd) return false;
+  final id = extractVelaWatchfaceId(bytes);
+  return bytes[_velaWatchfaceIdOffset] == 0 ||
+      (id != null && id.codeUnits.every((byte) => byte == 0x30));
+}
+
+bool writeVelaWatchfaceId(List<int> bytes, String id) {
+  if (bytes.length < _velaWatchfaceIdEnd || !isValidVelaWatchfaceId(id)) {
+    return false;
+  }
+  bytes.fillRange(_velaWatchfaceIdOffset, _velaWatchfaceIdEnd, 0);
+  bytes.setAll(_velaWatchfaceIdOffset, id.codeUnits);
+  return true;
 }
 
 /// Returns the first restricted ID found in the payload or install metadata.

@@ -1,15 +1,21 @@
+import '../widgets/resource_external_link.dart';
+
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/utils/error_localization.dart';
+import 'package:oronbox/src/app/utils/picked_file.dart';
 import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:oronbox/src/app/widgets/page_container.dart';
 import 'package:oronbox/src/app/widgets/network_img_layer.dart';
 import 'package:oronbox/src/app/widgets/smooth_linear_progress_indicator.dart';
 import 'package:oronbox/src/app/widgets/sys_app_bar.dart';
+import 'package:oronbox/src/device/core/watchface_install_policy.dart'
+    show isValidVelaWatchfaceId;
 import 'package:oronbox/src/core/constants/style_constants.dart';
 import 'package:oronbox/src/core/utils/layout.dart';
 import 'package:oronbox/src/host/tasks/task_models.dart';
@@ -19,16 +25,40 @@ import 'package:oronbox/src/features/resources/services/download_queue_notifier.
 import 'package:oronbox/src/features/resources/domain/community_resource.dart';
 import 'package:oronbox/src/features/resources/services/install_queue_notifier.dart';
 import 'package:oronbox/src/features/resources/services/resource_task_status.dart';
+import 'package:oronbox/src/features/resources/widgets/resource_install_confirmation.dart';
 
 class QueuePage extends ConsumerWidget {
   const QueuePage({super.key});
+
+  Future<void> _pickAndInstall(BuildContext context, WidgetRef ref) async {
+    final file = await pickFileData(
+      type: FileType.any,
+      loadBytes: shouldLoadPickedFileData,
+    );
+    final selected = file?.xFile;
+    if (selected == null || !context.mounted) return;
+    await confirmAndEnqueueResourceFile(
+      context: context,
+      ref: ref,
+      file: selected,
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
-      appBar: SysAppBar(title: Text(l10n.settingsQueue)),
+      appBar: SysAppBar(
+        title: Text(l10n.settingsQueue),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: l10n.install,
+            onPressed: () => _pickAndInstall(context, ref),
+          ),
+        ],
+      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isWide = useWideLayout(constraints.maxWidth);
@@ -122,7 +152,18 @@ class _DownloadQueuePanel extends ConsumerWidget {
             progress: task.progress,
             error: task.error,
             onRemove: () => notifier.remove(task.id),
-            onRetry: () => notifier.retry(task.id),
+            onRetry: () {
+              if (isAstroBoxResourcePurchaseRequired(task.error)) {
+                unawaited(
+                  showAstroBoxResourcePurchaseDialog(
+                    context,
+                    task.resource.ref,
+                  ),
+                );
+              } else {
+                notifier.retry(task.id);
+              }
+            },
           ),
       ],
     );
@@ -204,20 +245,24 @@ class _InstallQueuePanel extends ConsumerWidget {
           _QueueTile(
             key: ValueKey('install-${task.id}'),
             icon: _installIcon(task.type),
-            iconUrl: task.resource?.iconUrl?.toString(),
+            iconUrl: task.iconUrl ?? task.resource?.iconUrl?.toString(),
             title: task.name,
             subtitle: _installTaskDescription(l10n, task),
             status: task.status,
             progress: task.progress,
             error: task.error,
             onRemove: () => notifier.remove(task.id),
-            onRetry: task.status == ResourceTaskStatus.failed
-                ? () => notifier.retry(task.id)
+            onRetry: task.status == ResourceTaskStatus.failed && task.canRetry
+                ? () {
+                    unawaited(retryResourceInstallTask(context, ref, task));
+                  }
                 : null,
             onFixWatchfaceId:
-                task.type == LocalDeviceInstallType.watchface &&
+                task.canRetry &&
+                    task.type == LocalDeviceInstallType.watchface &&
                     (task.status == ResourceTaskStatus.pending ||
-                        task.status == ResourceTaskStatus.failed)
+                        (task.status == ResourceTaskStatus.failed &&
+                            task.canRetry))
                 ? () => _promptWatchfaceId(context, ref, task)
                 : null,
           ),
@@ -232,11 +277,7 @@ class _InstallQueuePanel extends ConsumerWidget {
   ) async {
     final l10n = AppLocalizations.of(context)!;
     final currentIdentifier = task.identifier ?? '';
-    final controller = TextEditingController(
-      text: RegExp(r'^[0-9]{1,12}$').hasMatch(currentIdentifier)
-          ? currentIdentifier
-          : '',
-    );
+    final controller = TextEditingController(text: currentIdentifier);
     try {
       final identifier = await showDialog<String>(
         context: context,
@@ -245,17 +286,13 @@ class _InstallQueuePanel extends ConsumerWidget {
           content: TextField(
             controller: controller,
             autofocus: true,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(12),
-            ],
+            keyboardType: TextInputType.text,
             decoration: InputDecoration(
               hintText: l10n.installQueueFixWatchfaceIdHint,
             ),
             onSubmitted: (value) {
               final normalized = value.trim();
-              if (_isValidWatchfaceIdOverride(normalized)) {
+              if (isValidVelaWatchfaceId(normalized)) {
                 Navigator.of(context).pop(normalized);
               }
             },
@@ -268,7 +305,7 @@ class _InstallQueuePanel extends ConsumerWidget {
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: controller,
               builder: (context, value, _) => FilledButton(
-                onPressed: _isValidWatchfaceIdOverride(value.text)
+                onPressed: isValidVelaWatchfaceId(value.text.trim())
                     ? () => Navigator.of(context).pop(value.text.trim())
                     : null,
                 child: Text(l10n.save),
@@ -291,10 +328,6 @@ class _InstallQueuePanel extends ConsumerWidget {
     }
   }
 }
-
-bool _isValidWatchfaceIdOverride(String value) =>
-    RegExp(r'^[0-9]{1,12}$').hasMatch(value.trim()) &&
-    !RegExp(r'^[0]+$').hasMatch(value.trim());
 
 class _QueuePanel extends StatelessWidget {
   const _QueuePanel({
@@ -378,6 +411,51 @@ class _QueueTile extends StatelessWidget {
   /// Offered on failed watchface installs to reinstall with a custom id.
   final VoidCallback? onFixWatchfaceId;
 
+  Widget _artwork(BuildContext context) {
+    Widget fallback() => Icon(
+      _statusIcon(status, icon),
+      color: status == ResourceTaskStatus.failed
+          ? Theme.of(context).colorScheme.error
+          : Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    final url = iconUrl;
+    if (url == null || url.isEmpty) return fallback();
+    if (url.startsWith('data:')) {
+      try {
+        final data = UriData.parse(url);
+        final bytes = data.contentAsBytes();
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: data.mimeType == 'image/svg+xml'
+              ? SvgPicture.memory(
+                  bytes,
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => fallback(),
+                )
+              : Image.memory(
+                  bytes,
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => fallback(),
+                ),
+        );
+      } on FormatException {
+        return fallback();
+      }
+    }
+    return NetworkImgLayer(
+      src: url,
+      width: 40,
+      height: 40,
+      type: 'resource',
+      memCacheWidth: 96,
+      memCacheHeight: 96,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -392,21 +470,7 @@ class _QueueTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        leading: iconUrl?.isNotEmpty == true
-            ? NetworkImgLayer(
-                src: iconUrl,
-                width: 40,
-                height: 40,
-                type: 'resource',
-                memCacheWidth: 96,
-                memCacheHeight: 96,
-              )
-            : Icon(
-                _statusIcon(status, icon),
-                color: status == ResourceTaskStatus.failed
-                    ? colorScheme.error
-                    : colorScheme.onSurfaceVariant,
-              ),
+        leading: _artwork(context),
         title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -468,6 +532,8 @@ IconData _installIcon(LocalDeviceInstallType type) {
     LocalDeviceInstallType.app => Icons.apps_outlined,
     LocalDeviceInstallType.watchface => Icons.watch_outlined,
     LocalDeviceInstallType.firmware => Icons.memory_outlined,
+    LocalDeviceInstallType.canopus => Icons.extension_outlined,
+    LocalDeviceInstallType.resPack => Icons.inventory_2_outlined,
   };
 }
 
@@ -492,6 +558,8 @@ String _installTaskDescription(AppLocalizations l10n, InstallTask task) {
       LocalDeviceInstallType.app => l10n.localAppInstall,
       LocalDeviceInstallType.watchface => l10n.localWatchfaceInstall,
       LocalDeviceInstallType.firmware => l10n.localFirmwareInstall,
+      LocalDeviceInstallType.canopus => l10n.module,
+      LocalDeviceInstallType.resPack => l10n.resourceTypeResPack,
     },
   };
 }
@@ -503,6 +571,7 @@ String _downloadTaskDescription(AppLocalizations l10n, ResourceTask task) {
     CommunityResourceType.watchface => l10n.resourceTypeWatchface,
     CommunityResourceType.firmware => l10n.resourceTypeFirmware,
     CommunityResourceType.canopus => l10n.module,
+    CommunityResourceType.resPack => l10n.resourceTypeResPack,
   };
   return [
     type,

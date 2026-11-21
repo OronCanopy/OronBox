@@ -124,11 +124,13 @@ class AutoBackupService {
 
   final AppDataBackupService _backupService;
   bool _isExecuting = false;
+  DateTime? _retryAfter;
 
   bool get isExecuting => _isExecuting;
 
   Future<bool> runAutoBackupIfDue({DateTime? nowOverride}) async {
     final now = nowOverride ?? DateTime.now();
+    if (_retryAfter != null && now.isBefore(_retryAfter!)) return false;
     if (!AutoBackupPreferences.shouldRun(now)) return false;
     return await executeAutoBackup(nowOverride: now);
   }
@@ -175,17 +177,20 @@ class AutoBackupService {
       );
 
       if (savedPath == null) {
+        _retryAfter = now.add(const Duration(hours: 1));
         _log.warning('Failed to save auto backup file to public storage');
         return false;
       }
 
       _log.info('Auto backup saved to: $savedPath');
       AutoBackupPreferences.lastBackupTime = now;
+      _retryAfter = null;
 
       // Prune old backups per retention policy
       await pruneAutoBackups(maxRetention: AutoBackupPreferences.retention);
       return true;
     } catch (error) {
+      _retryAfter = now.add(const Duration(hours: 1));
       _log.warning('Auto backup failed', error);
       return false;
     } finally {

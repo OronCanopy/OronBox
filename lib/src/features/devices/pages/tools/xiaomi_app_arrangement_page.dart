@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:segmented_list/segmented_list.dart';
@@ -309,12 +310,12 @@ class _XiaomiAppArrangementPageState
           _savedLayout = _selectedLayout;
           _savedApps = List.unmodifiable(_apps);
         });
-        ScaffoldMessenger.of(context)
+        appScaffoldMessengerOf(context)
             .showSnackBar(SnackBar(content: Text(l10n.appOrderSaved)));
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        appScaffoldMessengerOf(context).showSnackBar(
           SnackBar(content: Text(localizedErrorMessage(l10n, error))),
         );
       }

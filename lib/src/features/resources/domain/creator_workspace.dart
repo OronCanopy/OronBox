@@ -1,6 +1,6 @@
 import 'package:oronbox/src/features/resources/domain/community_resource.dart';
 
-enum CreatorResourceKind { quickApp, watchface }
+enum CreatorResourceKind { quickApp, watchface, canopus }
 
 enum CreatorExternalPurchaseIssue { link, amount }
 
@@ -153,9 +153,11 @@ class CreatorResource {
         slug: json['slug']?.toString() ?? '',
         editVersion: (json['edit_version'] as num?)?.toInt() ?? 0,
         draftName: json['draft_name']?.toString() ?? '',
-        kind: json['kind'] == 'watchface'
-            ? CreatorResourceKind.watchface
-            : CreatorResourceKind.quickApp,
+        kind: switch (json['kind']?.toString()) {
+          'watchface' => CreatorResourceKind.watchface,
+          'canopus' => CreatorResourceKind.canopus,
+          _ => CreatorResourceKind.quickApp,
+        },
         moderationState: json['moderation_state']?.toString() ?? 'visible',
         moderationBy: json['moderation_by']?.toString() ?? '',
         moderationReason: json['moderation_reason']?.toString() ?? '',

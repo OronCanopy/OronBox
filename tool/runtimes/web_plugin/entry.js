@@ -1,160 +1,167 @@
-import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten-core";
-import releaseVariant from "@jitl/quickjs-singlefile-browser-release-sync";
+import { newQuickJSWASMModuleFromVariant } from "quickjs-emscripten";
+import variant from "@jitl/quickjs-singlefile-browser-release-sync";
+import { instantiateCore } from "./core_wasm.js";
 
-const modulePromise = newQuickJSWASMModuleFromVariant(releaseVariant);
-const instances = new Map();
+let quickJs;
 
-function requireInstance(id) {
-  const instance = instances.get(id);
-  if (!instance || instance.closed) throw new Error(`Plugin runtime not found: ${id}`);
-  return instance;
-}
-
-function pump(instance) {
-  if (instance.closed) return;
-  instance.deadline = performance.now() + 10000;
-  const result = instance.runtime.executePendingJobs();
-  if (result.error) {
-    const message = instance.context.dump(result.error);
-    result.error.dispose();
-    throw new Error(String(message));
-  }
-}
-
-function hostValue(instance, value) {
-  if (value === undefined) return instance.context.undefined;
-  if (value === null) return instance.context.null;
-  const json = JSON.stringify(value);
-  const result = instance.context.evalCode(`JSON.parse(${JSON.stringify(json)})`);
-  return instance.context.unwrapResult(result);
-}
-
-function evaluate(instance, code, name) {
-  instance.deadline = performance.now() + 10000;
-  const result = instance.context.evalCode(code, name);
-  if (result.error) {
-    const message = instance.context.dump(result.error);
-    result.error.dispose();
-    throw new Error(String(message));
-  }
-  return result.value;
-}
-
-async function settle(instance, handle) {
-  const promise = instance.context.resolvePromise(handle);
-  handle.dispose();
-  pump(instance);
-  const result = await promise;
-  if (result.error) {
-    const message = instance.context.dump(result.error);
-    result.error.dispose();
-    throw new Error(String(message));
-  }
-  const value = instance.context.dump(result.value);
-  result.value.dispose();
-  return value;
-}
-
-async function create(id, bootstrap, globals, source) {
-  await close(id);
-  const QuickJS = await modulePromise;
-  const runtime = QuickJS.newRuntime({
+async function create(bootstrap, hostCall) {
+  quickJs ??= newQuickJSWASMModuleFromVariant(variant).catch(error => {
+    quickJs = undefined;
+    throw error;
+  });
+  const engine = await quickJs;
+  const runtime = engine.newRuntime({
     memoryLimitBytes: 64 * 1024 * 1024,
     maxStackSizeBytes: 1024 * 1024,
   });
   const context = runtime.newContext();
-  const instance = {
-    id,
-    runtime,
-    context,
-    deadline: performance.now() + 10000,
-    closed: false,
-  };
-  runtime.setInterruptHandler(() => performance.now() > instance.deadline);
-  instances.set(id, instance);
+  const timers = new Map();
+  const operations = new Map();
+  let closed = false;
+  let deadline;
+  runtime.setInterruptHandler(() => performance.now() > deadline);
 
-  const sendMessage = context.newFunction("sendMessage", (channel, message) => {
-    const channelName = context.getString(channel);
-    const payload = context.getString(message);
-    const hostResult = globalThis.oronboxPluginHostCall(id, channelName, payload);
-    if (!hostResult || typeof hostResult.then !== "function") {
-      return hostValue(instance, hostResult);
+  function unwrap(result) {
+    if (!result.error) return result.value;
+    const error = context.dump(result.error);
+    result.error.dispose();
+    throw new Error(error?.message ?? String(error));
+  }
+
+  function evaluate(source, name, options) {
+    if (closed) throw new Error("JavaScript runtime is closed");
+    deadline = performance.now() + 10000;
+    return unwrap(context.evalCode(source, name, options));
+  }
+
+  function pump() {
+    deadline = performance.now() + 10000;
+    try {
+      unwrap(runtime.executePendingJobs());
+    } catch (error) {
+      rejectOperations(error);
+      throw error;
     }
-    const deferred = context.newPromise();
-    Promise.resolve(hostResult).then(
-      (value) => {
-        if (instance.closed) return;
-        const handle = hostValue(instance, value);
-        deferred.resolve(handle);
-        if (handle.alive && handle !== context.undefined && handle !== context.null) {
-          handle.dispose();
+    for (const [handle, operation] of operations) {
+      const result = context.getPromiseState(handle);
+      if (result.type === "pending") continue;
+      operations.delete(handle);
+      try {
+        const value = unwrap(result);
+        try {
+          operation.resolve(operation.readResult ? JSON.stringify(context.dump(value) ?? null) : "null");
+        } finally {
+          if (!result.notAPromise) value.dispose();
         }
-        pump(instance);
-      },
-      (error) => {
-        if (instance.closed) return;
-        const handle = context.newError(String(error));
-        deferred.reject(handle);
+      } catch (error) {
+        operation.reject(error);
+      } finally {
         handle.dispose();
-        pump(instance);
-      },
-    );
-    deferred.settled.finally(() => deferred.dispose());
-    return deferred.handle;
-  });
-  context.setProp(context.global, "sendMessage", sendMessage);
-  sendMessage.dispose();
+      }
+    }
+  }
+
+  function rejectOperations(error) {
+    for (const [handle, { reject }] of operations) {
+      handle.dispose();
+      reject(error);
+    }
+    operations.clear();
+  }
+
+  function settle(handle, readResult = true) {
+    return new Promise((resolve, reject) => {
+      operations.set(handle, { resolve, reject, readResult });
+      pump();
+    });
+  }
+
+  function invoke(name, args) {
+    return settle(evaluate(`globalThis[${JSON.stringify(name)}](...${args})`, "callback.js"));
+  }
+
+  function reportError(error) {
+    if (!closed) Promise.resolve(hostCall("runtime.reportError", JSON.stringify([String(error)]))).catch(() => {});
+  }
+
+  function clearTimer(id) {
+    clearTimeout(timers.get(id));
+    return timers.delete(id);
+  }
+
+  async function request(method, args) {
+    if (method === "runtime.clearTimer") return clearTimer(args[0]);
+    if (method === "runtime.setTimer") {
+      const [id, delay, repeat] = args;
+      clearTimer(id);
+      const fire = () => {
+        if (!repeat) timers.delete(id);
+        try {
+          invoke("__obFireTimer", JSON.stringify([id])).catch(reportError);
+        } catch (error) {
+          reportError(error);
+        }
+      };
+      timers.set(id, repeat ? setInterval(fire, delay) : setTimeout(fire, delay));
+      return id;
+    }
+    return JSON.parse(await hostCall(method, JSON.stringify(args)));
+  }
+
+  async function serve({ requestId, method, args }) {
+    if (closed) return;
+    let success = true;
+    let result;
+    try {
+      result = await request(method, args);
+    } catch (error) {
+      success = false;
+      result = String(error);
+    }
+    if (closed) return;
+    try {
+      evaluate(`__obSettleHostRequest(${JSON.stringify(requestId)}, ${success}, ${JSON.stringify(result)})`, "host_result.js").dispose();
+      pump();
+    } catch (error) {
+      reportError(error);
+    }
+  }
+
+  function close() {
+    if (closed) return;
+    closed = true;
+    for (const id of timers.keys()) clearTimer(id);
+    rejectOperations(new Error("JavaScript runtime closed"));
+    context.dispose();
+    runtime.dispose();
+  }
 
   try {
-    evaluate(instance, bootstrap, "oronbox_abv1_host.js").dispose();
-    evaluate(instance, globals, "oronbox_abv1_globals.js").dispose();
-    evaluate(instance, source, `${id}/main.js`).dispose();
-    return await settle(instance, evaluate(instance, "__zbStartPlugin()", `${id}/start.js`));
+    const sendMessage = context.newFunction("sendMessage", (channel, message) => {
+      if (context.getString(channel) !== "OronBoxHost") return;
+      const payload = JSON.parse(context.getString(message));
+      queueMicrotask(() => serve(payload));
+    });
+    context.setProp(context.global, "sendMessage", sendMessage);
+    sendMessage.dispose();
+    evaluate(bootstrap, "bootstrap.js").dispose();
   } catch (error) {
-    await close(id);
+    close();
     throw error;
   }
+
+  return {
+    async evaluateEntry(source, name, modules) {
+      const sources = new Map(Object.entries(JSON.parse(modules)));
+      runtime.setModuleLoader(path => {
+        if (!sources.has(path)) throw new Error(`Plugin module not found: ${path}`);
+        return sources.get(path);
+      });
+      return settle(evaluate(source, name, name.endsWith(".mjs") ? { type: "module" } : undefined), false);
+    },
+    invoke,
+    close,
+  };
 }
 
-async function invoke(id, callback, args) {
-  const instance = requireInstance(id);
-  return settle(
-    instance,
-    evaluate(
-      instance,
-      `__zbInvokeRegistered(${JSON.stringify(callback)}, ${JSON.stringify(args)})`,
-      `${id}/callback.js`,
-    ),
-  );
-}
-
-async function dispatchEvent(id, name, payload) {
-  const instance = requireInstance(id);
-  return settle(
-    instance,
-    evaluate(
-      instance,
-      `__zbDispatchEvent(${JSON.stringify(name)}, ${JSON.stringify(payload)})`,
-      `${id}/event.js`,
-    ),
-  );
-}
-
-async function fireTimer(id, timerId) {
-  const instance = requireInstance(id);
-  return settle(
-    instance,
-    evaluate(instance, `__zbFireTimer(${Number(timerId)})`, `${id}/timer.js`),
-  );
-}
-
-async function close(id) {
-  const instance = instances.get(id);
-  if (!instance) return;
-  instances.delete(id);
-  instance.closed = true;
-  instance.context.dispose();
-  instance.runtime.dispose();
-}
-
-globalThis.OronBoxPluginRuntime = { create, invoke, dispatchEvent, fireTimer, close };
+globalThis.OronBoxPluginRuntime = { create, instantiateCore };

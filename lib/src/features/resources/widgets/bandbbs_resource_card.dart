@@ -310,6 +310,7 @@ Color _typeColor(ColorScheme color, CommunityResourceType type) =>
       CommunityResourceType.watchface => color.primary,
       CommunityResourceType.firmware => color.tertiary,
       CommunityResourceType.canopus => color.secondary,
+      CommunityResourceType.resPack => color.secondary,
     };
 
 String _typeLabel(
@@ -325,6 +326,7 @@ String _typeLabel(
   CommunityResourceType.watchface => l10n.watchface,
   CommunityResourceType.firmware => l10n.firmwareTool,
   CommunityResourceType.canopus => l10n.module,
+  CommunityResourceType.resPack => l10n.resourceTypeResPack,
 };
 
 String _paidLabel(AppLocalizations l10n, CommunityPaidType type) =>

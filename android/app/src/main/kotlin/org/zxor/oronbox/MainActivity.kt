@@ -1,5 +1,11 @@
 package org.zxor.oronbox
 
+import org.oroncanopy.oronbox.PlatformChannelNames
+import org.oroncanopy.oronbox.QueueActivityNotification
+import org.oroncanopy.oronbox.NotificationChannels
+import org.oroncanopy.oronbox.StatusWidgetDataStore
+import org.oroncanopy.oronbox.XmsWearableBridge
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
@@ -31,15 +37,7 @@ import android.os.Process
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.Log
-import android.view.ViewGroup
 import android.view.Window
-import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
-import android.webkit.ValueCallback
-import android.webkit.WebChromeClient
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.widget.FrameLayout
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -82,15 +80,13 @@ class MainActivity : FlutterActivity() {
     private val sendExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val connectGeneration = AtomicLong(0)
     private val backgroundTaskIds = mutableSetOf<Int>()
+    private val pluginBackgroundTaskIds = mutableSetOf<Int>()
     private var nextBackgroundTaskId = 0
     private var connectionLabel: String? = null
     private var connectionBattery: Int? = null
     private var lastTaskLabel: String? = null
-    private var zeppSettingsContainer: ViewGroup? = null
-    private var zeppSettingsWebView: WebView? = null
-    private var zeppSettingsAppId: Long? = null
-    private var zeppSettingsChannel: MethodChannel? = null
     private var xmsWearableChannel: MethodChannel? = null
+    private var notificationChannels: NotificationChannels? = null
     private var fileOpenChannel: MethodChannel? = null
     private var pendingOpenFilePath: String? = null
     private var pendingWearableLogResult: MethodChannel.Result? = null
@@ -281,6 +277,13 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun backgroundServiceMode(): String =
+        if (connectionLabel != null && backgroundTaskIds.all { it in pluginBackgroundTaskIds }) {
+            BackgroundTaskService.MODE_CONNECTION
+        } else {
+            BackgroundTaskService.MODE_TASK
+        }
+
     private fun stopBackgroundServiceIfIdle() {
         if (backgroundTaskIds.isEmpty() && connectionLabel == null) {
             stopService(Intent(this, BackgroundTaskService::class.java))
@@ -301,6 +304,9 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        notificationChannels = NotificationChannels(
+            this, flutterEngine.dartExecutor.binaryMessenger,
+        )
         fileOpenChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             PlatformChannelNames.FILE_OPEN,
@@ -420,8 +426,33 @@ class MainActivity : FlutterActivity() {
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             PlatformChannelNames.BACKGROUND_TASKS,
-        ).setMethodCallHandler { call, result ->
+        ).also { channel ->
+            BackgroundTaskService.onTaskTimeout = {
+                val expired = backgroundTaskIds.toList()
+                backgroundTaskIds.clear()
+                pluginBackgroundTaskIds.clear()
+                lastTaskLabel = null
+                channel.invokeMethod("expired", mapOf("ids" to expired))
+            }
+        }.setMethodCallHandler { call, result ->
             when (call.method) {
+                "beginPlugin" -> {
+                    val id = ++nextBackgroundTaskId
+                    val label = call.argument<String>("label") ?: "OronBox"
+                    val started = startBackgroundService(
+                        connectionLabel ?: label,
+                        backgroundServiceMode(),
+                        connectionBattery,
+                    )
+                    if (started) {
+                        backgroundTaskIds.add(id)
+                        pluginBackgroundTaskIds.add(id)
+                        lastTaskLabel = label
+                        result.success(id)
+                    } else {
+                        result.error("BACKGROUND_UNAVAILABLE", "Background execution could not be started", null)
+                    }
+                }
                 "begin" -> {
                     val id = ++nextBackgroundTaskId
                     backgroundTaskIds.add(id)
@@ -433,17 +464,17 @@ class MainActivity : FlutterActivity() {
                     result.success(id)
                 }
                 "end" -> {
-                    call.argument<Int>("id")?.let(backgroundTaskIds::remove)
-                    if (backgroundTaskIds.isEmpty()) {
-                        lastTaskLabel = null
-                        connectionLabel?.let {
-                            startBackgroundService(
-                                it,
-                                BackgroundTaskService.MODE_CONNECTION,
-                                connectionBattery,
-                            )
-                        }
+                    call.argument<Int>("id")?.let {
+                        backgroundTaskIds.remove(it)
+                        pluginBackgroundTaskIds.remove(it)
                     }
+                    if (backgroundTaskIds.isEmpty()) lastTaskLabel = null
+                    val label = if (backgroundServiceMode() == BackgroundTaskService.MODE_CONNECTION) {
+                        connectionLabel
+                    } else {
+                        lastTaskLabel
+                    }
+                    label?.let { startBackgroundService(it, backgroundServiceMode(), connectionBattery) }
                     stopBackgroundServiceIfIdle()
                     result.success(null)
                 }
@@ -453,12 +484,8 @@ class MainActivity : FlutterActivity() {
                     connectionLabel = call.argument<String>("label") ?: "Device connected"
                     connectionBattery = call.argument<Int>("battery")
                     startBackgroundService(
-                        lastTaskLabel ?: connectionLabel!!,
-                        if (lastTaskLabel == null) {
-                            BackgroundTaskService.MODE_CONNECTION
-                        } else {
-                            BackgroundTaskService.MODE_TASK
-                        },
+                        if (backgroundServiceMode() == BackgroundTaskService.MODE_CONNECTION) connectionLabel!! else lastTaskLabel!!,
+                        backgroundServiceMode(),
                         call.argument<Int>("battery"),
                     )
                     result.success(null)
@@ -466,7 +493,7 @@ class MainActivity : FlutterActivity() {
                 "updateConnection" -> {
                     connectionLabel = call.argument<String>("label") ?: "Device connected"
                     connectionBattery = call.argument<Int>("battery")
-                    if (lastTaskLabel == null) {
+                    if (backgroundServiceMode() == BackgroundTaskService.MODE_CONNECTION) {
                         startBackgroundService(
                             connectionLabel!!,
                             BackgroundTaskService.MODE_CONNECTION,
@@ -675,6 +702,26 @@ class MainActivity : FlutterActivity() {
         }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
+            PlatformChannelNames.SYSTEM_INFO,
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getAndroidKernelInfo" -> {
+                    try {
+                        result.success(
+                            mapOf(
+                                "sdkInt" to Build.VERSION.SDK_INT,
+                                "kernelRelease" to android.system.Os.uname().release,
+                            ),
+                        )
+                    } catch (e: Throwable) {
+                        result.error("SYSTEM_INFO_FAILED", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
             PlatformChannelNames.CLASSIC_SPP,
         ).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -722,41 +769,6 @@ class MainActivity : FlutterActivity() {
             }
         })
 
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            PlatformChannelNames.MI_ACCOUNT_2FA,
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "resolve" -> resolveMiAccountTwoFactor(call, result)
-                else -> result.notImplemented()
-            }
-        }
-        zeppSettingsChannel = MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            PlatformChannelNames.ZEPPOS_APP_SETTINGS,
-        ).also { channel ->
-            channel.setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "open" -> openZeppSettings(call, result)
-                    "close" -> {
-                        closeZeppSettings(notify = false)
-                        result.success(null)
-                    }
-                    "settingsChanged" -> {
-                        val appId = call.argument<Number>("appId")?.toLong()
-                        val settingsJson = call.argument<String>("settingsJson")
-                        if (appId == zeppSettingsAppId && settingsJson != null) {
-                            zeppSettingsWebView?.evaluateJavascript(
-                                "globalThis.__oronboxSettingsChanged($settingsJson)",
-                                null,
-                            )
-                        }
-                        result.success(null)
-                    }
-                    else -> result.notImplemented()
-                }
-            }
-        }
     }
 
     private fun saveXiaomiScreenshot(call: MethodCall, result: MethodChannel.Result) {
@@ -1482,9 +1494,16 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        notificationChannels?.dispose()
+        notificationChannels = null
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        notificationChannels?.onNewIntent(intent)
         val path = resolveOpenIntent(intent) ?: return
         pendingOpenFilePath = path
         // Warm start: the Dart handler is already listening; push directly.
@@ -1497,95 +1516,24 @@ class MainActivity : FlutterActivity() {
         val uri = intent?.data ?: return null
         val scheme = uri.scheme
         if (scheme != "content" && scheme != "file") return null
+        var directory: java.io.File? = null
         return try {
-            val name = uri.lastPathSegment?.takeIf { it.isNotBlank() } ?: "opened-file"
-            val dir = java.io.File(cacheDir, "file_open").apply { mkdirs() }
+            val displayName = if (scheme == "content") {
+                contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                }
+            } else uri.lastPathSegment
+            val name = displayName?.substringAfterLast('/')?.substringAfterLast('\\')
+                ?.takeIf { it.isNotBlank() && it != "." && it != ".." } ?: "opened-file"
+            val dir = java.io.File(cacheDir, "file_open/${java.util.UUID.randomUUID()}").apply { mkdirs() }
+            directory = dir
             val target = java.io.File(dir, name)
-            contentResolver.openInputStream(uri)?.use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
-            }
+            val input = contentResolver.openInputStream(uri) ?: throw java.io.IOException("Unable to open file")
+            input.use { source -> target.outputStream().use { output -> source.copyTo(output) } }
             target.absolutePath
         } catch (_: Exception) {
+            directory?.deleteRecursively()
             null
-        }
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun openZeppSettings(call: MethodCall, result: MethodChannel.Result) {
-        val appId = call.argument<Number>("appId")?.toLong()
-        val html = call.argument<String>("html")
-        val contentTop = call.argument<Number>("contentTop")?.toFloat() ?: 0f
-        if (appId == null || html == null) {
-            result.error("INVALID_ARGUMENT", "appId and html are required", null)
-            return
-        }
-        mainHandler.post {
-            closeZeppSettings(notify = false)
-            val density = resources.displayMetrics.density
-            val container = FrameLayout(this).apply {
-                isClickable = true
-                isFocusable = true
-                elevation = 1f * density
-            }
-            val webView = WebView(this)
-            webView.settings.javaScriptEnabled = true
-            webView.settings.domStorageEnabled = false
-            webView.settings.allowFileAccess = false
-            webView.settings.allowContentAccess = false
-            webView.webChromeClient = WebChromeClient()
-            webView.webViewClient = object : WebViewClient() {
-                override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                    if (url == null || url == "about:blank") return false
-                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
-                    return true
-                }
-            }
-            webView.addJavascriptInterface(object {
-                @JavascriptInterface
-                fun postMessage(message: String) {
-                    val value = runCatching { org.json.JSONObject(message) }.getOrNull() ?: return
-                    val type = value.optString("type")
-                    val args = mutableMapOf<String, Any?>("appId" to appId)
-                    value.keys().forEach { key -> if (key != "type") args[key] = value.opt(key) }
-                    mainHandler.post { zeppSettingsChannel?.invokeMethod(type, args) }
-                }
-            }, "ZeppSettingsBridge")
-            container.addView(
-                webView,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                ),
-            )
-            findViewById<ViewGroup>(android.R.id.content).addView(
-                container,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                ).apply { topMargin = (contentTop * density).toInt() },
-            )
-            zeppSettingsContainer = container
-            zeppSettingsWebView = webView
-            zeppSettingsAppId = appId
-            webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
-            result.success(null)
-        }
-    }
-
-    private fun closeZeppSettings(notify: Boolean = true) {
-        val appId = zeppSettingsAppId
-        val webView = zeppSettingsWebView
-        val container = zeppSettingsContainer
-        zeppSettingsContainer = null
-        zeppSettingsWebView = null
-        zeppSettingsAppId = null
-        (container?.parent as? ViewGroup)?.removeView(container)
-        webView?.removeJavascriptInterface("ZeppSettingsBridge")
-        webView?.stopLoading()
-        webView?.loadUrl("about:blank")
-        webView?.destroy()
-        if (notify && appId != null) {
-            zeppSettingsChannel?.invokeMethod("closed", mapOf("appId" to appId))
         }
     }
 
@@ -1694,153 +1642,6 @@ class MainActivity : FlutterActivity() {
         return scanResults.values.toList()
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun resolveMiAccountTwoFactor(call: MethodCall, result: MethodChannel.Result) {
-        val url = call.argument<String>("url")
-        if (url.isNullOrBlank()) {
-            result.error("INVALID_ARGUMENT", "url is required", null)
-            return
-        }
-
-        mainHandler.post {
-            val dialog = Dialog(this)
-            dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-            val webView = WebView(this)
-            var completed = false
-            val cookieManager = CookieManager.getInstance()
-            cookieManager.setAcceptCookie(true)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                cookieManager.setAcceptThirdPartyCookies(webView, true)
-            }
-
-            fun cookieHeaderFor(currentUrl: String?): String {
-                val values = linkedMapOf<String, String>()
-                listOf(
-                    currentUrl,
-                    "https://account.xiaomi.com",
-                    "https://mi.com",
-                    "https://xiaomi.com",
-                ).filterNotNull().forEach { cookieUrl ->
-                    cookieManager.getCookie(cookieUrl)
-                        ?.split(";")
-                        ?.map { it.trim() }
-                        ?.filter { it.contains("=") }
-                        ?.forEach { pair ->
-                            val index = pair.indexOf("=")
-                            val name = pair.substring(0, index).trim()
-                            val value = pair.substring(index + 1).trim()
-                            if (name.isNotEmpty() && value.isNotEmpty()) {
-                                values[name] = value
-                            }
-                        }
-                }
-                return values.entries.joinToString("; ") { "${it.key}=${it.value}" }
-            }
-
-            fun hasSessionCookie(header: String): Boolean {
-                val names = header.split(";")
-                    .mapNotNull { pair ->
-                        val index = pair.indexOf("=")
-                        if (index <= 0) null else pair.substring(0, index).trim()
-                    }
-                    .toSet()
-                return names.contains("passToken") ||
-                    names.contains("cUserId") ||
-                    names.contains("userId")
-            }
-
-            fun completeIfReady(currentUrl: String?) {
-                if (completed) return
-                val header = cookieHeaderFor(currentUrl)
-                if (!hasSessionCookie(header)) return
-                completed = true
-                cookieManager.flush()
-                dialog.dismiss()
-                result.success(header)
-            }
-
-            fun failIfOpen(code: String, message: String) {
-                if (completed) return
-                completed = true
-                dialog.dismiss()
-                result.error(code, message, null)
-            }
-
-            val poller = object : Runnable {
-                override fun run() {
-                    if (completed) return
-                    completeIfReady(webView.url)
-                    mainHandler.postDelayed(this, 750)
-                }
-            }
-
-            webView.settings.javaScriptEnabled = true
-            webView.settings.domStorageEnabled = true
-            webView.webChromeClient = WebChromeClient()
-            webView.webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, finishedUrl: String?) {
-                    super.onPageFinished(view, finishedUrl)
-                    val currentUrl = finishedUrl ?: view?.url
-                    completeIfReady(currentUrl)
-                    view?.evaluateJavascript(
-                        "(document.body && document.body.innerText || '').trim()",
-                        ValueCallback { body ->
-                            val text = body
-                                ?.trim()
-                                ?.trim('"')
-                                ?.replace("\\n", "\n")
-                                ?.trim()
-                                ?.lowercase()
-                            if (text == "ok" || text?.endsWith("\nok") == true) {
-                                completeIfReady(currentUrl)
-                            }
-                        },
-                    )
-                }
-            }
-
-            dialog.setContentView(
-                webView,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                ),
-            )
-            dialog.window?.setLayout(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            )
-            dialog.setOnCancelListener {
-                failIfOpen("CANCELLED", "Xiaomi 2FA WebView was cancelled")
-            }
-            dialog.setOnDismissListener {
-                mainHandler.removeCallbacks(poller)
-                webView.stopLoading()
-                webView.destroy()
-                if (!completed) {
-                    completed = true
-                    result.error("CANCELLED", "Xiaomi 2FA WebView was closed", null)
-                }
-            }
-            dialog.show()
-            dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            dialog.window?.setLayout(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            )
-            // Android's CookieManager is process-global and otherwise keeps
-            // the previous Xiaomi account between two-factor sessions.  A
-            // fresh login must start without the old account's cookies.
-            webView.clearHistory()
-            webView.clearCache(true)
-            cookieManager.removeAllCookies {
-                if (completed) return@removeAllCookies
-                cookieManager.flush()
-                webView.loadUrl(url)
-                mainHandler.postDelayed(poller, 750)
-            }
-        }
-    }
 
     @SuppressLint("MissingPermission")
     private fun connect(call: MethodCall, result: MethodChannel.Result) {
@@ -2625,6 +2426,7 @@ class MainActivity : FlutterActivity() {
     )
 
     override fun onDestroy() {
+        BackgroundTaskService.onTaskTimeout = null
         stopPhoneFinder()
         disconnect()
         sessionMarker?.let { marker ->
@@ -2634,7 +2436,6 @@ class MainActivity : FlutterActivity() {
         XmsWearableBridge.detach(xmsWearableChannel)
         xmsWearableChannel = null
         fileOpenChannel = null
-        closeZeppSettings(notify = false)
         stopSppScan()
         sendExecutor.shutdownNow()
         wearableLogExecutor.shutdownNow()

@@ -46,14 +46,16 @@ void RegisterOronBoxFileAssociations() {
   if (::GetModuleFileNameW(nullptr, executable_path, MAX_PATH) == 0) return;
 
   const wchar_t* extensions[] = {L".rpk", L".bin", L".face", L".zpk",
-                                 L".mwz", L".obp", L".abp"};
+                                 L".mwz", L".obp", L".abp", L".canopus",
+                                 L".crpack"};
   const wchar_t* descriptions[] = {
       L"OronBox RPK Package", L"OronBox Firmware", L"OronBox Watchface",
       L"OronBox ZPK Package", L"OronBox MWZ Project",
-      L"OronBox Plugin Package", L"AstroBox Plugin Package"};
+      L"OronBox Plugin Package", L"AstroBox Plugin Package",
+      L"OronBox Canopus Module"};
   const std::wstring command =
       L"\"" + std::wstring(executable_path) + L"\" \"%1\"";
-  for (int i = 0; i < 7; i++) {
+  for (int i = 0; i < 8; i++) {
     std::wstring class_name = std::wstring(L"OronBox.") + (extensions[i] + 1);
     HKEY class_key = nullptr;
     if (::RegCreateKeyExW(HKEY_CURRENT_USER,
@@ -99,7 +101,8 @@ std::string OronBoxFilePathFromArguments(
                      return static_cast<char>(std::tolower(value));
                    });
     for (const char* extension : {".rpk", ".bin", ".face", ".zpk", ".mwz",
-                                  ".obp", ".abp"}) {
+                                  ".obp", ".abp", ".canopus", ".crpack", ".zip",
+                                  ".tar"}) {
       const auto length = std::strlen(extension);
       if (lower.size() >= length &&
           lower.compare(lower.size() - length, length, extension) == 0) {

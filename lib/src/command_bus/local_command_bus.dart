@@ -1,8 +1,23 @@
+import 'package:oronbox/src/device/xiaomi/systems/canopus_system.dart'
+    show CanopusException;
+import 'package:oronbox/src/device/xiaomi/engineering/miwear_engineering_system.dart';
+import 'package:oronbox/src/core/providers/bluetooth_platform_provider.dart';
+import 'package:oronbox/src/core/services/background_task_guard.dart';
+import 'package:oronbox/src/features/devices/services/miwear_engineering_session.dart';
+
 import 'package:oronbox/src/core/storage/managed_temporary_files.dart';
 
 import 'dart:async';
+
+import 'package:oronbox/src/core/wasm/wasm_compatibility.dart';
+
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:dio/dio.dart';
+import 'package:oronbox/src/core/network/http_observability_interceptor.dart';
+
+import 'package:oronbox/src/device/xiaomi/systems/install_system.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,11 +58,13 @@ import 'package:oronbox/src/features/resources/domain/community_resource.dart';
 import 'package:oronbox/src/features/resources/domain/community_resource_codec.dart';
 import 'package:oronbox/src/features/resources/domain/resource_catalog.dart';
 import 'package:oronbox/src/host/application_host.dart';
+import 'package:oronbox/src/host/tasks/task_queue.dart';
 import 'package:oronbox/src/device/core/device_state.dart';
 import 'package:oronbox/src/device/xiaomi/protocol/generated/wear_system.pb.dart'
     as pb_system;
 
-class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
+class LocalCommandBus
+    implements OronBoxCommandBus, ActiveOperationController, TaskQueueClient {
   static final _log = getLogger('LocalCommandBus');
 
   LocalCommandBus(this.container) {
@@ -205,11 +222,12 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
       readDeviceState: () => _state,
       emitEvent: _events.add,
     );
-    _pluginRepositories = PluginRepositories(
-      manager: _pluginManager,
-      container: container,
+    _pluginRepositories = PluginRepositories(manager: _pluginManager);
+    unawaited(
+      _pluginManager.initialize().then(
+        (_) => _pluginManager.startAutomaticPlugins(),
+      ),
     );
-    unawaited(_pluginManager.initialize());
     unawaited(_restoreXiaomiAccountSession());
   }
 
@@ -231,15 +249,44 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
   bool _activeCommandCancelled = false;
   bool _rawBluetoothEnabled = false;
   bool _protocolTraceEnabled = false;
-  bool? _batterySyncPausedBeforeTrace;
+  bool? _batterySyncPausedBeforeDiagnostics;
+  int _rawRequestsInProgress = 0;
+  Future<void> _batterySyncUpdateTail = Future<void>.value();
   MiAccountToken? _xiaomiAccountToken;
   var _xiaomiAccountSessionLoaded = false;
   Future<void> _commandTail = Future<void>.value();
+  final _localLogCancellations = <String, bool>{};
+  String? _activeLocalLogOperation;
   late final PluginManager _pluginManager;
+
+  @override
+  void attachTaskQueue(HostTaskQueue queue) =>
+      _pluginManager.attachTaskQueue(queue);
+
+  @override
+  bool canRunTask(HostTask task) =>
+      task.command.params['pluginId'] == null ||
+      _manager.connectedAddresses.any(
+        (address) =>
+            address.toUpperCase().replaceAll('-', ':') ==
+            task.command.params['device']
+                ?.toString()
+                .trim()
+                .toUpperCase()
+                .replaceAll('-', ':'),
+      );
   late final PluginRepositories _pluginRepositories;
   final _zmlAttachments = <int>{};
   final _zmlHookResponses = <String, Completer<Object?>>{};
   var _zmlHookCounter = 0;
+
+  MiWearEngineeringSession? _engineeringSession;
+  MiWearEngineeringSession get _engineering =>
+      _engineeringSession ??= MiWearEngineeringSession(
+        container.read(bluetoothPlatformProvider),
+        onChanged: (state) =>
+            _events.add(CommandEvent('miwear.engineering.state', data: state)),
+      );
 
   DeviceManager get _manager => container.read(deviceManagerProvider.notifier);
   DeviceManagerState get _state => container.read(deviceManagerProvider);
@@ -296,6 +343,7 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
           command.params['requestId']?.toString() ?? '',
           (command.params['response'] as Map?)?.cast<String, Object?>() ??
               const {},
+          owner: command.params['owner']?.toString(),
         );
         return const CommandResult.success({'accepted': true});
       } catch (error, stackTrace) {
@@ -304,30 +352,48 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
         );
       }
     }
-    if (!_runsExclusive(command.method)) {
+    if (!_runsExclusive(command.method) &&
+        !command.params.containsKey('_localApiDeviceAllowlist')) {
       return _runObserved(command);
     }
+    final logOperation =
+        command.method == 'device.logs.pull' &&
+            command.params.containsKey('_localApiDeviceAllowlist')
+        ? command.params['operationId']?.toString()
+        : null;
+    if (logOperation != null) _localLogCancellations[logOperation] = false;
     final previous = _commandTail;
     final turn = Completer<void>();
     _commandTail = turn.future;
     await previous;
     _activeCommandCancelled = false;
     try {
+      if (_localLogCancellations[logOperation] == true) {
+        return const CommandResult.failure(
+          CommandError('cancelled', 'Device log export cancelled'),
+        );
+      }
       return await _runObserved(command);
     } finally {
+      if (logOperation != null) _localLogCancellations.remove(logOperation);
       turn.complete();
     }
   }
 
   // Only commands that drive the Bluetooth link or the device connection need
   // to run one at a time; network/account/settings work must not queue behind
-  // them (and vice versa).
+  // them (and vice versa). Plugin callbacks may await permission or device
+  // responses, so their UI and lifecycle commands must remain independent.
   static bool _runsExclusive(String method) =>
+      (method.startsWith('miwear.engineering.') &&
+          ![
+            'miwear.engineering.status',
+            'miwear.engineering.scan',
+            'miwear.engineering.cancel',
+            'miwear.engineering.close',
+          ].contains(method)) ||
       method == 'install.local' ||
       method == 'resource.install' ||
-      method == 'plugin.open' ||
-      method == 'plugin.invoke' ||
-      method == 'plugin.close' ||
       method.startsWith('app.') ||
       method.startsWith('watchface.') ||
       (method.startsWith('device.') &&
@@ -342,6 +408,20 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     final stopwatch = Stopwatch()..start();
     final result = await _execute(command);
     stopwatch.stop();
+    if (command.method == 'miwear.engineering.install' &&
+        result.error?.code != 'cancelled') {
+      _events.add(
+        CommandEvent(
+          'miwear.engineering.install.finished',
+          data: {
+            if (result.error case final error?) ...{
+              'code': error.code,
+              'message': error.message,
+            },
+          },
+        ),
+      );
+    }
     if (observable && !result.ok) {
       logDiagnostic(
         _log,
@@ -358,12 +438,67 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     return result;
   }
 
+  static bool _isMaintenanceBlockedCommand(String method) {
+    if (method.startsWith('device.zeppos.appside.')) {
+      return method == 'device.zeppos.appside.start' ||
+          method == 'device.zeppos.appside.stop';
+    }
+    if (method.startsWith('plugin.')) {
+      const blockedPluginMethods = {
+        'plugin.install',
+        'plugin.remove',
+        'plugin.data.clear',
+        'plugin.open',
+        'plugin.view.attach',
+        'plugin.view.visibility',
+        'plugin.settings.set',
+        'plugin.permission.set',
+        'plugin.invoke',
+        'plugin.close',
+        'plugin.safeMode.set',
+        'plugin.repository.install',
+      };
+      return blockedPluginMethods.contains(method);
+    }
+    return false;
+  }
+
   Future<CommandResult> _execute(OronBoxCommand command) async {
     try {
       if (_pluginManager.maintainingData &&
-          (command.method.startsWith('plugin.') ||
-              command.method.startsWith('device.zeppos.appside.'))) {
+          _isMaintenanceBlockedCommand(command.method)) {
         throw StateError('Data maintenance is active');
+      }
+      final allowedDevices =
+          command.params['_localApiDeviceAllowlist'] as List?;
+      if (allowedDevices != null) {
+        final requestedDevice = command.params['device']?.toString();
+        final target = requestedDevice ?? _state.currentDevice?.addr;
+        if (allowedDevices.isNotEmpty &&
+            (target == null ||
+                !allowedDevices.any(
+                  (allowed) =>
+                      allowed.toString().toLowerCase() == target.toLowerCase(),
+                ))) {
+          throw const CommandFailure('forbidden', 'Device is not authorized');
+        }
+        if (target != null && target.isNotEmpty) {
+          command = OronBoxCommand(
+            method: command.method,
+            params: {...command.params, 'device': target},
+          );
+          if (command.method != 'device.connect' &&
+              command.method != 'device.disconnect' &&
+              command.method != 'install.local' &&
+              (command.method != 'device.status' || requestedDevice != null)) {
+            await _ensureConnected(target);
+          }
+        }
+      }
+      if (_engineeringSession?.connected == true &&
+          _runsExclusive(command.method) &&
+          !command.method.startsWith('miwear.engineering.')) {
+        throw const CommandFailure('engineering_busy', 'engineering_busy');
       }
       final result = await _dispatch(command);
       final wireValue = switch (command.method) {
@@ -371,11 +506,21 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
         _ => _wireValue(result),
       };
       return CommandResult.success(wireValue);
+    } on MiWearEngineeringException catch (error) {
+      return CommandResult.failure(CommandError(error.code, error.message));
+    } on CanopusException catch (error) {
+      return CommandResult.failure(
+        CommandError(error.code, error.message, details: error.details),
+      );
     } on CommandFailure catch (error) {
       return CommandResult.failure(
         CommandError(error.code, error.message, details: error.details),
       );
     } on WatchfaceInstallBlockedException catch (error) {
+      return CommandResult.failure(
+        CommandError(error.code, error.message, details: error.details),
+      );
+    } on XiaomiInstallException catch (error) {
       return CommandResult.failure(
         CommandError(error.code, error.message, details: error.details),
       );
@@ -390,6 +535,40 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     } on CreatorApiException catch (error) {
       return CommandResult.failure(
         CommandError(error.code, error.message, details: error.details),
+      );
+    } on DioException catch (error) {
+      final summary = safeHttpErrorSummary(error.response?.data);
+      final code = switch (error.type) {
+        DioExceptionType.cancel => 'cancelled',
+        DioExceptionType.connectionTimeout ||
+        DioExceptionType.sendTimeout ||
+        DioExceptionType.receiveTimeout => 'request_timeout',
+        DioExceptionType.badCertificate => 'certificate_error',
+        _ when error.error is HandshakeException => 'certificate_error',
+        DioExceptionType.connectionError => 'network_error',
+        _ when error.error is SocketException || error.error is HttpException =>
+          'network_error',
+        _ when error.error is FormatException => 'invalid_response',
+        _ =>
+          summary['serverCode'] as String? ??
+              (error.response?.statusCode == null
+                  ? 'internal'
+                  : 'http_${error.response!.statusCode}'),
+      };
+      return CommandResult.failure(
+        CommandError(
+          code,
+          summary['serverMessage'] as String? ?? '',
+          details: {
+            'errorType': error.type.name,
+            'endpoint': safeHttpEndpoint(error.requestOptions.uri),
+            if (error.error != null)
+              'causeType': error.error.runtimeType.toString(),
+            if (error.response?.statusCode case final status?) 'status': status,
+            if (httpRequestId(error.response) case final requestId?)
+              'requestId': requestId,
+          },
+        ),
       );
     } catch (error) {
       _log.severe('Command ${command.method} failed', error);
@@ -417,6 +596,8 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
   }
 
   Future<Object?> _dispatch(OronBoxCommand command) => switch (command.method) {
+    final method when method.startsWith('miwear.engineering.') =>
+      _engineeringCommand(method, command.params),
     'status' => Future.value(_status()),
     'device.snapshot' => Future.value(_deviceStateJson(_state)),
     'device.paired' => Future.value(
@@ -491,7 +672,7 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     'device.zeppos.screenshot' => _manager.requestZeppOsScreenshot(),
     'device.zeppos.voice_memos.download' => _downloadVoiceMemos(),
     'device.logs.pull' => _pullDeviceLogs(command.params),
-    'device.logs.cancel' => _cancelDeviceLogPull(),
+    'device.logs.cancel' => _cancelDeviceLogPull(command.params),
     'device.zeppos.appside.list' => _manager.listZeppOsAppSides(),
     'device.zeppos.appside.observed' => _manager.observedZeppOsAppSideIds(),
     'device.zeppos.appside.sessions' => _appSideSessions(),
@@ -517,6 +698,13 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     'device.zeppos.xiaoai.endpoint' => _setXiaoAiEndpoint(
       (command.params['endpoint'] as num?)?.toInt(),
     ),
+    'device.module.list' => _listCanopusModules(),
+    'device.module.enable' => _updateCanopusModule(command.params),
+    'device.module.remove' => _updateCanopusModule(
+      command.params,
+      remove: true,
+    ),
+    'device.canopus.send' => _sendCanopusConnect(command.params),
     'device.interconnect.send' => _sendInterconnectMessage(command.params),
     'device.raw.send' => _sendRaw(command.params),
     'device.raw.request' => _requestRaw(command.params),
@@ -894,11 +1082,55 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     'plugin.get' => _pluginManager.get(command.params['id']?.toString() ?? ''),
     'plugin.open' => _pluginManager.open(
       command.params['id']?.toString() ?? '',
+      interactive: true,
     ),
     'plugin.invoke' => _pluginManager.invoke(
       command.params['id']?.toString() ?? '',
       command.params['callback']?.toString() ?? '',
       command.params['value'],
+    ),
+    'plugin.view.attach' => _pluginManager.attachView(
+      command.params['id']?.toString() ?? '',
+      command.params['view']?.toString() ?? '',
+      visible: command.params['visible'] != false,
+    ),
+    'plugin.view.visibility' => _pluginManager.setViewVisibility(
+      command.params['id']?.toString() ?? '',
+      command.params['view']?.toString() ?? '',
+      command.params['visible'] == true,
+    ),
+    'plugin.view.detach' => _pluginManager.detachView(
+      command.params['id']?.toString() ?? '',
+      command.params['view']?.toString() ?? '',
+    ),
+    'plugin.settings.set' => _pluginManager.setSettings(
+      command.params['id']?.toString() ?? '',
+      command.params,
+    ),
+    'plugin.permission.set' => _pluginManager.setPermission(
+      command.params['id']?.toString() ?? '',
+      command.params['key']?.toString() ?? '',
+      (command.params['policy'] as Map? ?? {}).cast<String, Object?>(),
+    ),
+    'plugin.lifecycle' => _pluginManager.setForeground(
+      command.params['foreground'] == true,
+    ),
+    'plugin.host.claim' => Future.value(
+      _pluginManager.claimHostRequest(
+        command.params['requestId']?.toString() ?? '',
+        command.params['owner']?.toString() ?? '',
+      ),
+    ),
+    'plugin.host.release' => Future.sync(
+      () => _pluginManager.releaseHostRequests(
+        command.params['owner']?.toString() ?? '',
+        requestId: command.params['requestId']?.toString(),
+      ),
+    ),
+    'plugin.host.pending' => Future.value(
+      _pluginManager.hasHostRequest(
+        command.params['requestId']?.toString() ?? '',
+      ),
     ),
     'plugin.close' => _pluginManager.closePlugin(
       command.params['id']?.toString() ?? '',
@@ -908,12 +1140,21 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
       command.params['id']?.toString() ?? '',
     ),
     'plugin.provider.list' => _pluginManager.providers(),
+    'plugin.resourceInstall' => Future.value(const {
+      'kind': 'unavailable',
+      'reason': 'unsupported',
+    }),
     'plugin.provider.call' => _pluginManager.callProvider(
-      command.params['provider']?.toString() ?? '',
+      (command.params['id'] ?? command.params['provider'])?.toString() ?? '',
       command.params['operation']?.toString() ?? '',
-      (command.params['arguments'] as List?)?.cast<Object?>() ?? const [],
+      ((command.params['arguments'] ?? command.params['args']) as List?)
+              ?.cast<Object?>() ??
+          const [],
     ),
     'plugin.repositories' => Future.value(_pluginRepositories.sources()),
+    'plugin.repository.updates' => _pluginRepositories.updates(
+      force: command.params['force'] == true,
+    ),
     'plugin.repository.catalog' => _pluginRepositories.catalog(
       command.params['source']?.toString() ?? '',
       force: command.params['force'] == true,
@@ -921,14 +1162,7 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     'plugin.repository.install' => _pluginRepositories.install(
       command.params['source']?.toString() ?? '',
       command.params['id']?.toString() ?? '',
-    ),
-    'plugin.repository.upload' => _pluginRepositories.upload(
-      command.params['source']?.toString() ?? '',
-      _pluginRepositoryUploadBytes(command.params),
-    ),
-    'plugin.repository.remove' => _pluginRepositories.remove(
-      command.params['source']?.toString() ?? '',
-      command.params['id']?.toString() ?? '',
+      expectedVersion: command.params['expectedVersion']?.toString(),
     ),
     'install.local' => _installLocal(command.params),
     _ => throw CommandFailure(
@@ -1045,35 +1279,50 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     };
   }
 
+  Future<void> _updateDiagnosticBatterySync(void Function() update) {
+    final operation = _batterySyncUpdateTail.then((_) async {
+      update();
+      final active =
+          _rawBluetoothEnabled ||
+          _protocolTraceEnabled ||
+          _rawRequestsInProgress > 0;
+      if (active) {
+        _batterySyncPausedBeforeDiagnostics ??= _manager.batteryRefreshPaused;
+        await _manager.setBatteryRefreshPaused(true);
+      } else {
+        final previous = _batterySyncPausedBeforeDiagnostics;
+        if (previous != null) {
+          await _manager.setBatteryRefreshPaused(previous);
+          _batterySyncPausedBeforeDiagnostics = null;
+        }
+      }
+    });
+    _batterySyncUpdateTail = operation.then<void>(
+      (_) {},
+      onError: (Object _) {},
+    );
+    return operation;
+  }
+
   Future<Map<String, Object?>> _setBatterySyncPaused(bool paused) async {
-    await _manager.setBatteryRefreshPaused(paused);
+    await _updateDiagnosticBatterySync(() {
+      _batterySyncPausedBeforeDiagnostics = paused;
+    });
     return {'paused': _manager.batteryRefreshPaused};
   }
 
   Future<Map<String, Object?>> _setRawBluetoothListener(bool enabled) async {
-    _rawBluetoothEnabled = enabled;
-    if (!enabled) _rawBluetoothPackets.clear();
+    await _updateDiagnosticBatterySync(() {
+      _rawBluetoothEnabled = enabled;
+      if (!enabled) _rawBluetoothPackets.clear();
+    });
     return {'enabled': enabled};
   }
 
   Future<Map<String, Object?>> _setProtocolTrace(bool enabled) async {
-    if (enabled == _protocolTraceEnabled) {
-      return {
-        'enabled': enabled,
-        'batterySyncPaused': _manager.batteryRefreshPaused,
-      };
-    }
-    if (enabled) {
-      _batterySyncPausedBeforeTrace = _manager.batteryRefreshPaused;
-      await _manager.setBatteryRefreshPaused(true);
-    } else {
-      final previous = _batterySyncPausedBeforeTrace;
-      _batterySyncPausedBeforeTrace = null;
-      if (previous != null) {
-        await _manager.setBatteryRefreshPaused(previous);
-      }
-    }
-    _protocolTraceEnabled = enabled;
+    await _updateDiagnosticBatterySync(() {
+      _protocolTraceEnabled = enabled;
+    });
     return {
       'enabled': enabled,
       'batterySyncPaused': _manager.batteryRefreshPaused,
@@ -1152,25 +1401,13 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     );
   }
 
-  Uint8List _pluginRepositoryUploadBytes(Map<String, Object?> params) {
-    final raw = params['bytes'];
-    return switch (raw) {
-      Uint8List value => value,
-      List value => Uint8List.fromList(
-        value.whereType<num>().map((item) => item.toInt() & 0xff).toList(),
-      ),
-      String value => base64Decode(value),
-      _ => throw const CommandFailure('usage', 'Plugin bytes are required'),
-    };
-  }
-
   Future<Object?> _removePlugin(Map<String, Object?> params) async {
     final id = params['id']?.toString() ?? '';
     final removedSources = (await _pluginManager.providers())
         .where((provider) => provider['pluginId']?.toString() == id)
         .map(
           (provider) =>
-              CommunitySourceId.plugin(provider['name']?.toString() ?? '')
+              CommunitySourceId.plugin(provider['id']?.toString() ?? '')
                   .storageKey,
         )
         .toSet();
@@ -1189,20 +1426,194 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     return {'removed': id};
   }
 
+  Future<Object?> _listCanopusModules() async {
+    if (_state.protocolState != ProtocolState.ready) {
+      throw const CommandFailure('no_device', 'Device is not connected');
+    }
+    await _manager.fetchModules();
+    return {
+      'supported': _state.hasCanopus,
+      'items': [
+        for (final module in _state.modules)
+          {
+            'id': module.moduleId,
+            'version': module.version,
+            'enabled': module.isEnabled,
+            'state': module.state,
+            'slot': module.slot,
+            'lifecycleClass': module.lifecycleClass,
+            'flags': module.flags,
+            'activationError': module.activationError,
+          },
+      ],
+    };
+  }
+
+  Future<Object?> _updateCanopusModule(
+    Map<String, Object?> params, {
+    bool remove = false,
+  }) async {
+    final id = params['moduleId'];
+    final enabled = params['enabled'];
+    if (id is! String || id.trim().isEmpty || (!remove && enabled is! bool)) {
+      throw const CommandFailure('usage', 'Invalid module operation');
+    }
+    if (remove) {
+      await _manager.removeModule(id);
+    } else {
+      await _manager.setModuleEnabled(id, enabled as bool);
+    }
+    return {'id': id, if (remove) 'removed': true else 'enabled': enabled};
+  }
+
+  Future<Object?> _sendCanopusConnect(Map<String, Object?> params) async {
+    final module = params['moduleId'];
+    final payload = params['payload'];
+    final address = _state.currentDevice?.addr;
+    if (address == null || _state.protocolState != ProtocolState.ready) {
+      throw const CommandFailure('no_device', 'Device is not connected');
+    }
+    if (module is! String ||
+        module.trim().isEmpty ||
+        payload is! List ||
+        payload.any((byte) => byte is! int || byte < 0 || byte > 255)) {
+      throw const CommandFailure(
+        'usage',
+        'moduleId and byte payload are required',
+      );
+    }
+    try {
+      await _manager.sendPluginCanopus(
+        address,
+        module,
+        Uint8List.fromList(payload.cast<int>()),
+        isText: params['isText'] == true,
+      );
+    } on UnsupportedError {
+      throw const CommandFailure(
+        'unsupported',
+        'Canopus Connect is not supported',
+      );
+    }
+    return {'sent': true};
+  }
+
   Future<Object?> _sendInterconnectMessage(Map<String, Object?> params) async {
-    final packageName = params['package']?.toString() ?? '';
-    final payload = (params['payload'] as List?)
-        ?.whereType<num>()
-        .map((value) => value.toInt() & 0xff)
-        .toList(growable: false);
-    if (packageName.isEmpty || payload == null) {
+    final packageName = params['package']?.toString().trim() ?? '';
+    final rawPayload = params['payload'];
+    if (rawPayload is! List ||
+        rawPayload.any((byte) => byte is! int || byte < 0 || byte > 255)) {
+      throw const CommandFailure('usage', 'payload must contain bytes');
+    }
+    final payload = rawPayload.cast<int>();
+    if (packageName.isEmpty) {
       throw const CommandFailure('usage', 'package and payload are required');
     }
-    await _manager.sendInterconnectMessage(
-      packageName,
-      Uint8List.fromList(payload),
-    );
+    if (_state.protocolState != ProtocolState.ready) {
+      throw const CommandFailure('no_device', 'Device is not connected');
+    }
+    try {
+      await _manager.sendInterconnectMessage(
+        packageName,
+        Uint8List.fromList(payload),
+      );
+    } on UnsupportedError catch (error) {
+      throw CommandFailure(
+        'unsupported',
+        error.message?.toString() ?? 'Interconnect is not supported',
+      );
+    } catch (error) {
+      throw CommandFailure('send_failed', error.toString());
+    }
     return {'sent': true};
+  }
+
+  Future<Object?> _engineeringCommand(
+    String method,
+    Map<String, Object?> params,
+  ) async {
+    switch (method) {
+      case 'miwear.engineering.status':
+        return _engineering.snapshot;
+      case 'miwear.engineering.mode.get':
+        return {'mode': await _manager.getMiWearMode()};
+      case 'miwear.engineering.mode.set':
+        final mode = params['mode'];
+        if (mode is! int || ![0, 1, 2].contains(mode)) {
+          throw const CommandFailure('usage', 'Invalid mode');
+        }
+        await _manager.setMiWearMode(mode);
+        _engineering.expectRestart(engineering: mode == 2);
+      case 'miwear.engineering.scan':
+        await _engineering.scan();
+      case 'miwear.engineering.connect':
+        await _engineering.connect(
+          params['address']?.toString() ?? '',
+          params['type']?.toString() ?? 'ble',
+          prepareConnection: () async {
+            await _manager.disconnect();
+            for (final address in _manager.connectedAddresses) {
+              await _manager.disconnect(address);
+            }
+            if (_manager.connectedAddresses.isNotEmpty) {
+              throw const CommandFailure(
+                'engineering_busy',
+                'engineering_busy',
+              );
+            }
+          },
+        );
+      case 'miwear.engineering.refresh':
+        await _engineering.refresh();
+      case 'miwear.engineering.return':
+        await _engineering.returnToUser();
+      case 'miwear.engineering.install':
+        final path = params['path']?.toString();
+        final bytes = path != null
+            ? await _readEngineeringFirmware(path)
+            : base64Decode(params['bytes']?.toString() ?? '');
+        if (bytes.isEmpty) {
+          throw const CommandFailure(
+            'engineering_firmware',
+            'engineering_firmware',
+          );
+        }
+        final guard = await beginBackgroundTask(
+          params['label']?.toString() ?? 'MiWear OTA',
+        );
+        final expiration = backgroundTaskExpirations.listen((ids) {
+          if (guard.id != null && ids.contains(guard.id)) {
+            unawaited(_engineering.close(phase: 'failed'));
+          }
+        });
+        try {
+          await _engineering.install(bytes);
+        } finally {
+          await expiration.cancel();
+          await guard.end();
+        }
+      case 'miwear.engineering.cancel':
+      case 'miwear.engineering.close':
+        await _engineering.close(
+          phase: _engineering.snapshot['phase'] == 'waiting'
+              ? 'waiting'
+              : 'idle',
+        );
+      default:
+        throw const CommandFailure('usage', 'Unknown engineering command');
+    }
+    return _engineering.snapshot;
+  }
+
+  Future<Uint8List> _readEngineeringFirmware(String path) async {
+    final file = File(path);
+    if (await file.length() > 128 * 1024 * 1024) {
+      throw const CommandFailure(
+        'engineering_firmware',
+        'engineering_firmware',
+      );
+    }
+    return file.readAsBytes();
   }
 
   Future<Object?> _sendRaw(Map<String, Object?> params) async {
@@ -1226,11 +1637,16 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
       throw const CommandFailure('usage', 'payload is required');
     }
     final timeoutMs = (params['timeoutMs'] as num?)?.toInt() ?? 5000;
-    final response = await _manager.requestRaw(
-      Uint8List.fromList(payload),
-      timeout: Duration(milliseconds: timeoutMs),
-    );
-    return response.toList(growable: false);
+    try {
+      await _updateDiagnosticBatterySync(() => _rawRequestsInProgress++);
+      final response = await _manager.requestRaw(
+        Uint8List.fromList(payload),
+        timeout: Duration(milliseconds: timeoutMs),
+      );
+      return response.toList(growable: false);
+    } finally {
+      await _updateDiagnosticBatterySync(() => _rawRequestsInProgress--);
+    }
   }
 
   Future<Object?> _zmlAttach(Map<String, Object?> params) async {
@@ -1332,6 +1748,8 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     if (state.health != null) 'health': state.health!.toJson(),
     if (state.systemInfo != null) 'systemInfo': state.systemInfo!.toJson(),
     'apps': state.apps.map((item) => item.toJson()).toList(),
+    'appsLoaded': state.appsLoaded,
+    'watchfacesLoaded': state.watchfacesLoaded,
     'watchfaces': state.watchfaces.map((item) => item.toJson()).toList(),
     'xiaoAiActive': state.xiaoAiActive,
     'xiaoAiFrameCount': state.xiaoAiFrameCount,
@@ -1498,8 +1916,14 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
   Future<Object?> _pullDeviceLogs([
     Map<String, Object?> params = const {},
   ]) async {
-    final operationId = params['operationId'];
-    final deviceId = params['deviceId'];
+    final operationId = params['operationId']?.toString();
+    final localOperation = _localLogCancellations.containsKey(operationId)
+        ? operationId
+        : null;
+    if (_localLogCancellations[localOperation] == true) {
+      throw const CommandFailure('cancelled', 'Device log export cancelled');
+    }
+    final deviceId = params['deviceId'] ?? _state.currentDevice?.addr;
     _events.add(
       CommandEvent(
         'device.log.progress',
@@ -1512,6 +1936,7 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     );
     DateTime? lastLogProgressAt;
     DeviceLogPullResult pulled;
+    _activeLocalLogOperation = localOperation;
     try {
       pulled = await _manager.pullDeviceLogs(
         onStage: (stage) => _events.add(
@@ -1563,6 +1988,11 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
         ),
       );
       rethrow;
+    } finally {
+      _activeLocalLogOperation = null;
+    }
+    if (_localLogCancellations[localOperation] == true) {
+      throw const CommandFailure('cancelled', 'Device log export cancelled');
     }
     final sourceName = pulled.fileName.trim();
     final safeName = sourceName
@@ -1681,7 +2111,17 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
     };
   }
 
-  Future<Object?> _cancelDeviceLogPull() async {
+  Future<Object?> _cancelDeviceLogPull(Map<String, Object?> params) async {
+    final operation = params['operationId']?.toString();
+    if (operation != null) {
+      if (!_localLogCancellations.containsKey(operation)) {
+        return const {'cancelled': false};
+      }
+      _localLogCancellations[operation] = true;
+      if (_activeLocalLogOperation != operation) {
+        return const {'cancelled': true};
+      }
+    }
     await _manager.cancelDeviceLogPull();
     return const {'cancelled': true};
   }
@@ -1952,6 +2392,7 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
   }
 
   Future<Object?> _appSideStart(Map<String, Object?> params) async {
+    await WasmCompatibility.shared.ensureAllowed(interactive: true);
     await _ensureConnected(null);
     final id = _appSideId(params);
     await _manager.startZeppOsAppSide(id);
@@ -2339,6 +2780,15 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
       }
       final service = container.read(resourceInstallServiceProvider);
       final identifier = params['identifier']?.toString();
+      final replaceWatchfaceId = params['replaceWatchfaceId']?.toString();
+      if (replaceWatchfaceId != null &&
+          (replaceWatchfaceId.isEmpty ||
+              params['device']?.toString().isNotEmpty != true)) {
+        throw const CommandFailure(
+          'usage',
+          'Watchface replacement requires an ID and target device',
+        );
+      }
       // The payload analyzer is the source of truth; the command's declared
       // type (e.g. quickapp) is only a fallback hint for undetectable files.
       final type =
@@ -2348,6 +2798,8 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
             'quickapp' || 'app' || 'miniprogram' => LocalDeviceInstallType.app,
             'watchface' => LocalDeviceInstallType.watchface,
             'firmware' => LocalDeviceInstallType.firmware,
+            'canopus' || 'module' => LocalDeviceInstallType.canopus,
+            'res_pack' || 'resPack' => LocalDeviceInstallType.resPack,
             _ => null,
           };
       if (type == null) {
@@ -2369,6 +2821,15 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
           },
         ),
       );
+      final rawResource = params['resource'];
+      ResourceRef? resource;
+      if (rawResource case {'ref': final String key}) {
+        try {
+          resource = resourceRefFromKey(key);
+        } on FormatException {
+          // Older queue entries can omit the catalog reference.
+        }
+      }
       switch (installMode) {
         case ResourceInstallMode.automatic:
           await service.installLocalPayload(
@@ -2378,6 +2839,8 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
             deviceManager: _manager,
             onProgress: onProgress,
             identifierOverride: identifier,
+            resource: resource,
+            replaceWatchfaceId: replaceWatchfaceId,
           );
         case ResourceInstallMode.forceType:
           await service.installForcedPayload(
@@ -2386,6 +2849,7 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
             bytes: bytes,
             deviceManager: _manager,
             identifierOverride: identifier,
+            replaceWatchfaceId: replaceWatchfaceId,
             onProgress: onProgress,
           );
         case ResourceInstallMode.forcePlatform:
@@ -2406,7 +2870,9 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
             fileName: fileName,
             deviceManager: _manager,
             forcePlatform: true,
+            resource: resource,
             identifierOverride: identifier,
+            replaceWatchfaceId: replaceWatchfaceId,
             onProgress: onProgress,
           );
       }
@@ -2628,7 +3094,8 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
           CommunityResourceType.miniprogram => 'miniprogram',
           CommunityResourceType.watchface => 'watchface',
           CommunityResourceType.firmware => 'firmware',
-          CommunityResourceType.canopus => 'watchface',
+          CommunityResourceType.canopus => 'canopus',
+          CommunityResourceType.resPack => 'res_pack',
         };
     if (install) {
       await _ensureConnected(params['device']?.toString());
@@ -2639,7 +3106,8 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
           CommunityResourceType.miniprogram => LocalDeviceInstallType.app,
           CommunityResourceType.watchface => LocalDeviceInstallType.watchface,
           CommunityResourceType.firmware => LocalDeviceInstallType.firmware,
-          CommunityResourceType.canopus => LocalDeviceInstallType.watchface,
+          CommunityResourceType.canopus => LocalDeviceInstallType.canopus,
+          CommunityResourceType.resPack => LocalDeviceInstallType.resPack,
         },
         fileName: downloaded.fileName,
         bytes: payloadBytes,
@@ -2709,6 +3177,7 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
       'watchface' => CommunityResourceType.watchface,
       'firmware' => CommunityResourceType.firmware,
       'canopus' => CommunityResourceType.canopus,
+      'res_pack' || 'resPack' => CommunityResourceType.resPack,
       _ => throw CommandFailure('usage', 'Unknown resource type: $value'),
     };
   }
@@ -3089,12 +3558,17 @@ class LocalCommandBus implements OronBoxCommandBus, ActiveOperationController {
 
   @override
   Future<void> close() async {
-    if (_protocolTraceEnabled) {
+    await _engineeringSession?.dispose();
+    if (_protocolTraceEnabled || _rawBluetoothEnabled) {
       try {
-        await _setProtocolTrace(false);
+        await _updateDiagnosticBatterySync(() {
+          _protocolTraceEnabled = false;
+          _rawBluetoothEnabled = false;
+          _rawBluetoothPackets.clear();
+        });
       } catch (error, stackTrace) {
         _log.warning(
-          'Failed to restore battery synchronization after protocol trace',
+          'Failed to restore battery synchronization after diagnostics',
           error,
           stackTrace,
         );

@@ -1,4 +1,5 @@
 import 'package:oronbox/src/core/asr/asr_runtime.dart';
+import 'package:oronbox/src/core/wasm/wasm_compilation_cache.dart';
 
 import 'dart:convert';
 
@@ -34,11 +35,13 @@ Future<void> cleanupApplicationDataCategory(AppDataCategory category) async {
       });
     case AppDataCategory.cache:
       await _clearPluginCache();
+    case AppDataCategory.compilation:
+      await WasmCompilationCache.clear();
     case AppDataCategory.images:
       await CachedNetworkImageProvider.defaultCacheManager.emptyCache();
       PaintingBinding.instance.imageCache.clear();
     case AppDataCategory.models:
-      await AsrModelStore.cleanupUnused();
+      await AsrModelStore.deleteAll();
       await cleanupAsrRuntimes();
     case AppDataCategory.documents:
       await _clearDirectory(
@@ -49,11 +52,21 @@ Future<void> cleanupApplicationDataCategory(AppDataCategory category) async {
       );
     case AppDataCategory.downloads:
       await _clearUnusedDownloads();
-    case AppDataCategory.plugins:
-    case AppDataCategory.zeppos:
     case AppDataCategory.logs:
+      await _clearDirectory(await openAppDataDirectory('logs'));
+    case AppDataCategory.zeppos:
+      await _clearDirectory(await openAppDataDirectory('zeppos'));
+    case AppDataCategory.plugins:
+      final plugins = await createPluginStorage();
+      try {
+        final installed = await plugins.loadInstalled();
+        for (final plugin in installed) {
+          await plugins.removePlugin(plugin.manifest.id);
+        }
+      } finally {
+        await plugins.close();
+      }
     case AppDataCategory.recovery:
-    case AppDataCategory.tasks:
       throw UnsupportedError('This application data category is protected');
   }
 }
@@ -67,28 +80,6 @@ Future<void> _clearDirectory(AppDataDirectory directory) async {
 }
 
 Future<void> _clearPluginCache() async {
-  final plugins = await createPluginStorage();
-  try {
-    for (final plugin in await plugins.loadInstalled()) {
-      for (final file in await plugins.listDirectory(
-        plugin.manifest.id,
-        PluginStoragePath.parse('/cache'),
-      )) {
-        await plugins.removeFile(
-          plugin.manifest.id,
-          PluginStoragePath.parse(file.path),
-        );
-      }
-    }
-  } finally {
-    await plugins.close();
-  }
-}
-
-/// Only expired, unowned files are reclaimable. Queued paths remain intact.
-Future<void> cleanupApplicationCache() async {
-  await CachedNetworkImageProvider.defaultCacheManager.emptyCache();
-  PaintingBinding.instance.imageCache.clear();
   final plugins = await createPluginStorage();
   try {
     for (final plugin in await plugins.loadInstalled()) {
@@ -107,6 +98,14 @@ Future<void> cleanupApplicationCache() async {
   } finally {
     await plugins.close();
   }
+}
+
+/// Only expired, unowned files are reclaimable. Queued paths remain intact.
+Future<void> cleanupApplicationCache() async {
+  await WasmCompilationCache.clear();
+  await CachedNetworkImageProvider.defaultCacheManager.emptyCache();
+  PaintingBinding.instance.imageCache.clear();
+  await _clearPluginCache();
   await AsrModelStore.cleanupUnused();
   await cleanupAsrRuntimes();
   await _clearUnusedDownloads();
@@ -137,5 +136,6 @@ Future<void> _clearUnusedDownloads() async {
 
     if (bytes != null) visit(jsonDecode(utf8.decode(bytes)));
     await ManagedTemporaryFiles.cleanup(protectedPaths: paths);
+    await ManagedTemporaryFiles.cleanupImports(protectedPaths: paths);
   });
 }

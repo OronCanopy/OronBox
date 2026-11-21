@@ -5,7 +5,8 @@ import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/device/core/event_bus.dart';
 import 'package:oronbox/src/device/xiaomi/systems/xiaomi_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/xiaomi_protocol_trace.dart';
-import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart' as pb;
+import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart'
+    as pb;
 import 'package:oronbox/src/device/xiaomi/protocol/packet/l2_packet.dart';
 
 /// Xiaomi screenshot control and data protocol.
@@ -35,6 +36,7 @@ class XiaomiScreenshotSystem extends XiaomiSystem {
   Future<void>? _permissionResponseInFlight;
 
   bool _negotiationSent = false;
+  int _sessionGeneration = 0;
 
   /// Registers OronBox as a screenshot-capable companion after Xiaomi auth.
   ///
@@ -45,6 +47,7 @@ class XiaomiScreenshotSystem extends XiaomiSystem {
   Future<void> negotiateAfterAuthentication() async {
     if (_negotiationSent) return;
     _negotiationSent = true;
+    final generation = _sessionGeneration;
     final operation = component.protocolTracer?.beginOperation(
       'screenshot.negotiation',
       data: {
@@ -55,10 +58,12 @@ class XiaomiScreenshotSystem extends XiaomiSystem {
     );
     try {
       await component.sendProtobufBytes(_buildCapabilityPacket());
+      if (generation != _sessionGeneration) return;
       operation?.step('capability_sent', data: {'id': _capabilityUpdateId});
       await component.sendProtobufBytes(
         _buildSystemPacket(_screenshotSetupCommand),
       );
+      if (generation != _sessionGeneration) return;
       operation?.step(
         'screenshot_setup_sent',
         data: {'command': _screenshotSetupCommand},
@@ -68,6 +73,7 @@ class XiaomiScreenshotSystem extends XiaomiSystem {
         '[${entity.id}] registered screenshot capability and sent setup',
       );
     } catch (error, stackTrace) {
+      if (generation != _sessionGeneration) return;
       _negotiationSent = false;
       operation?.fail(error);
       _log.warning(
@@ -80,11 +86,13 @@ class XiaomiScreenshotSystem extends XiaomiSystem {
 
   /// Clears the per-connection negotiation guard before a new auth session.
   void resetSession() {
+    _sessionGeneration++;
     _negotiationSent = false;
     _log.fine('[${entity.id}] reset Xiaomi screenshot session');
   }
 
   void abortPending([Object? reason, StackTrace? stackTrace]) {
+    resetSession();
     final hasPendingTransfer =
         _timeoutTimer != null ||
         _operation != null ||

@@ -47,13 +47,19 @@ void main() {
             'author': 'test',
             'description': 'test',
             'api_level': 1,
-            'runtime': 'js',
-            'entry': 'main.js',
+            'runtime': 'wasm',
+            'entry': 'main.wasm',
             'permissions': [],
           }),
         ),
       )
-      ..addFile(ArchiveFile.string('main.js', 'export {}'));
+      ..addFile(
+        ArchiveFile(
+          'main.wasm',
+          8,
+          Uint8List.fromList([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]),
+        ),
+      );
     await plugins.install(
       const PluginPackageReader().read(
         Uint8List.fromList(ZipEncoder().encode(archive)),
@@ -61,6 +67,14 @@ void main() {
       config: {'color': 'red'},
     );
     await plugins.writePermissionGrants(id, {'test-grant'});
+    await plugins.writeHostSettings(id, {
+      'enabled': false,
+      'background': true,
+      'autoStart': true,
+      'permissionPolicies': {
+        'file': {'capability': 'file', 'operation': '*', 'decision': 'deny'},
+      },
+    });
     await plugins.writeFile(
       id,
       PluginStoragePath.parse('/data/file.bin'),
@@ -83,12 +97,27 @@ void main() {
         payload.files.containsKey('plugins/$id/package/manifest.json'),
         isTrue,
       );
-      expect(payload.files.containsKey('plugins/$id/package/main.js'), isTrue);
+      expect(
+        payload.files.containsKey('plugins/$id/package/main.wasm'),
+        isTrue,
+      );
       expect(payload.files.containsKey('plugins/$id/data/file.bin'), isTrue);
       expect((payload.metadata['plugins'] as Map)[id], {
         'version': '1.0.0',
         'config': {'color': 'red'},
         'permissions': ['test-grant'],
+        'hostSettings': {
+          'enabled': false,
+          'background': true,
+          'autoStart': true,
+          'permissionPolicies': {
+            'file': {
+              'capability': 'file',
+              'operation': '*',
+              'decision': 'deny',
+            },
+          },
+        },
       });
 
       final newRoot = await Directory.systemTemp.createTemp(
@@ -112,6 +141,10 @@ void main() {
         expect(installed.single.manifest.id, id);
         expect(installed.single.config, {'color': 'red'});
         expect(await newPlugins.readPermissionGrants(id), {'test-grant'});
+        expect(
+          await newPlugins.readHostSettings(id),
+          await plugins.readHostSettings(id),
+        );
         expect(
           await newPlugins.readFile(
             id,

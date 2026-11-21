@@ -10,6 +10,11 @@ import 'package:oronbox/src/core/storage/app_data_directory.dart';
 
 import 'dart:typed_data';
 
+abstract interface class TaskQueueClient {
+  void attachTaskQueue(HostTaskQueue queue);
+  bool canRunTask(HostTask task);
+}
+
 class HostTaskQueue {
   HostTaskQueue(
     this.bus, {
@@ -17,6 +22,7 @@ class HostTaskQueue {
     this.beginExecution,
     this.onCompleted,
     this.shouldRemoveCompleted,
+    this.canRun,
     AppDataDirectory? storage,
   }) {
     _storage = storage == null
@@ -37,6 +43,7 @@ class HostTaskQueue {
   final Future<Future<void> Function()> Function(HostTask)? beginExecution;
   final Future<void> Function(HostTask, CommandResult)? onCompleted;
   final Future<bool> Function(HostTask, CommandResult)? shouldRemoveCompleted;
+  final bool Function(HostTask)? canRun;
   final _tasks = <String, HostTask>{};
   late final Future<AppDataDirectory> _storage;
   late final Future<void> ready;
@@ -44,7 +51,11 @@ class HostTaskQueue {
   final _events = StreamController<CommandEvent>.broadcast();
   String? _runningId;
   bool _pumpScheduled = false;
+  bool _closed = false;
+  Future<void>? _runningTask;
+  Future<void>? _closing;
   Future<void> _persistTail = Future<void>.value();
+  Future<void> _cleanupTail = Future<void>.value();
   Stream<CommandEvent> get events => _events.stream;
 
   List<Map<String, Object?>> list() =>
@@ -52,6 +63,7 @@ class HostTaskQueue {
         ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
 
   String enqueue(OronBoxCommand command, {bool held = false}) {
+    if (_closed) throw StateError('Task queue closed');
     final now = DateTime.now();
     final id = '${now.microsecondsSinceEpoch}';
     final trackedCommand = _withProgressCorrelation(command, id);
@@ -67,7 +79,7 @@ class HostTaskQueue {
   }
 
   void _schedulePump() {
-    if (_pumpScheduled || _runningId != null) return;
+    if (_closed || _pumpScheduled || _runningId != null) return;
     _pumpScheduled = true;
     scheduleMicrotask(() async {
       _pumpScheduled = false;
@@ -81,15 +93,19 @@ class HostTaskQueue {
     } catch (_) {
       return;
     }
-    if (_runningId != null) return;
+    if (_closed || _runningId != null) return;
     final next = _tasks.values
         .where((task) => task.status == 'pending')
         .firstOrNull;
     if (next == null) return;
     _runningId = next.id;
-    await _run(next.id);
-    _runningId = null;
-    _schedulePump();
+    try {
+      await (_runningTask = _run(next.id));
+    } finally {
+      _runningTask = null;
+      _runningId = null;
+      _schedulePump();
+    }
   }
 
   Future<void> _run(String id) => runAsDiagnosticBackend(() => _runTask(id));
@@ -97,6 +113,22 @@ class HostTaskQueue {
   Future<void> _runTask(String id) async {
     var task = _tasks[id];
     if (task == null || task.status != 'pending') return;
+    if (canRun?.call(task) == false) {
+      _tasks[id] = task.copyWith(status: 'waiting_device');
+      _notify(_tasks[id]!);
+      return;
+    }
+    final executionCommand = task.command;
+    if (executionCommand.method == 'install.local' &&
+        executionCommand.params.containsKey('replaceWatchfaceId')) {
+      // Deleting the installed face is authorized for this attempt only.
+      task = task.copyWith(
+        command: OronBoxCommand(
+          method: executionCommand.method,
+          params: {...executionCommand.params}..remove('replaceWatchfaceId'),
+        ),
+      );
+    }
     task = task.copyWith(status: 'running', startedAt: DateTime.now());
     _tasks[id] = task;
     _notify(task);
@@ -132,13 +164,10 @@ class HostTaskQueue {
     late CommandResult result;
     try {
       endExecution = await beginExecution?.call(task);
-      result = await bus.execute(task.command);
+      result = await bus.execute(executionCommand);
     } catch (error) {
       result = CommandResult.failure(
-        CommandError(
-          'task_execution',
-          error.toString(),
-        ),
+        CommandError('task_execution', error.toString()),
       );
     } finally {
       await progressSubscription.cancel();
@@ -149,10 +178,7 @@ class HostTaskQueue {
         await onCompleted!(task, result);
       } catch (error) {
         result = CommandResult.failure(
-          CommandError(
-            'task_completion',
-            error.toString(),
-          ),
+          CommandError('task_completion', error.toString()),
         );
       }
     }
@@ -170,6 +196,7 @@ class HostTaskQueue {
       progress: result.ok ? 1 : task.progress,
     );
     _tasks[id] = task;
+    await _cleanupPluginInstall(task);
     _notify(task);
     _completeWaiters(task);
     if (status == 'completed' &&
@@ -196,10 +223,13 @@ class HostTaskQueue {
         {'completed', 'failed', 'cancelled'}.contains(task.status)) {
       return false;
     }
-    final updated = task.status == 'pending' || task.status == 'held'
+    final updated = {'pending', 'held', 'waiting_device'}.contains(task.status)
         ? task.copyWith(status: 'cancelled', finishedAt: DateTime.now())
         : task.copyWith(cancelRequested: true);
     _tasks[id] = updated;
+    if (updated.status == 'cancelled') {
+      unawaited(_cleanupPluginInstall(updated));
+    }
     _notify(updated);
     if (task.status == 'running') {
       unawaited(onCancelRunning?.call());
@@ -212,6 +242,10 @@ class HostTaskQueue {
     var count = 0;
     for (final entry in _tasks.entries.toList()) {
       if (entry.value.status != 'held' && entry.value.status != 'failed') {
+        continue;
+      }
+      if (entry.value.status == 'failed' &&
+          entry.value.command.params['pluginId'] != null) {
         continue;
       }
       _tasks[entry.key] = entry.value.copyWith(
@@ -229,7 +263,7 @@ class HostTaskQueue {
   int holdPending() {
     var count = 0;
     for (final entry in _tasks.entries.toList()) {
-      if (entry.value.status != 'pending') continue;
+      if (!{'pending', 'waiting_device'}.contains(entry.value.status)) continue;
       _tasks[entry.key] = entry.value.copyWith(status: 'held');
       _notify(_tasks[entry.key]!);
       count += 1;
@@ -242,6 +276,8 @@ class HostTaskQueue {
     if (task == null || !{'failed', 'cancelled'}.contains(task.status)) {
       return false;
     }
+    // The plugin relinquished this file and terminal cleanup has deleted it.
+    if (task.command.params['pluginId'] != null) return false;
     final updated = task.copyWith(
       status: 'pending',
       progress: 0,
@@ -254,6 +290,31 @@ class HostTaskQueue {
   }
 
   HostTask? get(String id) => _tasks[id];
+
+  void resumeWaiting() {
+    for (final task in _tasks.values.toList()) {
+      if (task.status != 'waiting_device' || canRun?.call(task) == false) {
+        continue;
+      }
+      _tasks[task.id] = task.copyWith(status: 'pending');
+      _notify(_tasks[task.id]!);
+    }
+    _schedulePump();
+  }
+
+  Future<void> _cleanupPluginInstall(HostTask task) {
+    if (task.command.params['pluginId'] == null || !_isTerminal(task.status)) {
+      return Future.value();
+    }
+    final path = task.command.params['path'];
+    if (path is! String) return Future.value();
+    return _cleanupTail = _cleanupTail
+        .then((_) => ManagedTemporaryFiles.release(path))
+        .catchError((Object error, StackTrace stack) {
+          getLogger('HostTaskQueue')
+              .warning('Plugin install cleanup failed', error, stack);
+        });
+  }
 
   Future<HostTask?> wait(String id) async {
     await ready;
@@ -298,10 +359,10 @@ class HostTaskQueue {
     };
     for (final path in candidates) {
       unawaited(
-        ManagedTemporaryFiles.release(path, delete: false).catchError((
-          Object error,
-          StackTrace stack,
-        ) {
+        ManagedTemporaryFiles.release(
+          path,
+          delete: task.command.params['deleteAfter'] == true,
+        ).catchError((Object error, StackTrace stack) {
           getLogger('HostTasks')
               .warning('Temporary file lease release failed', error, stack);
         }),
@@ -391,8 +452,19 @@ class HostTaskQueue {
             .warning('Task state write failed', error, stack);
       });
 
-  Future<void> close() async {
+  Future<void> close() => _closing ??= _close();
+
+  Future<void> _close() async {
+    _closed = true;
     await ready;
+    for (final task in _tasks.values.toList()) {
+      if (task.command.params['pluginId'] != null &&
+          {'pending', 'held', 'waiting_device'}.contains(task.status)) {
+        cancel(task.id);
+      }
+    }
+    if (_runningId case final id?) cancel(id);
+    await _runningTask;
     for (final waiters in _waiters.values) {
       for (final waiter in waiters) {
         if (!waiter.isCompleted) {
@@ -401,6 +473,7 @@ class HostTaskQueue {
       }
     }
     _waiters.clear();
+    await _cleanupTail;
     await _persistTail;
     await _events.close();
   }
@@ -430,6 +503,7 @@ class HostTask {
   final Map<String, Object?>? result;
 
   HostTask copyWith({
+    OronBoxCommand? command,
     String? status,
     DateTime? startedAt,
     DateTime? finishedAt,
@@ -441,7 +515,7 @@ class HostTask {
     bool clearResult = false,
   }) => HostTask(
     id: id,
-    command: command,
+    command: command ?? this.command,
     status: status ?? this.status,
     createdAt: createdAt,
     startedAt: clearStartedAt ? null : startedAt ?? this.startedAt,

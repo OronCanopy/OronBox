@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/core/utils/layout.dart';
 
@@ -45,7 +46,8 @@ class OronBoxDialog {
     final ctx = context ?? observer.scaffoldContext;
     if (ctx != null && ctx.mounted) {
       try {
-        ScaffoldMessenger.of(ctx)
+        final messenger = appScaffoldMessengerOf(ctx);
+        messenger
           ..removeCurrentSnackBar()
           ..showSnackBar(
             SnackBar(
@@ -57,8 +59,8 @@ class OronBoxDialog {
                   ? SnackBarAction(
                       label: actionLabel ?? 'Dismiss',
                       onPressed: () {
+                        messenger.hideCurrentSnackBar();
                         onActionPressed?.call();
-                        ScaffoldMessenger.of(ctx).hideCurrentSnackBar();
                       },
                     )
                   : null,

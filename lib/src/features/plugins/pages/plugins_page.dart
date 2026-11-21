@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
@@ -18,11 +18,12 @@ import 'package:oronbox/src/app/window/desktop_window.dart';
 import 'package:oronbox/src/commands/command_protocol.dart';
 import 'package:oronbox/src/core/utils/layout.dart';
 import 'package:oronbox/src/core/constants/style_constants.dart';
-import 'package:oronbox/src/features/accounts/application/host_accounts.dart';
 import 'package:oronbox/src/features/plugins/domain/plugin_package.dart';
 import 'package:oronbox/src/features/plugins/widgets/plugin_install_confirmation.dart';
 import 'package:oronbox/src/host/application_host_provider.dart';
 
+import '../widgets/plugin_icon.dart';
+import '../widgets/plugin_summary.dart';
 import 'plugin_detail_page.dart';
 
 class PluginsPage extends ConsumerStatefulWidget {
@@ -43,6 +44,7 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
   String? _marketSource;
   var _marketEntries = <Map<String, Object?>>[];
   var _marketLoading = false;
+  var _marketRequest = 0;
   Object? _marketError;
   final _installing = <String>{};
   String? _selectedPluginId;
@@ -57,7 +59,6 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
     if (widget.targetPluginId.isNotEmpty) {
       _section = 1;
       _query = widget.targetPluginId;
-      _marketSource = 'oronbox';
     }
     _load().then((_) {
       if (mounted && widget.targetPluginId.isNotEmpty) _loadMarket(force: true);
@@ -95,11 +96,7 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
             .map((row) => row.cast<String, Object?>())
             .toList(growable: false);
         if (!_sources.any((source) => source['id'] == _marketSource)) {
-          _marketSource = _sources
-              .where((source) => source['id'] == 'oronbox')
-              .firstOrNull?['id']
-              ?.toString();
-          _marketSource ??= _sources.firstOrNull?['id']?.toString();
+          _marketSource = _sources.firstOrNull?['id']?.toString();
         }
         final ids = _plugins.map((plugin) => plugin['id']?.toString()).toSet();
         if (!ids.contains(_selectedPluginId)) {
@@ -115,8 +112,9 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
 
   Future<void> _loadMarket({bool force = false}) async {
     final source = _marketSource;
-    if (source == null || _marketLoading) return;
+    if (source == null) return;
     if (!force && _marketEntries.isNotEmpty) return;
+    final request = ++_marketRequest;
     setState(() {
       _marketLoading = true;
       _marketError = null;
@@ -128,7 +126,7 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
           params: {'source': source, 'force': force},
         ),
       );
-      if (mounted) {
+      if (mounted && request == _marketRequest) {
         setState(
           () => _marketEntries = (value as List)
               .whereType<Map>()
@@ -137,9 +135,13 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
         );
       }
     } catch (error) {
-      if (mounted) setState(() => _marketError = error);
+      if (mounted && request == _marketRequest) {
+        setState(() => _marketError = error);
+      }
     } finally {
-      if (mounted) setState(() => _marketLoading = false);
+      if (mounted && request == _marketRequest) {
+        setState(() => _marketLoading = false);
+      }
     }
   }
 
@@ -180,9 +182,18 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
       if (!await confirmPluginInstall(
         context: context,
         name: manifest.name,
+        author: manifest.author,
+        version: manifest.version,
+        description: manifest.description,
+        runtime: manifest.runtime.manifestValue,
+        icon: PluginIcon(
+          base64: manifest.iconPath == null
+              ? null
+              : base64Encode(package.files[manifest.iconPath] ?? const []),
+          size: 56,
+        ),
         permissions: manifest.permissions,
         updating: updating,
-        legacy: manifest.runtime == PluginRuntimeType.legacy,
       )) {
         return;
       }
@@ -199,19 +210,8 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
   }
 
   Future<void> _installMarketPlugin(Map<String, Object?> entry) async {
-    final legacy = entry['legacy'] == true;
-    if (!await confirmPluginInstall(
-      context: context,
-      name: entry['name']?.toString() ?? '',
-      permissions: (entry['permissions'] as List? ?? const [])
-          .map((value) => value.toString())
-          .toList(growable: false),
-      updating: entry['updateAvailable'] == true,
-      legacy: legacy,
-    )) {
-      return;
-    }
     final id = entry['id']?.toString() ?? '';
+    if (_installing.contains(id)) return;
     setState(() => _installing.add(id));
     try {
       await _execute(
@@ -229,237 +229,22 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
     }
   }
 
-  Future<void> _uploadPlugin() async {
-    final l10n = AppLocalizations.of(context)!;
-    if (!ref.read(hostAccountsProvider).bandbbs.isSignedIn) {
-      _showError(StateError(l10n.pluginLoginRequired));
-      return;
-    }
-    final bytes = await _pickPackage(const ['obp', 'zip']);
-    if (bytes == null) return;
-    try {
-      final package = const PluginPackageReader().read(bytes);
-      final manifest = package.manifest;
-      if (manifest.runtime == PluginRuntimeType.legacy) {
-        _showError(const FormatException('Legacy plugins cannot be published'));
-        return;
-      }
-      final existing = _marketEntries
-          .where((entry) => entry['id']?.toString() == manifest.id)
-          .firstOrNull;
-      if (existing != null && existing['owned'] != true) {
-        _showError(
-          StateError('Plugin id is published by another user: ${manifest.id}'),
-        );
-        return;
-      }
-      if (!mounted) return;
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) =>
-            _PluginPublishDialog(package: package, updating: existing != null),
-      );
-      if (confirmed != true) return;
-      await _execute(
-        OronBoxCommand(
-          method: 'plugin.repository.upload',
-          params: {'source': 'oronbox', 'bytes': base64Encode(bytes)},
-        ),
-      );
-      await _loadMarket(force: true);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.pluginSubmittedForReview)));
-      }
-    } catch (error) {
-      if (mounted) _showError(error);
-    }
-  }
-
-  Future<void> _takedownPlugin(Map<String, Object?> entry) async {
-    final l10n = AppLocalizations.of(context)!;
-    final confirmed =
-        await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(l10n.pluginTakedown),
-            content: Text(l10n.pluginTakedownConfirm),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text(l10n.cancel),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text(l10n.pluginTakedown),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (!confirmed) return;
-    try {
-      await _execute(
-        OronBoxCommand(
-          method: 'plugin.repository.remove',
-          params: {'source': 'oronbox', 'id': entry['id']?.toString() ?? ''},
-        ),
-      );
-      await _loadMarket(force: true);
-    } catch (error) {
-      if (mounted) _showError(error);
-    }
-  }
-
   Future<void> _showMarketEntry(Map<String, Object?> entry) async {
-    final l10n = AppLocalizations.of(context)!;
-    final permissions = (entry['permissions'] as List? ?? const [])
-        .map((value) => value.toString())
-        .toList(growable: false);
-    final installed = entry['installed'] == true;
-    final updateAvailable = entry['updateAvailable'] == true;
-    final owned = entry['owned'] == true;
-    final state = entry['state']?.toString();
-    final listed = state == null || state == 'listed';
-    final stateLabel = switch (state) {
-      'pending' => l10n.pluginStatePending,
-      'rejected' => l10n.pluginStateRejected,
-      'delisted' => l10n.pluginStateDelisted,
-      _ => null,
-    };
-    await showDialog<void>(
+    final confirmed = await confirmPluginInstall(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(entry['name']?.toString() ?? ''),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  _MarketIcon(iconUrl: entry['iconUrl']?.toString(), size: 56),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${entry['author'] ?? ''} · ${entry['version'] ?? ''}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        if (entry['uploaderName'] != null)
-                          Text(
-                            entry['uploaderName'].toString(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (stateLabel != null) ...[
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Icon(
-                      state == 'pending' ? Icons.schedule : Icons.error_outline,
-                      size: 18,
-                      color: state == 'pending'
-                          ? Theme.of(context).colorScheme.onSurfaceVariant
-                          : Theme.of(context).colorScheme.error,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        entry['moderationReason']?.toString().isNotEmpty == true
-                            ? '$stateLabel:${entry['moderationReason']}'
-                            : stateLabel,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              if (entry['description']?.toString().isNotEmpty == true) ...[
-                const SizedBox(height: 16),
-                Text(entry['description'].toString()),
-              ],
-              const SizedBox(height: 16),
-              Text(l10n.pluginDeclaredPermissions),
-              const SizedBox(height: 8),
-              if (permissions.isEmpty)
-                Text(
-                  l10n.pluginNoPermissions,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                )
-              else
-                ...permissions.map(
-                  (permission) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.circle, size: 7),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(permission)),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          if (owned) ...[
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _takedownPlugin(entry);
-              },
-              child: Text(l10n.pluginTakedown),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _uploadPlugin();
-              },
-              child: Text(l10n.update),
-            ),
-          ],
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: installed || !listed
-                ? null
-                : () {
-                    Navigator.pop(context);
-                    _installMarketPlugin(entry);
-                  },
-            child: Text(
-              updateAvailable
-                  ? l10n.update
-                  : installed
-                  ? l10n.pluginUpToDate
-                  : l10n.install,
-            ),
-          ),
-        ],
-      ),
+      name: entry['name']?.toString() ?? '',
+      author: entry['author']?.toString() ?? '',
+      version: entry['version']?.toString() ?? '',
+      description: entry['description']?.toString() ?? '',
+      runtime: entry['runtime']?.toString(),
+      icon: _MarketIcon(iconUrl: entry['iconUrl']?.toString(), size: 56),
+      permissions: (entry['permissions'] as List? ?? const [])
+          .map((value) => value.toString())
+          .toList(growable: false),
+      installed: entry['installed'] == true,
+      updating: entry['updateAvailable'] == true,
     );
+    if (confirmed && mounted) await _installMarketPlugin(entry);
   }
 
   Future<void> _exitSafeMode() async {
@@ -518,19 +303,12 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
                 _loadMarket();
               },
             ),
-            if (_marketSource == 'oronbox')
-              IconButton(
-                onPressed: _uploadPlugin,
-                icon: const Icon(Icons.upload_outlined),
-                tooltip: l10n.pluginUpload,
-              ),
           ],
-          if (!(_section == 1 && _marketSource == 'oronbox'))
-            IconButton(
-              onPressed: _importPlugin,
-              icon: const Icon(Icons.add_box_outlined),
-              tooltip: l10n.pluginImport,
-            ),
+          IconButton(
+            onPressed: _importPlugin,
+            icon: const Icon(Icons.add),
+            tooltip: l10n.pluginImport,
+          ),
           IconButton(
             onPressed: _section == 0 ? _load : () => _loadMarket(force: true),
             icon: const Icon(Icons.refresh),
@@ -550,8 +328,12 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
             marketError: _marketError,
             installing: _installing,
             selectedPluginId: wide ? _selectedPluginId : null,
-            emptyText: l10n.pluginEmpty,
-            marketUnavailableText: l10n.pluginMarketUnavailable,
+            emptyText: query.isEmpty
+                ? l10n.pluginEmpty
+                : l10n.pluginSearchEmpty,
+            marketEmptyText: query.isEmpty
+                ? l10n.pluginMarketEmpty
+                : l10n.pluginSearchEmpty,
             installedLabel: l10n.pluginInstalled,
             marketLabel: l10n.pluginMarket,
             onQueryChanged: (value) => setState(() => _query = value),
@@ -560,7 +342,6 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
               if (value == 1) _loadMarket();
             },
             onRefreshMarket: () => _loadMarket(force: true),
-            onInstall: _installMarketPlugin,
             onOpenEntry: _showMarketEntry,
             onOpen: (id) => _openInstalledPlugin(id, wide: wide),
           );
@@ -627,7 +408,7 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
       return;
     }
     final l10n = AppLocalizations.of(context)!;
-    ScaffoldMessenger.of(
+    appScaffoldMessengerOf(
       context,
     ).showSnackBar(SnackBar(content: Text(localizedErrorMessage(l10n, error))));
   }
@@ -710,108 +491,6 @@ class _PluginSourceMenu extends StatelessWidget {
   }
 }
 
-class _PluginPublishDialog extends StatelessWidget {
-  const _PluginPublishDialog({required this.package, required this.updating});
-
-  final PluginPackage package;
-  final bool updating;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final manifest = package.manifest;
-    return AlertDialog(
-      title: Text(l10n.pluginPublishTitle),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                PluginIcon(base64: package.installed().iconBase64, size: 56),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        manifest.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      Text(
-                        '${manifest.author} · ${manifest.version}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      Text(
-                        manifest.id,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (manifest.description.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(manifest.description),
-            ],
-            const SizedBox(height: 16),
-            Text(l10n.pluginDeclaredPermissions),
-            const SizedBox(height: 8),
-            if (manifest.permissions.isEmpty)
-              Text(
-                l10n.pluginNoPermissions,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              )
-            else
-              ...manifest.permissions.map(
-                (permission) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.circle, size: 7),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(permission)),
-                    ],
-                  ),
-                ),
-              ),
-            const SizedBox(height: 16),
-            Text(
-              updating ? l10n.pluginPublishUpdate : l10n.pluginPublishNew,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: Text(l10n.cancel),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: Text(updating ? l10n.update : l10n.pluginUpload),
-        ),
-      ],
-    );
-  }
-}
-
 class _PluginSafeModeBanner extends StatelessWidget {
   const _PluginSafeModeBanner({required this.onExit});
 
@@ -867,13 +546,12 @@ class _PluginCatalog extends StatelessWidget {
     required this.installing,
     required this.selectedPluginId,
     required this.emptyText,
-    required this.marketUnavailableText,
+    required this.marketEmptyText,
     required this.installedLabel,
     required this.marketLabel,
     required this.onQueryChanged,
     required this.onSectionChanged,
     required this.onRefreshMarket,
-    required this.onInstall,
     required this.onOpenEntry,
     required this.onOpen,
   });
@@ -887,13 +565,12 @@ class _PluginCatalog extends StatelessWidget {
   final Set<String> installing;
   final String? selectedPluginId;
   final String emptyText;
-  final String marketUnavailableText;
+  final String marketEmptyText;
   final String installedLabel;
   final String marketLabel;
   final ValueChanged<String> onQueryChanged;
   final ValueChanged<int> onSectionChanged;
   final VoidCallback onRefreshMarket;
-  final ValueChanged<Map<String, Object?>> onInstall;
   final ValueChanged<Map<String, Object?>> onOpenEntry;
   final ValueChanged<String> onOpen;
 
@@ -964,9 +641,8 @@ class _PluginCatalog extends StatelessWidget {
                   error: marketError,
                   entries: entries,
                   installing: installing,
-                  emptyText: marketUnavailableText,
+                  emptyText: marketEmptyText,
                   onRefresh: onRefreshMarket,
-                  onInstall: onInstall,
                   onOpen: onOpenEntry,
                 ),
         ),
@@ -994,21 +670,9 @@ class _InstalledPlugins extends StatelessWidget {
   Widget build(BuildContext context) {
     if (loading) return const Center(child: CircularProgressIndicator());
     if (plugins.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.extension_outlined,
-              size: 56,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 12),
-            Text(emptyText),
-          ],
-        ),
-      );
+      return EmptyStateView(icon: Icons.extension_outlined, title: emptyText);
     }
+
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: 16),
       itemCount: plugins.length,
@@ -1043,41 +707,17 @@ class _PluginCard extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              PluginIcon(
-                base64: plugin['icon']?.toString(),
-                path: plugin['iconPath']?.toString(),
-                size: 56,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      plugin['name']?.toString() ?? '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        height: 1.25,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      plugin['description']?.toString() ?? '',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: color.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          child: PluginSummary(
+            name: plugin['name']?.toString() ?? '',
+            author: plugin['author']?.toString() ?? '',
+            version: plugin['version']?.toString() ?? '',
+            runtime: plugin['runtime']?.toString(),
+            compact: true,
+            icon: PluginIcon(
+              base64: plugin['icon']?.toString(),
+              path: plugin['iconPath']?.toString(),
+              size: 56,
+            ),
           ),
         ),
       ),
@@ -1092,20 +732,7 @@ class _PluginSelectionPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.extension_outlined,
-            size: 56,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: 12),
-          Text(text),
-        ],
-      ),
-    );
+    return EmptyStateView(icon: Icons.extension_outlined, title: text);
   }
 }
 
@@ -1117,7 +744,6 @@ class _PluginMarket extends StatelessWidget {
     required this.installing,
     required this.emptyText,
     required this.onRefresh,
-    required this.onInstall,
     required this.onOpen,
   });
 
@@ -1127,7 +753,6 @@ class _PluginMarket extends StatelessWidget {
   final Set<String> installing;
   final String emptyText;
   final VoidCallback onRefresh;
-  final ValueChanged<Map<String, Object?>> onInstall;
   final ValueChanged<Map<String, Object?>> onOpen;
 
   @override
@@ -1168,28 +793,17 @@ class _PluginMarket extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    _MarketIcon(
-                      iconUrl: entry['iconUrl']?.toString(),
-                      size: 56,
-                    ),
-                    const SizedBox(width: 12),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            entry['name']?.toString() ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          Text(
-                            '${entry['author'] ?? ''} · ${entry['version'] ?? ''}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
+                      child: PluginSummary(
+                        name: entry['name']?.toString() ?? '',
+                        author: entry['author']?.toString() ?? '',
+                        version: entry['version']?.toString() ?? '',
+                        runtime: entry['runtime']?.toString(),
+                        compact: true,
+                        icon: _MarketIcon(
+                          iconUrl: entry['iconUrl']?.toString(),
+                          size: 56,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -1202,17 +816,15 @@ class _PluginMarket extends StatelessWidget {
                             ),
                           )
                         : IconButton.filledTonal(
-                            onPressed: installed
-                                ? null
-                                : () => onInstall(entry),
+                            onPressed: () => onOpen(entry),
                             icon: Icon(
-                              installed
+                              installed && !updateAvailable
                                   ? Icons.check_rounded
                                   : updateAvailable
                                   ? Icons.upgrade_rounded
                                   : Icons.add_rounded,
                             ),
-                            tooltip: installed
+                            tooltip: installed && !updateAvailable
                                 ? AppLocalizations.of(context)!.pluginUpToDate
                                 : updateAvailable
                                 ? AppLocalizations.of(context)!.update
@@ -1264,60 +876,6 @@ class _MarketIcon extends StatelessWidget {
                     progress == null ? child : fallback(context),
               ),
       ),
-    );
-  }
-}
-
-class PluginIcon extends StatelessWidget {
-  const PluginIcon({super.key, this.base64, this.path, required this.size});
-
-  final String? base64;
-  final String? path;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    Uint8List? bytes;
-    final data = base64;
-    if (data != null) {
-      try {
-        bytes = base64Decode(data);
-      } on FormatException {
-        bytes = null;
-      }
-    }
-    Widget fallback(BuildContext context) => ColoredBox(
-      color: Theme.of(context).useMaterial3
-          ? colors.secondaryContainer
-          : context.appSelectionContainer,
-      child: Icon(
-        Icons.extension,
-        color: Theme.of(context).useMaterial3
-            ? colors.onSecondaryContainer
-            : context.appSelectionForeground,
-      ),
-    );
-    Widget child;
-    final nativePath = path;
-    if (!kIsWeb && nativePath != null && File(nativePath).existsSync()) {
-      child = Image.file(
-        File(nativePath),
-        fit: BoxFit.cover,
-        errorBuilder: (context, _, _) => fallback(context),
-      );
-    } else if (bytes != null) {
-      child = Image.memory(
-        bytes,
-        fit: BoxFit.cover,
-        errorBuilder: (context, _, _) => fallback(context),
-      );
-    } else {
-      child = fallback(context);
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(size * 0.22),
-      child: SizedBox.square(dimension: size, child: child),
     );
   }
 }

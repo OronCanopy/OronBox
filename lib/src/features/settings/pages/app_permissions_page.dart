@@ -1,12 +1,23 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:oronbox_location/oronbox_location.dart';
+import 'package:wear_location/wear_location.dart';
 import 'package:segmented_list/segmented_list.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:oronbox/src/app/widgets/page_container.dart';
 import 'package:oronbox/src/app/widgets/sys_app_bar.dart';
 import 'package:oronbox/src/core/constants/style_constants.dart';
 import 'package:oronbox/src/core/services/device_location_service.dart';
+import 'package:oronbox/src/core/services/system_notification_bridge.dart';
+import 'package:oronbox/src/features/devices/services/device_notification_preferences.dart';
+
+final _displayNotificationsProvider = FutureProvider.autoDispose<bool>(
+  (ref) => SystemNotificationBridge.hasPermission(),
+);
+
+final _readNotificationsProvider = FutureProvider.autoDispose<bool>(
+  (ref) => PhoneNotifications.hasAccess(),
+);
 
 class AppPermissionsPage extends ConsumerStatefulWidget {
   const AppPermissionsPage({super.key});
@@ -39,12 +50,34 @@ class _AppPermissionsPageState extends ConsumerState<AppPermissionsPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _supported) _refresh();
+    if (state != AppLifecycleState.resumed) return;
+    if (_supported) _refresh();
+    if (SystemNotificationBridge.isSupported) {
+      ref.invalidate(_displayNotificationsProvider);
+    }
+    if (PhoneNotifications.isSupported) {
+      ref.invalidate(_readNotificationsProvider);
+    }
+  }
+
+  Future<void> _openNotificationSettings(
+    Future<void> Function() open,
+    FutureProvider<bool> permission,
+  ) async {
+    try {
+      await open();
+      if (mounted) ref.invalidate(permission);
+    } catch (_) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      appScaffoldMessengerOf(context)
+          .showSnackBar(SnackBar(content: Text(l10n.errorOperationFailed)));
+    }
   }
 
   Future<void> _refresh() async {
     try {
-      final location = OronboxLocation.instance;
+      final location = WearLocation.instance;
       final permission = await location.checkPermission();
       final precise = await location.isPreciseLocationEnabled();
       final enabled = await location.isLocationServiceEnabled();
@@ -62,7 +95,7 @@ class _AppPermissionsPageState extends ConsumerState<AppPermissionsPage>
 
   Future<void> _openLocationSettings() async {
     try {
-      await OronboxLocation.instance.openLocationSettings();
+      await WearLocation.instance.openLocationSettings();
     } catch (_) {
       if (mounted) setState(() => _failed = true);
     }
@@ -71,9 +104,9 @@ class _AppPermissionsPageState extends ConsumerState<AppPermissionsPage>
   Future<void> _requestOrOpenSettings() async {
     try {
       if (_permission == LocationPermission.denied) {
-        await OronboxLocation.instance.requestPermission();
+        await WearLocation.instance.requestPermission();
       } else {
-        await OronboxLocation.instance.openSettings();
+        await WearLocation.instance.openSettings();
       }
       await _refresh();
     } catch (_) {
@@ -84,9 +117,9 @@ class _AppPermissionsPageState extends ConsumerState<AppPermissionsPage>
   Future<void> _requestBackgroundPermission() async {
     try {
       if (_permission == LocationPermission.always) {
-        await OronboxLocation.instance.openSettings();
+        await WearLocation.instance.openSettings();
       } else {
-        await OronboxLocation.instance.requestBackgroundPermission();
+        await WearLocation.instance.requestBackgroundPermission();
       }
       await _refresh();
     } catch (_) {
@@ -98,6 +131,20 @@ class _AppPermissionsPageState extends ConsumerState<AppPermissionsPage>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
+    final canDisplay = SystemNotificationBridge.isSupported;
+    final canRead = PhoneNotifications.isSupported;
+
+    Widget? notificationStatus(FutureProvider<bool> provider) => ref
+        .watch(provider)
+        .when(
+          data: (enabled) => Text(
+            enabled
+                ? l10n.notificationPermissionEnabled
+                : l10n.notificationPermissionDisabled,
+          ),
+          loading: () => null,
+          error: (_, _) => Text(l10n.notificationPermissionUnavailable),
+        );
 
     return Scaffold(
       appBar: SysAppBar(
@@ -113,7 +160,37 @@ class _AppPermissionsPageState extends ConsumerState<AppPermissionsPage>
             bottom: bottomContentPadding(context, extra: 16),
           ),
           sections: [
-            if (!_supported)
+            if (canDisplay || canRead)
+              SegmentedSection(
+                title: Text(l10n.notificationPermissionsSection),
+                tiles: [
+                  if (canDisplay)
+                    SegmentedTile.navigation(
+                      leading: const Icon(Icons.notifications_outlined),
+                      title: Text(l10n.notificationPermissionDisplay),
+                      description: notificationStatus(
+                        _displayNotificationsProvider,
+                      ),
+                      onPressed: (_) => _openNotificationSettings(
+                        SystemNotificationBridge.openSettings,
+                        _displayNotificationsProvider,
+                      ),
+                    ),
+                  if (canRead)
+                    SegmentedTile.navigation(
+                      leading: const Icon(Icons.notifications_active_outlined),
+                      title: Text(l10n.notificationPermissionRead),
+                      description: notificationStatus(
+                        _readNotificationsProvider,
+                      ),
+                      onPressed: (_) => _openNotificationSettings(
+                        PhoneNotifications.openAccessSettings,
+                        _readNotificationsProvider,
+                      ),
+                    ),
+                ],
+              ),
+            if (!_supported && !canDisplay && !canRead)
               SegmentedSection(
                 tiles: [
                   SegmentedTile(
@@ -122,7 +199,7 @@ class _AppPermissionsPageState extends ConsumerState<AppPermissionsPage>
                   ),
                 ],
               )
-            else if (_failed)
+            else if (_supported && _failed)
               SegmentedSection(
                 tiles: [
                   SegmentedTile(
@@ -135,7 +212,7 @@ class _AppPermissionsPageState extends ConsumerState<AppPermissionsPage>
                   ),
                 ],
               )
-            else
+            else if (_supported)
               SegmentedSection(
                 title: Text(l10n.phoneLocationPermissionsSection),
                 tiles: [

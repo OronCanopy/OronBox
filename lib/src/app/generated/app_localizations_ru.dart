@@ -31,7 +31,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get pluginMarket => 'Магазин плагинов';
 
   @override
-  String get pluginMarketUnavailable => 'Магазин плагинов пока недоступен';
+  String get pluginMarketEmpty => 'Нет доступных плагинов';
+
+  @override
+  String get pluginSearchEmpty => 'Подходящие плагины не найдены';
 
   @override
   String get pluginEmpty => 'Нет установленных плагинов';
@@ -64,12 +67,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get pluginPermissions => 'Разрешения';
 
   @override
-  String get pluginInstallConfirmTitle => 'Подтвердите установку плагина';
-
-  @override
-  String get pluginUpdateConfirmTitle => 'Подтвердите обновление плагина';
-
-  @override
   String get pluginDeclaredPermissions =>
       'Плагин запрашивает следующие разрешения:';
 
@@ -84,42 +81,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get pluginUninstallMessage => 'Данные плагина также будут удалены';
-
-  @override
-  String get pluginUpload => 'Загрузить плагин';
-
-  @override
-  String get pluginPublishTitle => 'Опубликовать плагин';
-
-  @override
-  String get pluginPublishNew => 'Опубликовать как новый плагин';
-
-  @override
-  String get pluginPublishUpdate =>
-      'Обновить опубликованный плагин с тем же ID';
-
-  @override
-  String get pluginTakedown => 'Снять с публикации';
-
-  @override
-  String get pluginTakedownConfirm =>
-      'Плагин будет навсегда удалён из магазина';
-
-  @override
-  String get pluginLoginRequired => 'Войдите, чтобы загружать плагины';
-
-  @override
-  String get pluginSubmittedForReview =>
-      'Отправлено на проверку. После одобрения плагин появится в списке';
-
-  @override
-  String get pluginStatePending => 'На проверке';
-
-  @override
-  String get pluginStateRejected => 'Отклонён';
-
-  @override
-  String get pluginStateDelisted => 'Снят с публикации';
 
   @override
   String get pluginLegacyWarningTitle => 'Устаревший плагин';
@@ -175,6 +136,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get creatorResourceSummary => 'Описание ресурса';
+
+  @override
+  String get creatorSummaryHint =>
+      'Краткое описание в одно-два предложения, одна строка обычного текста';
+
+  @override
+  String get creatorDescriptionHint =>
+      'Подробное описание, поддерживается многострочный Markdown';
 
   @override
   String get creatorResourceMetadataRequired =>
@@ -300,15 +269,7 @@ class AppLocalizationsRu extends AppLocalizations {
       'Для каждого файла ресурса нужно выбрать хотя бы одно устройство';
 
   @override
-  String get resourceAstroBoxEncryptedTitle =>
-      'OronBox не может обработать этот ресурс AstroBox';
-
-  @override
-  String get resourceAstroBoxEncryptedMessage =>
-      'Этот ресурс использует закрытую зашифрованную загрузку AstroBox Creator Console. OronBox не может расшифровать, скачать или установить его. Откройте его в AstroBox';
-
-  @override
-  String get resourceAstroBoxEncryptedAction => 'Понятно';
+  String get resourceAstroBoxPurchaseAction => 'Понятно';
 
   @override
   String get filter => 'Фильтр';
@@ -544,6 +505,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceWatchfaceCount => 'Количество циферблатов';
+
+  @override
+  String get deviceModuleCount => 'Количество модулей';
+
+  @override
+  String get modules => 'Модули';
 
   @override
   String get connection => 'Подключение';
@@ -791,6 +758,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deviceFeaturesInstallWatchface => 'Установить циферблат';
 
   @override
+  String get deviceFeaturesInstallModule => 'Установить модуль';
+
+  @override
   String get deviceFeaturesInstallFirmware => 'Обновить прошивку';
 
   @override
@@ -830,7 +800,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get firmwareDownloadLatestFull => 'Скачать последний полный пакет';
 
   @override
-  String get firmwareUpdateNow => 'Обновить';
+  String get firmwareUpdateIncrementalPackage =>
+      'Установить разностное обновление';
+
+  @override
+  String get firmwareUpdateFullPackage => 'Установить полное обновление';
 
   @override
   String get firmwareReleaseNotes => 'Примечания к выпуску';
@@ -905,14 +879,6 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get voiceLabContinuousCaptureDescription =>
       'Запрашивать следующую запись после завершения текущей';
-
-  @override
-  String get voiceLabDisableMonitoring =>
-      'Отключить наблюдение в реальном времени';
-
-  @override
-  String get voiceLabEnableMonitoring =>
-      'Включить наблюдение в реальном времени';
 
   @override
   String get voiceLabReplyLabel => 'Ответ отправлен на часы';
@@ -1508,13 +1474,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deviceMusicTransferred => 'Передано';
 
   @override
-  String get deviceMusicLibrary => 'Музыкальная библиотека';
-
-  @override
-  String get deviceMusicLibraryDescription =>
-      'Управление песнями и плейлистами на устройстве';
-
-  @override
   String get deviceMusicSongs => 'Песни';
 
   @override
@@ -1595,13 +1554,6 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get deviceRecordingsDescription =>
       'Синхронизация и экспорт записей с часов';
-
-  @override
-  String get deviceRecordingsLibrary => 'Записи устройства';
-
-  @override
-  String get deviceRecordingsLibraryDescription =>
-      'Экспорт записей с устройства';
 
   @override
   String get deviceRecordingsHint =>
@@ -1880,6 +1832,29 @@ class AppLocalizationsRu extends AppLocalizations {
   String get watchfaceManagementNone => 'Циферблатов нет';
 
   @override
+  String get moduleManagementTitle => 'Управление модулями';
+
+  @override
+  String get moduleManagementNone => 'Модулей нет';
+
+  @override
+  String moduleUninstallConfirm(String name) {
+    return 'Удалить модуль «$name»?';
+  }
+
+  @override
+  String get moduleStatusEnabled => 'Включён';
+
+  @override
+  String get moduleStatusDisabled => 'Отключён';
+
+  @override
+  String get moduleEnable => 'Включить';
+
+  @override
+  String get moduleDisable => 'Отключить';
+
+  @override
   String get open => 'Открытие';
 
   @override
@@ -2146,6 +2121,9 @@ class AppLocalizationsRu extends AppLocalizations {
       'Введите имя пользователя и пароль Xiaomi';
 
   @override
+  String get settingsMiAccountTwoFactorTitle => 'Проверка аккаунта Xiaomi';
+
+  @override
   String get settingsMiAccountTwoFactorPrompt =>
       'Завершите двухфакторную проверку Xiaomi на странице проверки';
 
@@ -2247,7 +2225,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceReconnectAttempting =>
-      'Соединение с устройством потеряно, выполняется переподключение';
+      'Попытка повторного подключения к устройству...';
 
   @override
   String get deviceReconnectSucceeded => 'Подключение восстановлено';
@@ -2690,9 +2668,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get pluginPermissionExportFile => 'экспортировать файл на компьютер';
 
   @override
-  String get pluginPermissionNetwork => 'получать доступ к сети';
-
-  @override
   String get pluginPermissionInterconnect =>
       'обмениваться данными с приложениями устройства';
 
@@ -2839,6 +2814,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get resourceTypeQuickApp => 'быстрое приложение';
+
+  @override
+  String get resourceTypeResPack => 'Пакет ресурсов';
 
   @override
   String get resourceTypeWatchface => 'циферблат';
@@ -3034,7 +3012,37 @@ class AppLocalizationsRu extends AppLocalizations {
   String get installQueueFixWatchfaceId => 'Исправить ID циферблата';
 
   @override
-  String get installQueueFixWatchfaceIdHint => 'Введите не более 12 цифр';
+  String get installQueueFixWatchfaceIdHint => 'Введите новый ID циферблата';
+
+  @override
+  String get installQueueReinstallWatchface => 'Переустановить циферблат';
+
+  @override
+  String get installQueueRetryDirectly => 'Повторить без удаления';
+
+  @override
+  String get installLowStorageMessage =>
+      'На устройстве недостаточно зарезервированного места или достигнут предел количества объектов';
+
+  @override
+  String get installLowBatteryMessage =>
+      'Уровень заряда устройства слишком низкий';
+
+  @override
+  String get installQuantityLimitMessage =>
+      'Достигнут лимит количества установок на устройстве';
+
+  @override
+  String get installQueueReplaceWatchface => 'Удалить и переустановить';
+
+  @override
+  String installQueueReplaceWatchfaceMessage(String id) {
+    return 'На устройстве уже есть циферблат с ID $id, поэтому эту версию нельзя установить напрямую\nМожно повторить попытку или удалить существующий циферблат и переустановить его\nЕсли установка после удаления завершится ошибкой, исходный циферблат не восстановится автоматически';
+  }
+
+  @override
+  String get watchfaceDowngradeMessage =>
+      'На устройстве уже есть циферблат с таким ID, поэтому эту версию нельзя установить напрямую';
 
   @override
   String get authorize => 'Авторизовать';
@@ -4180,7 +4188,10 @@ class AppLocalizationsRu extends AppLocalizations {
       'Автоматически синхронизировать данные о погоде при синхронизации данных устройства';
 
   @override
-  String get alarmManagementTitle => 'Alarm management';
+  String get alarmManagementTitle => 'Управление будильниками';
+
+  @override
+  String get alarmManagementNone => 'Будильники не настроены';
 
   @override
   String get alarmManagementDescription =>
@@ -5012,7 +5023,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get errorSppBondRemovalFailed =>
-      'В Android ниже 11 removeBond не поддерживается системой. Если устройство часто отключается, переключитесь на другое устройство в Xiaomi Fitness или отключите разрешение «Устройства поблизости»';
+      'Не удалось отменить сопряжение Bluetooth\nУдалите устройство в настройках Bluetooth телефона и повторите попытку';
 
   @override
   String get viewAllResources => 'Показать все';
@@ -5221,8 +5232,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get qrScanImageFailed => 'Не удалось прочитать изображение';
 
   @override
-  String get qrScanCameraUnavailable =>
-      'Камера недоступна\nМожно выбрать изображение с QR-кодом';
+  String get qrScanCameraUnavailable => 'Камера недоступна';
 
   @override
   String get qrScanChooseCode => 'Выберите QR-код';
@@ -5501,7 +5511,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get appDataClearCacheDescription =>
-      'Очистить кэш изображений, плагинов, документов и старые временные файлы\nРаботающие плагины и приложения устройства будут остановлены';
+      'Очистить кэш изображений, компиляции WebAssembly, плагинов и документов, а также устаревшие временные файлы\nПри необходимости они будут созданы заново или загружены\nРаботающие плагины и приложения устройства будут остановлены';
 
   @override
   String get appDataCacheCleared => 'Кэш очищен';
@@ -5596,7 +5606,8 @@ class AppLocalizationsRu extends AppLocalizations {
       'Временные файлы загрузки и установки';
 
   @override
-  String get appDataPluginCacheDescription => 'Кэш плагинов и временные файлы';
+  String get appDataPluginCacheDescription =>
+      'Кэш и временные файлы, созданные плагинами';
 
   @override
   String get appDataImagesDescription =>
@@ -5741,7 +5752,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get appDataClearCachedCategoryDescription =>
-      'Будет удалён только неиспользуемый кэш\nПри необходимости файлы загрузятся снова';
+      'Удалить неиспользуемые файлы кэша\nПри необходимости они будут созданы заново или загружены';
 
   @override
   String get appDataClearModelsDescription =>
@@ -6274,14 +6285,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get globalAiDelete => 'Delete';
 
   @override
-  String get globalAiNoProvidersPrompt =>
-      'No providers added\nPlease add a new provider above';
-
-  @override
-  String get globalAiNoModelsPrompt =>
-      'No models available, please add a model first';
-
-  @override
   String get globalAiSystemPrompt => 'System prompt';
 
   @override
@@ -6390,17 +6393,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get globalAiTestStart => 'Start Test';
 
   @override
-  String get wasmUnsupportedTitle =>
-      'Среда выполнения Wasm недоступна в этой системе';
-
-  @override
-  String get wasmUnsupportedMessage =>
-      'Из-за ограничений безопасности ядра Android 8\nраспознавание голосового потока и сжатие изображений недоступны\n\nДля использования этих функций обновите систему до Android 9+\nили используйте устройство с другой версией ОС';
-
-  @override
-  String get doNotShowAgainThisSession => 'Не показывать снова в этой сессии';
-
-  @override
   String get settingsMiAccountRegion => 'Регион сервера';
 
   @override
@@ -6420,4 +6412,487 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsMiAccountRegionIn => 'Индия (IN)';
+
+  @override
+  String get pluginPermissionReadClipboard => 'читать буфер обмена';
+
+  @override
+  String get pluginPermissionWriteClipboard => 'записывать в буфер обмена';
+
+  @override
+  String get pluginPermissionHostServer => 'запустить локальный HTTP-сервер';
+
+  @override
+  String get pluginPermissionReceiveLink => 'получать ссылки приложения';
+
+  @override
+  String get pluginProviderUnavailable =>
+      'Этот источник ресурсов плагина сейчас недоступен';
+
+  @override
+  String get pluginDisabled => 'Плагин отключён';
+
+  @override
+  String get pluginOpenWindow => 'Открыть в отдельном окне';
+
+  @override
+  String get pluginRunSettings => 'Настройки запуска';
+
+  @override
+  String get pluginEnable => 'Включить';
+
+  @override
+  String get pluginDisable => 'Отключить';
+
+  @override
+  String get pluginEnabled => 'Включить плагин';
+
+  @override
+  String get pluginBackground => 'Работа в фоне';
+
+  @override
+  String get pluginBackgroundDescription =>
+      'Остановка после 10 минут бездействия';
+
+  @override
+  String get pluginBackgroundForbidden => 'Запрещена';
+
+  @override
+  String get pluginBackgroundActive => 'Пока активен';
+
+  @override
+  String get pluginBackgroundContinuous => 'Постоянно';
+
+  @override
+  String get pluginBackgroundForbiddenDescription =>
+      'Останавливать при выходе из плагина';
+
+  @override
+  String get pluginBackgroundContinuousDescription =>
+      'Продолжать работу после выхода из плагина';
+
+  @override
+  String get pluginAutoStart => 'Автозапуск';
+
+  @override
+  String get pluginAutoStartDescription => 'Запускать при открытии OronBox';
+
+  @override
+  String get pluginRunStatus => 'Состояние';
+
+  @override
+  String get pluginStopped => 'Остановлен';
+
+  @override
+  String get pluginExistingGrant => 'Существующее разрешение';
+
+  @override
+  String get pluginPermissionAsk => 'Спрашивать';
+
+  @override
+  String get pluginPermissionAllow => 'Разрешить';
+
+  @override
+  String get pluginTargetPermissions => 'Разрешения операций и целей';
+
+  @override
+  String get pluginNoTargetPermissions =>
+      'Нет разрешений устройств или приложений';
+
+  @override
+  String get errorPlatformCapabilityUnavailable =>
+      'Эта операция недоступна на данной платформе или в браузере';
+
+  @override
+  String get oauthPopupBlocked =>
+      'Разрешите всплывающие окна для этого сайта и повторите вход';
+
+  @override
+  String get oauthBrowserCompleting => 'Завершение входа на исходной странице';
+
+  @override
+  String get oauthBrowserCompleted =>
+      'Вход выполнен, эту страницу можно закрыть';
+
+  @override
+  String get oauthBrowserOriginalClosed =>
+      'Исходная страница не отвечает, можно продолжить вход здесь';
+
+  @override
+  String get oauthBrowserContinue => 'Продолжить вход';
+
+  @override
+  String get wasmCompatibilityTitle => 'Проверка совместимости среды';
+
+  @override
+  String get wasmCompatibilityMessage =>
+      'OronBox необходимо проверить, может ли устройство запускать WebAssembly\n\nЭто сообщение может появиться по следующим причинам\n• Устройство работает на Android 8~9 с ядром Linux 4.x\n• Приложение неожиданно закрылось при загрузке среды или проверке\n\nВо время проверки приложение может аварийно завершиться из-за известного риска несовместимости\nПолитика безопасности устройства может быть несовместима со средой выполнения\n\nВ случае сбоя снова откройте OronBox\nЗагрузка среды будет приостановлена, чтобы избежать повторного сбоя\n\nОбработка изображений, голоса, некоторые плагины и фоновые скрипты приложений Huami могут быть недоступны до успешного прохождения проверки перед следующим использованием этих функций';
+
+  @override
+  String get wasmCompatibilityDefer => 'Не сейчас';
+
+  @override
+  String get wasmCompatibilityStart => 'Начать проверку';
+
+  @override
+  String get wasmCompatibilityTesting => 'Выполняется проверка, подождите';
+
+  @override
+  String get wasmCompatibilityPassed => 'Проверка совместимости пройдена';
+
+  @override
+  String get wasmCompatibilityTestFailed =>
+      'Проверка не завершена, повторите попытку или отложите её';
+
+  @override
+  String get wasmCompatibilityRequired =>
+      'Пройдите проверку совместимости перед использованием этой функции';
+
+  @override
+  String get pluginType => 'Тип плагина';
+
+  @override
+  String get pluginTypeAstroBox => 'AstroBox-NG';
+
+  @override
+  String get pluginTypeOronBox => 'OronBox';
+
+  @override
+  String get appDataCompilationCache => 'Кэш компиляции';
+
+  @override
+  String get appDataCompilationCacheDescription => 'Кэш компиляции WebAssembly';
+
+  @override
+  String get openExternally => 'Открыть в браузере';
+
+  @override
+  String get externalOpenFailed => 'Не удалось открыть браузер';
+
+  @override
+  String get resourceAstroBoxPurchaseTitle =>
+      'Для этого файла нужна покупка или авторизация';
+
+  @override
+  String get resourceAstroBoxPurchaseMessage =>
+      'Этот ресурс зашифрован и загружен через AstroBox Creator Console\nДля расшифровки требуется покупка или разрешение на доступ\nОткройте его в AstroBox';
+
+  @override
+  String get resourceAstroBoxAccessCheckFailed =>
+      'Не удалось проверить доступ к файлу\nПовторите попытку';
+
+  @override
+  String get resourceAstroBoxDecryptionFailed =>
+      'Не удалось расшифровать файл\nПовторите попытку';
+
+  @override
+  String get appDataClearPluginCacheDescription =>
+      'Удалить кэш и временные файлы плагинов\nПри необходимости они будут созданы заново или загружены';
+
+  @override
+  String get appDataClearCompilationCacheDescription =>
+      'Удалить кэш компиляции WebAssembly\nПри необходимости он будет создан заново';
+
+  @override
+  String get resourceMoreDevicesDownload => 'Скачать для других устройств';
+
+  @override
+  String get resourceCompatibleWithDevice =>
+      'Этот ресурс совместим с вашим устройством';
+
+  @override
+  String get resourceIncompatibleWithDevice =>
+      'Этот ресурс пока не совместим с вашим устройством';
+
+  @override
+  String get resourceInstallSucceeded => 'Успешно установлено';
+
+  @override
+  String get installStorageFullTitle => 'Недостаточно памяти на устройстве';
+
+  @override
+  String get installQuantityLimitTitle => 'Достигнут предел установок';
+
+  @override
+  String get installStorageFullHelp =>
+      'Недостаточно зарезервированной памяти или достигнут предел количества ресурсов\nУдалите несколько ресурсов и повторите установку';
+
+  @override
+  String get installQuantityLimitHelp =>
+      'Достигнут предел количества установленных ресурсов\nУдалите несколько ресурсов и повторите установку';
+
+  @override
+  String get installTargetDeviceChanged =>
+      'Сначала переключитесь на устройство, для которого выполняется установка';
+
+  @override
+  String get debugNoLogs => 'Нет журналов';
+
+  @override
+  String get debugNoLayoutTree => 'У этого источника нет дерева интерфейса';
+
+  @override
+  String get debugSelectElement => 'Выберите элемент для просмотра';
+
+  @override
+  String get debugEmptyDirectory => 'Каталог пуст';
+
+  @override
+  String get debugNoProtocolEvents => 'События протокола ещё не записаны';
+
+  @override
+  String get globalAiNoProvidersTitle => 'Провайдеры не добавлены';
+
+  @override
+  String get globalAiNoProvidersMessage => 'Добавьте провайдера выше';
+
+  @override
+  String get globalAiNoModelsTitle => 'Нет доступных моделей';
+
+  @override
+  String get globalAiNoModelsMessage => 'Сначала добавьте модель';
+
+  @override
+  String get debugNoMatchingLogs => 'Подходящие записи не найдены';
+
+  @override
+  String get appManagementNoVisibleApps => 'Нет приложений для отображения';
+
+  @override
+  String get zeppOsAppCompatibilityEmpty =>
+      'Файлы совместимости приложений не добавлены';
+
+  @override
+  String get qrScanCameraUnavailableMessage =>
+      'Можно выбрать изображение с QR-кодом';
+
+  @override
+  String get resourceFeaturesDisabledTitle => 'Функции ресурсов отключены';
+
+  @override
+  String get pairingConnectStep => 'Подключение устройства';
+
+  @override
+  String get pairingAccountStep => 'Привязка аккаунта';
+
+  @override
+  String get pairingLocalStep => 'Локальное сопряжение';
+
+  @override
+  String get pairingAuthStep => 'Аутентификация устройства';
+
+  @override
+  String get pairingUnbound => 'Не сопряжено';
+
+  @override
+  String get pairingContinue => 'Продолжить';
+
+  @override
+  String get pairingStartPrompt =>
+      'Устройство ещё не привязано\nСледуйте инструкциям, чтобы завершить привязку';
+
+  @override
+  String get pairingSuccess => 'Устройство успешно подключено';
+
+  @override
+  String get pairingTitle => 'Привязать устройство';
+
+  @override
+  String get pairingConnecting => 'Подключение к устройству';
+
+  @override
+  String get pairingConfirmOnDevice => 'Подтвердите привязку на устройстве';
+
+  @override
+  String get pairingCompareCode => 'Убедитесь, что код привязки совпадает';
+
+  @override
+  String get pairingRebind => 'Устройство нужно привязать заново';
+
+  @override
+  String get pairingAlreadyBound => 'Устройство уже сопряжено';
+
+  @override
+  String get pairingUseExistingKey => 'Подключиться с существующим ключом';
+
+  @override
+  String get engineeringTitle => 'Инженерный режим MiWear';
+
+  @override
+  String get engineeringDescription =>
+      'Режимы устройства и обновление прошивки';
+
+  @override
+  String get engineeringMode => 'Режим устройства';
+
+  @override
+  String get engineeringUser => 'Пользовательский режим';
+
+  @override
+  String get engineeringUserDebug => 'Пользовательский режим отладки';
+
+  @override
+  String get engineeringEng => 'Инженерный режим';
+
+  @override
+  String get engineeringModeConfirm =>
+      'Устройство перезагрузится и отключится\nПодключитесь снова после перезагрузки';
+
+  @override
+  String get engineeringConnectDevice => 'Подключить устройство';
+
+  @override
+  String get engineeringConnectConfirm =>
+      'Текущее устройство будет отключено\nПроверьте выбранное устройство';
+
+  @override
+  String get engineeringFirmwareHint => 'Выберите прошивку для устройства';
+
+  @override
+  String get engineeringOtaConfirm =>
+      'Обновить подключённое устройство этой прошивкой?\nПроверьте соответствие модели\nОбеспечьте достаточный заряд устройства';
+
+  @override
+  String get engineeringReturn => 'Перезагрузить в пользовательский режим';
+
+  @override
+  String get engineeringIdle => 'Ожидание действия';
+
+  @override
+  String get engineeringScanning => 'Поиск инженерных устройств';
+
+  @override
+  String get engineeringConnecting => 'Подключение';
+
+  @override
+  String get engineeringUpdateBackBlocked =>
+      'Обновление прошивки\nДождитесь завершения текущей операции';
+
+  @override
+  String get engineeringUploading => 'Передача прошивки';
+
+  @override
+  String get engineeringRestarting => 'Запрос перезагрузки';
+
+  @override
+  String get engineeringWaiting =>
+      'Ожидание перезагрузки устройства\nПодключитесь после запуска';
+
+  @override
+  String get engineeringFailed => 'Обновление прервано';
+
+  @override
+  String get engineeringEmpty =>
+      'Инженерные устройства не найдены\nПроверьте режим устройства и повторите поиск';
+
+  @override
+  String get engineeringFirmwareError => 'Выберите непустой файл прошивки';
+
+  @override
+  String get engineeringResponseError =>
+      'Устройство отклонило запрос или вернуло неожиданный ответ';
+
+  @override
+  String get engineeringTimeout =>
+      'Время ожидания ответа истекло\nПодключитесь снова и повторите попытку';
+
+  @override
+  String get engineeringMtuError =>
+      'Невозможно отправить команду по этому соединению\nПодключитесь снова или используйте SPP';
+
+  @override
+  String get engineeringBusyError =>
+      'Сначала завершите или отмените текущую операцию';
+
+  @override
+  String get engineeringConnectionError =>
+      'Сначала подключитесь к инженерному устройству';
+
+  @override
+  String get deviceSettingsTitle => 'Настройки устройства';
+
+  @override
+  String get deviceSettingsDescription =>
+      'Настройте параметры для этого устройства';
+
+  @override
+  String get deviceSettingsUnavailable =>
+      'Для этого устройства нет доступных настроек';
+
+  @override
+  String get deviceNotificationSync => 'Синхронизация уведомлений';
+
+  @override
+  String get deviceNotificationSyncDescription =>
+      'Передавать уведомления выбранных приложений на это устройство';
+
+  @override
+  String get deviceNotificationApps => 'Синхронизируемые приложения';
+
+  @override
+  String get deviceNotificationAppsEmpty => 'Приложения не найдены';
+
+  @override
+  String get updateReminderInbox => 'Уведомления о сообщениях';
+
+  @override
+  String get inboxNotificationUnread => 'У вас есть непрочитанные сообщения';
+
+  @override
+  String get notificationPermissionsSection => 'Разрешения для уведомлений';
+
+  @override
+  String get notificationPermissionDisplay => 'Показывать уведомления';
+
+  @override
+  String get notificationPermissionRead => 'Читать уведомления';
+
+  @override
+  String get notificationPermissionEnabled => 'Включено';
+
+  @override
+  String get notificationPermissionDisabled => 'Выключено';
+
+  @override
+  String get notificationPermissionUnavailable =>
+      'Не удалось проверить разрешение';
+
+  @override
+  String get updateReminderFirmwareTitle => 'Доступно обновление прошивки';
+
+  @override
+  String get updateReminderResourcesTitle => 'Доступны обновления ресурсов';
+
+  @override
+  String get updateReminderPluginsTitle => 'Доступны обновления плагинов';
+
+  @override
+  String get updateReminderFirmwareMessage =>
+      'Для вашего устройства доступно обновление прошивки';
+
+  @override
+  String get updateReminderResourcesMessage =>
+      'Для ресурсов на вашем устройстве доступны обновления';
+
+  @override
+  String updateReminderCurrentVersion(String version) {
+    return 'Текущая версия  $version';
+  }
+
+  @override
+  String updateReminderLatestFirmware(String version) {
+    return 'Последняя прошивка  $version';
+  }
+
+  @override
+  String get updateReminderSilence => 'Не напоминать до следующего обновления';
+
+  @override
+  String get updateReminderInstall => 'Обновить';
+
+  @override
+  String get updateReminderInstallAll => 'Обновить всё';
+
+  @override
+  String get updateReminderChanged => 'Сейчас это обновление недоступно';
 }

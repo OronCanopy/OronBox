@@ -1,3 +1,5 @@
+import 'package:oronbox/src/device/xiaomi/systems/factory_system.dart';
+import 'package:oronbox/src/device/xiaomi/systems/bind_system.dart';
 import 'package:oronbox/src/core/services/phone_location_sessions.dart';
 import 'package:oronbox/src/device/xiaomi/systems/phone_location_system.dart';
 import 'package:oronbox/src/core/services/device_location_service.dart';
@@ -8,6 +10,7 @@ import 'package:oronbox/src/device/core/transport.dart';
 import 'package:oronbox/src/device/xiaomi/systems/auth_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/xiaomi_voice_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/info_system.dart';
+import 'package:oronbox/src/device/xiaomi/systems/protocol_observer_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/health_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/gnss_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/install_system.dart';
@@ -23,6 +26,7 @@ import 'package:oronbox/src/device/xiaomi/systems/thirdparty_app_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/watchface_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/wifi_config_handler.dart';
 import 'package:oronbox/src/device/xiaomi/systems/xiaomi_device_component.dart';
+import 'package:oronbox/src/device/xiaomi/systems/canopus_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/screenshot_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/xiaomi_dispatcher.dart';
 import 'package:oronbox/src/device/xiaomi/systems/xiaomi_protocol_trace.dart';
@@ -47,10 +51,21 @@ class XiaomiDeviceFactory implements DeviceEntityFactory {
       sppV1: kind == 'xiaomi-spp-v1',
     );
     component.onTransportFailure = (error, stackTrace) {
+      entity.system<XiaomiAuthSystem>()?.failPending(error);
+      entity.system<XiaomiBindSystem>()?.abort(error);
       entity.system<XiaomiMassSystem>()?.abortPending(error, stackTrace);
+      entity.system<XiaomiInstallSystem>()?.abortPending(error, stackTrace);
       entity.system<XiaomiScreenshotSystem>()?.abortPending(error, stackTrace);
       entity.emit(DeviceError(deviceId: id, error: error.toString()));
       entity.emit(TransportDisconnected(deviceId: id));
+    };
+    component.onSessionReset = (error) {
+      entity.system<XiaomiMassSystem>()?.abortPending(error);
+      entity.system<XiaomiInstallSystem>()?.abortPending(error);
+      entity.system<XiaomiScreenshotSystem>()?.abortPending(error);
+      entity.system<XiaomiResourceSystem>()?.abortPending(error);
+      entity.system<XiaomiAuthSystem>()?.onLinkReset(error);
+      entity.system<XiaomiBindSystem>()?.abort(error);
     };
     component.onRawOutgoing = entity.recordRawOutgoing;
     final tracer = XiaomiProtocolTracer((trace) {
@@ -65,8 +80,10 @@ class XiaomiDeviceFactory implements DeviceEntityFactory {
     component.onL2Payload = dispatcher.onL2Payload;
     entity.setDispatcher(dispatcher);
 
+    entity.registerSystem(XiaomiProtocolObserverSystem());
     entity.registerSystem(XiaomiRequestPoolSystem());
     entity.registerSystem(XiaomiAuthSystem());
+    entity.registerSystem(XiaomiBindSystem());
 
     entity.registerSystem(XiaomiMassSystem());
     entity.registerSystem(XiaomiVoiceSystem());
@@ -89,6 +106,7 @@ class XiaomiDeviceFactory implements DeviceEntityFactory {
     entity.registerSystem(XiaomiLpaSystem());
 
     entity.registerSystem(XiaomiInstallSystem());
+    entity.registerSystem(XiaomiFactorySystem());
     entity.registerSystem(XiaomiInfoSystem());
     final healthSystem = XiaomiHealthSystem();
     entity.registerSystem(healthSystem);
@@ -98,6 +116,7 @@ class XiaomiDeviceFactory implements DeviceEntityFactory {
     entity.registerSystem(XiaomiWatchfaceSystem());
     entity.registerSystem(XiaomiThirdpartyAppSystem());
     entity.registerSystem(XiaomiReportSystem());
+    entity.registerSystem(XiaomiCanopusSystem());
 
     return entity;
   }

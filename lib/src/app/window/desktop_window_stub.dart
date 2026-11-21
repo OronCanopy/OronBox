@@ -20,9 +20,11 @@ class SecondaryWindowHost extends StatelessWidget {
     super.key,
     required this.role,
     required this.child,
+    this.onClose,
   });
   final String role;
   final Widget child;
+  final Future<void> Function()? onClose;
 
   @override
   Widget build(BuildContext context) => child;
@@ -38,12 +40,16 @@ Future<bool> initializeWindowCoordinator(
 
 Future<void> notifySecondaryWindowReady() async {}
 Future<bool> openDebugWindow() async => false;
+Future<void> closeSecondaryWindow() async {}
 Future<bool> closeDebugWindow() async => false;
 Future<bool> openPluginWindow(String pluginId) async => false;
 Future<bool> takePluginWindow(String pluginId) async => true;
+Future<String> createWebViewWindow(String id) async =>
+    throw UnsupportedError('Desktop windows are unavailable');
+Future<void> closeWebViewWindow(String id) async {}
+Future<void> focusSecondaryWindow() async {}
 Future<void> setSecondaryWindowIcon(String? base64Icon) async {}
 Future<void> setSecondaryWindowTitle(String title) async {}
-Stream<void> get secondaryWindowHandoffs => const Stream<void>.empty();
 Future<void> shutdownSecondaryWindows() async {}
 Future<void> reportSecondaryWindowBounds({
   required String role,
@@ -52,3 +58,6 @@ Future<void> reportSecondaryWindowBounds({
   required double x,
   required double y,
 }) async {}
+
+Future<void> closeDesktopWindow() async {}
+void dragDesktopWindow() {}

@@ -7,67 +7,71 @@ import 'package:oronbox/src/features/plugins/domain/plugin_package.dart';
 
 void main() {
   group('PluginPackageReader', () {
-    test('reads native JavaScript plugins', () {
+    test('reads valid WebAssembly plugins', () {
       final package = const PluginPackageReader().read(
-        _package(runtime: 'js', entry: 'main.js'),
+        _package(runtime: 'wasm', entry: 'plugin.wasm'),
       );
 
       expect(package.manifest.id, 'org.example.plugin');
-      expect(package.manifest.runtime, PluginRuntimeType.js);
-      expect(utf8.decode(package.files['main.js']!), 'export {}');
+      expect(package.manifest.runtime, PluginRuntimeType.wasm);
+      expect(package.files['plugin.wasm'], isNotNull);
+      expect(
+        package.files['plugin.wasm']!.sublist(0, 4),
+        equals([0, 97, 115, 109]),
+      );
     });
 
-    test('reads native hybrid and WASM manifests', () {
-      final hybrid = const PluginPackageReader().read(
-        _package(runtime: 'hybrid', entry: 'main.mjs'),
-      );
-      final wasm = const PluginPackageReader().read(
-        _package(runtime: 'wasm', entry: 'main.wasm'),
-      );
-
-      expect(hybrid.manifest.runtime, PluginRuntimeType.hybrid);
-      expect(wasm.manifest.runtime, PluginRuntimeType.wasm);
-    });
-
-    test('routes manifests without runtime to Legacy', () {
+    test('defaults runtime to wasm when omitted', () {
       final package = const PluginPackageReader().read(
-        _package(entry: 'main.js'),
+        _package(entry: 'plugin.wasm'),
       );
-
-      expect(package.manifest.runtime, PluginRuntimeType.legacy);
-      expect(package.manifest.id, startsWith('example-plugin-'));
+      expect(package.manifest.runtime, PluginRuntimeType.wasm);
     });
 
-    test('validates runtime entry type', () {
+    for (final runtime in ['js', 'hybrid']) {
+      test('reads OronBox $runtime packages and preserves the source', () {
+        final source = utf8.encode('globalThis.activate = async () => "天气";');
+        final package = const PluginPackageReader().read(
+          _package(runtime: runtime, entry: 'main.js', entryBytes: source),
+        );
+        expect(package.manifest.runtime.manifestValue, runtime);
+        expect(package.installed().entryBytes, source);
+      });
+    }
+
+    test('rejects non-wasm runtime in manifest', () {
       expect(
         () => const PluginPackageReader().read(
-          _package(runtime: 'wasm', entry: 'main.js'),
+          _package(runtime: 'js', entry: 'plugin.wasm'),
         ),
         throwsFormatException,
       );
     });
 
-    test('rejects unknown native permissions', () {
+    test('rejects non-wasm entry file extensions', () {
       expect(
-        () => const PluginPackageReader().read(
-          _package(
-            runtime: 'js',
-            entry: 'main.js',
-            permissions: const ['filesystem'],
-          ),
-        ),
+        () => const PluginPackageReader().read(_package(entry: 'main.js')),
         throwsFormatException,
+      );
+    });
+
+    test('preserves forward-compatible permissions without throwing', () {
+      final package = const PluginPackageReader().read(
+        _package(
+          entry: 'plugin.wasm',
+          permissions: const ['os.device-id', 'request'],
+        ),
+      );
+      expect(
+        package.manifest.permissions,
+        containsAll(['os.device-id', 'request']),
       );
     });
 
     test('rejects a WASM entry without the WebAssembly magic header', () {
       expect(
         () => const PluginPackageReader().read(
-          _package(
-            runtime: 'wasm',
-            entry: 'main.wasm',
-            entryBytes: const [1, 2, 3, 4],
-          ),
+          _package(entry: 'plugin.wasm', entryBytes: const [1, 2, 3, 4]),
         ),
         throwsFormatException,
       );
@@ -76,7 +80,7 @@ void main() {
     test('rejects archive entries that escape the package root', () {
       expect(
         () => const PluginPackageReader().read(
-          _package(entry: 'main.js', archiveEntryName: '../main.js'),
+          _package(entry: 'plugin.wasm', archiveEntryName: '../plugin.wasm'),
         ),
         throwsFormatException,
       );
@@ -85,7 +89,7 @@ void main() {
     test('rejects a manifest whose runtime entry is missing', () {
       expect(
         () => const PluginPackageReader().read(
-          _package(entry: 'main.js', includeEntry: false),
+          _package(entry: 'plugin.wasm', includeEntry: false),
         ),
         throwsFormatException,
       );

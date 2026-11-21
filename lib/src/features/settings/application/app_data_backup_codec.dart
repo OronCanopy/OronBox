@@ -126,36 +126,45 @@ AppDataBackup _decodeBackup(Uint8List bytes, {String? password}) {
   );
 }
 
+bool _isValidBackupSetting(String key, Object? value) =>
+    (backupPreferenceKeys.contains(key) ||
+        backupAccountPreferenceKeys.contains(key)) &&
+    (value == null ||
+        switch (key) {
+          'app_theme_mode' ||
+          'app_desktop_accent_color_source' ||
+          'app_locale' ||
+          'github_cdn' ||
+          'community_source' ||
+          'wide_navigation_rail_position' ||
+          'auto_backup_interval_unit' ||
+          'global_ai_active_provider_id' ||
+          'global_ai_active_model_id' ||
+          'global_ai_providers_json' ||
+          'global_ai_reply_length' ||
+          'global_ai_tool_policy' ||
+          'global_ai_confirm_mode' ||
+          'global_ai_asr_backend' ||
+          'global_ai_system_prompt_template' => value is String,
+          'desktop.exit_behavior' => value is int && value >= 0 && value <= 2,
+          'app_custom_seed_color' =>
+            value is int && value >= 0 && value <= 0xffffffff,
+          'zeppos.mirror.frame_interval_ms' =>
+            value is int && value >= 1 && value <= 1000,
+          'auto_backup_interval_value' => value is int && value >= 1,
+          'auto_backup_retention' => value is int && value >= 0,
+          'mi_account.username' ||
+          'mi_account.password' ||
+          'huami_account.username' ||
+          'huami_account.password' => value is String,
+          _ => value is bool,
+        });
+
 void _validateSettings(Map<String, Object?> settings) {
   for (final entry in settings.entries) {
-    final value = entry.value;
-    final valid =
-        (backupPreferenceKeys.contains(entry.key) ||
-            backupAccountPreferenceKeys.contains(entry.key)) &&
-        (value == null ||
-            switch (entry.key) {
-              'app_theme_mode' ||
-              'app_desktop_accent_color_source' ||
-              'app_locale' ||
-              'github_cdn' ||
-              'community_source' ||
-              'wide_navigation_rail_position' ||
-              'auto_backup_interval_unit' => value is String,
-              'desktop.exit_behavior' =>
-                value is int && value >= 0 && value <= 2,
-              'app_custom_seed_color' =>
-                value is int && value >= 0 && value <= 0xffffffff,
-              'zeppos.mirror.frame_interval_ms' =>
-                value is int && value >= 1 && value <= 1000,
-              'auto_backup_interval_value' => value is int && value >= 1,
-              'auto_backup_retention' => value is int && value >= 0,
-              'mi_account.username' ||
-              'mi_account.password' ||
-              'huami_account.username' ||
-              'huami_account.password' => value is String,
-              _ => value is bool,
-            });
-    if (!valid) throw const FormatException('Invalid backup settings');
+    if (!_isValidBackupSetting(entry.key, entry.value)) {
+      throw const FormatException('Invalid backup settings');
+    }
   }
 }
 

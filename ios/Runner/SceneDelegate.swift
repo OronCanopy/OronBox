@@ -7,6 +7,7 @@ class SceneDelegate: FlutterSceneDelegate {
     guard url.isFileURL else { return nil }
     let fm = FileManager.default
     let tmp = fm.temporaryDirectory.appendingPathComponent("file_open", isDirectory: true)
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
     try? fm.createDirectory(at: tmp, withIntermediateDirectories: true)
     let target = tmp.appendingPathComponent(url.lastPathComponent)
     do {

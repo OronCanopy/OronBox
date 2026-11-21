@@ -7,6 +7,7 @@ import 'package:oronbox/src/core/providers/app_settings_providers.dart';
 import 'package:oronbox/src/core/utils/layout.dart';
 import 'package:oronbox/src/features/resources/services/download_queue_notifier.dart';
 import 'package:oronbox/src/features/resources/services/install_queue_notifier.dart';
+import 'package:oronbox/src/features/resources/services/resource_task_status.dart';
 
 final queueDoneAtProvider = NotifierProvider<QueueDoneNotifier, DateTime?>(
   QueueDoneNotifier.new,
@@ -36,7 +37,7 @@ class QueueDoneVersionNotifier extends Notifier<int> {
 void markQueueDone(WidgetRef ref) {
   final version = ref.read(queueDoneVersionProvider.notifier).next();
   ref.read(queueDoneAtProvider.notifier).mark();
-  Timer(const Duration(seconds: 2), () {
+  Timer(resourceTaskCompletionDisplayDuration, () {
     if (ref.read(queueDoneVersionProvider) == version) {
       ref.read(queueDoneAtProvider.notifier).clear();
     }

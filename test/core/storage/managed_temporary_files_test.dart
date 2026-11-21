@@ -21,6 +21,35 @@ void main() {
     );
     await root.delete(recursive: true);
   });
+  test('picker cleanup protects queued and original files and releases consumed copies', () async {
+    final picker = await Directory('${root.path}/file_picker/session')
+        .create(recursive: true);
+    final consumed = await File('${picker.path}/consumed.bin')
+        .writeAsBytes([1, 2]);
+    final queued = await File('${picker.path}/queued.bin').writeAsBytes([3]);
+    final original = await File('${root.path}/original.bin').writeAsBytes([4]);
+    final link = await Link('${picker.path}/external.bin')
+        .create(original.path);
+    await ManagedTemporaryFiles.releaseImport(original.path);
+    await ManagedTemporaryFiles.releaseImport(link.path);
+    expect(await original.exists(), isTrue);
+    await ManagedTemporaryFiles.releaseImport(consumed.path);
+    expect(await consumed.exists(), isFalse);
+    expect(
+      await ManagedTemporaryFiles.cleanupImports(
+        minimumAge: Duration.zero,
+        protectedPaths: {queued.path},
+      ),
+      0,
+    );
+    expect(await queued.exists(), isTrue);
+    expect(
+      await ManagedTemporaryFiles.cleanupImports(minimumAge: Duration.zero),
+      1,
+    );
+    expect(await queued.exists(), isFalse);
+    expect(await original.readAsBytes(), [4]);
+  });
   test('active files and queued paths survive cleanup; released files are reclaimable', () async {
     final path = await ManagedTemporaryFiles.create(
       TemporaryFilePurpose.downloads,

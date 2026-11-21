@@ -1,12 +1,12 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 
-/// Delegates for the extracted Material UI application root.
+/// Delegates for the application root.
 ///
-/// Flutter's generated l10n file still emits the legacy Material delegates;
-/// keep that generated file untouched and provide the modern delegates at the
-/// application boundary instead.
+/// Combines the generated Flutter application delegates (which provide Flutter's
+/// native Material/Cupertino/Widgets localizations required by external packages
+/// like flutter_markdown_plus) with Material UI's custom delegates.
 const appLocalizationsDelegates = <LocalizationsDelegate<dynamic>>[
-  AppLocalizations.delegate,
+  ...AppLocalizations.localizationsDelegates,
   ...GlobalMaterialLocalizations.delegates,
 ];

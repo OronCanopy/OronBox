@@ -1,39 +1,49 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
+import 'package:oronbox/src/app/webview/app_webview_session.dart';
+import 'package:oronbox/src/app/webview/app_webview_page.dart';
+import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/utils/error_localization.dart';
 import 'package:oronbox/src/app/widgets/sys_app_bar.dart';
-import 'package:oronbox/src/features/devices/services/zeppos_app_settings_service.dart';
+import 'package:oronbox/src/features/devices/services/zeppos_app_settings_session.dart';
+
+final _settingsWindows = <int, ZeppOsAppSettingsSession>{};
 
 Future<void> showZeppOsAppSettings(
   BuildContext context, {
   required int appId,
   required String title,
 }) async {
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-    final location = Uri(
-      path: '/devices/apps/settings/$appId',
-      queryParameters: title.isEmpty ? null : {'title': title},
-    ).toString();
-    if (GoRouter.maybeOf(context) case final router?) {
-      await router.push<void>(location);
-    } else {
-      // Isolated/native hosts may not mount the application's GoRouter.
-      await Navigator.of(context).push<void>(
-        PageRouteBuilder(
-          pageBuilder: (_, _, _) =>
-              ZeppOsSettingViewerPage(appId: appId, title: title),
-          transitionDuration: Duration.zero,
-          reverseTransitionDuration: Duration.zero,
-        ),
-      );
+  if (usesDesktopWebViewWindows) {
+    final existing = _settingsWindows[appId];
+    if (existing != null) {
+      await existing.initialize(detached: true, title: title);
+      if (existing.browser?.closed == false) {
+        await existing.browser!.invoke('focus');
+      }
+      return;
+    }
+    final session = ZeppOsAppSettingsSession(appId);
+    _settingsWindows[appId] = session;
+    try {
+      await session.initialize(detached: true, title: title);
+      await session.browser!.done;
+    } finally {
+      await session.close();
+      if (identical(_settingsWindows[appId], session)) {
+        _settingsWindows.remove(appId);
+      }
     }
     return;
   }
-  await ZeppOsAppSettingsService.instance.open(appId, title: title);
+  final location = Uri(
+    path: '/devices/apps/settings/$appId',
+    queryParameters: title.isEmpty ? null : {'title': title},
+  ).toString();
+  await context.push<void>(location);
 }
 
 class ZeppOsSettingViewerPage extends StatefulWidget {
@@ -53,29 +63,25 @@ class ZeppOsSettingViewerPage extends StatefulWidget {
 
 class _ZeppOsSettingViewerPageState extends State<ZeppOsSettingViewerPage> {
   Object? _error;
-  bool _opened = false;
-  bool _closing = false;
+  late ZeppOsAppSettingsSession _session;
+  bool _ready = false;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_opened) return;
-    _opened = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+  void initState() {
+    super.initState();
+    _session = ZeppOsAppSettingsSession(widget.appId);
+    unawaited(_open());
   }
 
   Future<void> _open() async {
-    if (!mounted) return;
-    final contentTop = MediaQuery.paddingOf(context).top + kToolbarHeight;
     try {
-      await ZeppOsAppSettingsService.instance.open(
-        widget.appId,
+      await _session.initialize(
         title: widget.title,
-        contentTop: contentTop,
+        onLoadError: (error) {
+          if (mounted) setState(() => _error = error);
+        },
       );
-      if (!mounted) {
-        await ZeppOsAppSettingsService.instance.close(widget.appId);
-      }
+      if (mounted) setState(() => _ready = true);
     } catch (error) {
       if (mounted) setState(() => _error = error);
     }
@@ -83,37 +89,33 @@ class _ZeppOsSettingViewerPageState extends State<ZeppOsSettingViewerPage> {
 
   @override
   void dispose() {
-    if (_opened && !_closing) {
-      unawaited(ZeppOsAppSettingsService.instance.close(widget.appId));
-    }
+    unawaited(_session.close());
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    onPopInvokedWithResult: (_, _) {
-      if (!_closing) {
-        _closing = true;
-        unawaited(ZeppOsAppSettingsService.instance.close(widget.appId));
-      }
-    },
-    child: Scaffold(
-      appBar: SysAppBar(secondary: true, title: Text(widget.title)),
-      body: Center(
-        child: _error == null
-            ? const CircularProgressIndicator()
-            : Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  AppLocalizations.of(context)!.zeppOsSettingPageLoadFailed(
-                    localizedErrorMessage(
-                      AppLocalizations.of(context)!,
-                      _error,
-                    ),
+  Widget build(BuildContext context) => _ready && _error == null
+      ? AppWebViewPage(session: _session.browser!)
+      : Scaffold(
+          appBar: SysAppBar(secondary: true, title: Text(widget.title)),
+          body: _error != null
+              ? ErrorStateView(
+                  message: localizedErrorMessage(
+                    AppLocalizations.of(context)!,
+                    _error,
                   ),
-                ),
-              ),
-      ),
-    ),
-  );
+                  retryLabel: AppLocalizations.of(context)!.retry,
+                  onRetry: () async {
+                    await _session.close();
+                    if (!mounted) return;
+                    setState(() {
+                      _error = null;
+                      _ready = false;
+                    });
+                    _session = ZeppOsAppSettingsSession(widget.appId);
+                    await _open();
+                  },
+                )
+              : const Center(child: CircularProgressIndicator()),
+        );
 }

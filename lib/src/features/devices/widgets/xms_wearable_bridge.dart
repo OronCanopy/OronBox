@@ -22,7 +22,7 @@ class XmsWearableBridge extends ConsumerStatefulWidget {
 }
 
 class _XmsWearableBridgeState extends ConsumerState<XmsWearableBridge> {
-  static const _channel = MethodChannel('oronbox/xms_wearable');
+  static const _channel = MethodChannel('org.oroncanopy.oronbox/xms_wearable');
   static final _log = getLogger('XmsWearableBridge');
   StreamSubscription? _messages;
   ProviderSubscription<DeviceManagerState>? _deviceState;

@@ -221,12 +221,13 @@ class _XiaomiRecordingsPageState extends ConsumerState<XiaomiRecordingsPage> {
                   bottom: bottomContentPadding(context, extra: 80),
                 ),
                 sections: [
-                  CustomSegmentedSection(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      child: _buildHeaderCard(context, l10n, colors),
+                  if (_syncing)
+                    CustomSegmentedSection(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: _buildSyncProgress(l10n, colors),
+                      ),
                     ),
-                  ),
                   SegmentedSection(
                     tiles: [
                       for (final recording in _recordings)
@@ -239,16 +240,17 @@ class _XiaomiRecordingsPageState extends ConsumerState<XiaomiRecordingsPage> {
                 top: false,
                 child: Column(
                   children: [
-                    Align(
-                      alignment: Alignment.topCenter,
-                      child: Container(
-                        constraints: const BoxConstraints(
-                          maxWidth: StyleConstants.pageMaxWidth,
+                    if (_syncing)
+                      Align(
+                        alignment: Alignment.topCenter,
+                        child: Container(
+                          constraints: const BoxConstraints(
+                            maxWidth: StyleConstants.pageMaxWidth,
+                          ),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          child: _buildSyncProgress(l10n, colors),
                         ),
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                        child: _buildHeaderCard(context, l10n, colors),
                       ),
-                    ),
                     Expanded(
                       child: Center(
                         child: SingleChildScrollView(
@@ -264,38 +266,26 @@ class _XiaomiRecordingsPageState extends ConsumerState<XiaomiRecordingsPage> {
     );
   }
 
-  Widget _buildHeaderCard(
-    BuildContext context,
-    AppLocalizations l10n,
-    ColorScheme colors,
-  ) {
+  Widget _buildSyncProgress(AppLocalizations l10n, ColorScheme colors) {
     return SectionCard(
       margin: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionHeader(title: l10n.deviceRecordingsLibrary),
-          Text(
-            l10n.deviceRecordingsLibraryDescription,
-            style: TextStyle(color: colors.onSurfaceVariant),
+          SmoothLinearProgressIndicator(
+            value: _total == 0 ? null : _transferProgress,
           ),
-          if (_syncing) ...[
-            const SizedBox(height: 16),
-            SmoothLinearProgressIndicator(
-              value: _total == 0 ? null : _transferProgress,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _total == 0
-                  ? l10n.deviceRecordingsReading
-                  : l10n.deviceRecordingsProgress(
-                      _completed.clamp(0, _total),
-                      _total,
-                      _currentFile,
-                    ),
-              style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
-            ),
-          ],
+          const SizedBox(height: 6),
+          Text(
+            _total == 0
+                ? l10n.deviceRecordingsReading
+                : l10n.deviceRecordingsProgress(
+                    _completed.clamp(0, _total),
+                    _total,
+                    _currentFile,
+                  ),
+            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+          ),
         ],
       ),
     );

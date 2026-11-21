@@ -1,5 +1,7 @@
 package org.zxor.oronbox
 
+import org.oroncanopy.oronbox.XmsWearableBridge
+
 import android.app.Service
 import android.content.Intent
 import android.os.Binder

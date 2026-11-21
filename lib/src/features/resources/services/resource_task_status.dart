@@ -1,3 +1,5 @@
+const resourceTaskCompletionDisplayDuration = Duration(seconds: 2);
+
 enum ResourceTaskStatus { pending, downloading, installing, completed, failed }
 
 enum ResourceTaskActivity { download, install }

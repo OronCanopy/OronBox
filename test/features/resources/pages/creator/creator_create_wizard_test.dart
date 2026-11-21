@@ -39,13 +39,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('New collection'));
-    await tester.pumpAndSettle();
-    debugPrint(
-      'FORM TEXTS: ${tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).toList()}',
-    );
-    await tester.tap(find.text('Back'));
-    await tester.pumpAndSettle();
     await tester.tap(
       find.text('Import existing resources from other platforms'),
     );

@@ -118,9 +118,11 @@ extension _CreatorEditorBundleBuilder on _CreatorEditorViewState {
     final manifest = utf8.encode(
       jsonEncode({
         'version': 1,
-        'kind': widget.workspace.resource.kind == CreatorResourceKind.watchface
-            ? 'watchface'
-            : 'quickapp',
+        'kind': switch (widget.workspace.resource.kind) {
+          CreatorResourceKind.watchface => 'watchface',
+          CreatorResourceKind.canopus => 'canopus',
+          CreatorResourceKind.quickApp => 'quickapp',
+        },
         'name': _name.text.trim(),
         'summary': _summary.text.trim(),
         'description': _description.text,

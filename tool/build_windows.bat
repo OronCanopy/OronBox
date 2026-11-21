@@ -70,10 +70,6 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [INFO] Installing or verifying the WebView2 SDK
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_ROOT%\windows\scripts\install_webview2_sdk.ps1"
-if errorlevel 1 exit /b 1
-
 if not exist "%RELEASE_DIR%" mkdir "%RELEASE_DIR%"
 
 echo [INFO] Building Windows release package for version %VERSION%

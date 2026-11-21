@@ -136,6 +136,10 @@ void main() {
 
       expect(find.text('My Favorite'), findsOneWidget);
       expect(find.text('Test Song'), findsOneWidget);
+      expect(
+        find.text('Manage songs and playlists on the device'),
+        findsNothing,
+      );
 
       final chooseButton = tester.widget<OutlinedButton>(
         find.byType(OutlinedButton),

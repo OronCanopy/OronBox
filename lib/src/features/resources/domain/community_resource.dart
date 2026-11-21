@@ -8,33 +8,10 @@ enum CommunityResourceType {
   watchface,
   firmware,
   canopus,
+  resPack,
 }
 
 enum CommunityPaidType { free, paid, forcePaid }
-
-/// Download modes that OronBox cannot process locally.
-///
-/// AstroBox Creator Console encrypts selected paid downloads before upload and
-/// keeps the decryption key in its own purchase/entitlement service. The
-/// manifest marker is surfaced as this domain value so every catalog path can
-/// make the same decision without exposing AstroBox's raw extension object.
-enum CommunityResourceDownloadRestriction { none, astroBoxCreatorEncrypted }
-
-String communityResourceDownloadRestrictionToWire(
-  CommunityResourceDownloadRestriction value,
-) => switch (value) {
-  CommunityResourceDownloadRestriction.none => 'none',
-  CommunityResourceDownloadRestriction.astroBoxCreatorEncrypted =>
-    'astrobox_creator_encrypted',
-};
-
-CommunityResourceDownloadRestriction
-communityResourceDownloadRestrictionFromWire(Object? value) =>
-    switch (value?.toString().trim().toLowerCase()) {
-      'astrobox_creator_encrypted' || 'astroboxcreatorencrypted' =>
-        CommunityResourceDownloadRestriction.astroBoxCreatorEncrypted,
-      _ => CommunityResourceDownloadRestriction.none,
-    };
 
 String communityPaidTypeToWire(CommunityPaidType value) => switch (value) {
   CommunityPaidType.free => 'free',
@@ -92,16 +69,21 @@ class CommunityResourceFile {
     required this.fileName,
     required this.version,
     this.displayName,
+    this.versionCode,
+    this.sha256,
     this.downloadUrl,
     this.size,
     this.supportedDevices = const {},
     this.encrypted = false,
+    this.purchaseRequired = false,
   });
 
   final String id;
   final String fileName;
   final String version;
   final String? displayName;
+  final int? versionCode;
+  final String? sha256;
   final Uri? downloadUrl;
   final int? size;
   final Set<String> supportedDevices;
@@ -109,6 +91,7 @@ class CommunityResourceFile {
   /// The payload is encrypted by the source and must be unlocked before it
   /// can be passed to the device installer.
   final bool encrypted;
+  final bool purchaseRequired;
 
   String get label =>
       displayName?.trim().isNotEmpty == true ? displayName!.trim() : fileName;
@@ -241,7 +224,6 @@ class CommunityResourceDetail extends CommunityResource {
     this.previewImages = const [],
     this.links = const [],
     this.canDownload = true,
-    this.downloadRestriction = CommunityResourceDownloadRestriction.none,
   });
 
   final CommunityResourceContent content;
@@ -253,7 +235,6 @@ class CommunityResourceDetail extends CommunityResource {
   final List<CommunityResourceImage> previewImages;
   final List<CommunityResourceLink> links;
   final bool canDownload;
-  final CommunityResourceDownloadRestriction downloadRestriction;
 }
 
 class CommunityResourceDevice {

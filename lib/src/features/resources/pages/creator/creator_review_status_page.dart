@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -709,11 +710,11 @@ class _CreatorReviewStatusPageState
                 if (comments.isEmpty)
                   CreatorEditorCard(
                     padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: Text(
-                        l10n.commentEmpty,
-                        style: TextStyle(color: colors.onSurfaceVariant),
-                      ),
+                    child: EmptyStateView(
+                      compact: true,
+                      padding: EdgeInsets.zero,
+                      icon: Icons.chat_bubble_outline,
+                      title: l10n.commentEmpty,
                     ),
                   )
                 else

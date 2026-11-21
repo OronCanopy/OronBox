@@ -85,6 +85,9 @@ class CommandError implements CodedError {
       details == null ? '$code: $message' : '$code: $message\n$details';
 }
 
+const canopusConnectMessageEvent = 'canopusconnect.message';
+const canopusResponseEvent = 'canopus.response';
+
 class CommandEvent {
   const CommandEvent(this.event, {this.data = const {}});
   final String event;

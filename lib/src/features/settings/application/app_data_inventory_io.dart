@@ -25,8 +25,16 @@ Future<Map<AppDataCategory, int>> collectFileUsage() async {
       '${temporary.path}/oronbox_downloads',
       '${temporary.path}/oronbox/managed',
       '${support.path}/apk',
+      '${temporary.path}/file_picker',
+      '${temporary.path}/flutter_file_picker',
+      '${temporary.path}/file_open',
+      if (Platform.isIOS || Platform.isMacOS) ...[
+        '${Directory.systemTemp.path}/flutter_file_picker',
+        '${Directory.systemTemp.path}/file_open',
+      ],
     ],
     AppDataCategory.cache: ['$pluginCache/plugins'],
+    AppDataCategory.compilation: ['${cache.path}/wasm/compiled'],
     AppDataCategory.images: ['${temporary.path}/libCachedImageData'],
   };
   final sizes = <AppDataCategory, int>{};
@@ -46,7 +54,8 @@ Future<Map<AppDataCategory, int>> collectFileUsage() async {
               .last
               .startsWith('plugins-')) {
         sizes[AppDataCategory.cache] =
-            (sizes[AppDataCategory.cache] ?? 0) + await _size(entry);
+            (sizes[AppDataCategory.cache] ?? 0) +
+            await _size(entry, excludedRootFiles: const {'.owner', '.lease'});
       }
     }
   }
@@ -64,7 +73,10 @@ Future<Map<AppDataCategory, int>> collectFileUsage() async {
   return sizes;
 }
 
-Future<int> _size(Directory directory) async {
+Future<int> _size(
+  Directory directory, {
+  Set<String> excludedRootFiles = const {},
+}) async {
   if (await FileSystemEntity.type(directory.path, followLinks: false) !=
       FileSystemEntityType.directory) {
     return 0;
@@ -76,6 +88,11 @@ Future<int> _size(Directory directory) async {
   )) {
     if (await FileSystemEntity.type(entry.path, followLinks: false) !=
         FileSystemEntityType.file) {
+      continue;
+    }
+    if (excludedRootFiles.any(
+      (name) => entry.uri == directory.uri.resolve(name),
+    )) {
       continue;
     }
     try {

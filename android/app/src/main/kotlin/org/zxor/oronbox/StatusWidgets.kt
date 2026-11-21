@@ -1,5 +1,10 @@
 package org.zxor.oronbox
 
+import org.oroncanopy.oronbox.DeviceValues
+import org.oroncanopy.oronbox.HealthValues
+import org.oroncanopy.oronbox.R
+import org.oroncanopy.oronbox.StatusWidgetDataStore
+
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider

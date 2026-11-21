@@ -7,11 +7,11 @@ lib/src/app/generated/** linguist-generated=true
 # Xiaomi wearable protobuf generated code
 lib/src/device/xiaomi/protocol/generated/** linguist-generated=true
 
-# Build runner & Drift ORM generated files
+# Build runner generated files
 *.g.dart linguist-generated=true
-*.drift.dart linguist-generated=true
 
-# Precompiled Web runtime workers & WebAssembly
-web/drift_worker.js linguist-generated=true
+# Precompiled Web runtime workers
 web/asr_worker.js linguist-generated=true
-web/sqlite3.wasm binary linguist-generated=true
+
+# Windows launchers retain CRLF line endings
+*.bat whitespace=cr-at-eol

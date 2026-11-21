@@ -1,3 +1,4 @@
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import 'dart:async';
@@ -6,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
+import 'package:oronbox/src/device/xiaomi/xiaomi_device_catalog.dart';
 import 'package:oronbox/src/app/theme/app_theme.dart';
 import 'package:oronbox/src/app/utils/error_localization.dart';
 import 'package:oronbox/src/app/widgets/app_state_view.dart';
@@ -16,7 +18,6 @@ import 'package:oronbox/src/app/widgets/sys_app_bar.dart';
 import 'package:oronbox/src/core/constants/style_constants.dart';
 import 'package:oronbox/src/core/providers/app_settings_providers.dart';
 import 'package:oronbox/src/data/community/community_source.dart';
-import 'package:oronbox/src/device/core/xiaomi_wearable_catalog.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 import 'package:oronbox/src/features/accounts/application/host_accounts.dart';
 import 'package:oronbox/src/features/accounts/services/oronbox_coin_service.dart';
@@ -25,9 +26,9 @@ import 'package:oronbox/src/features/resources/application/resource_catalog_prov
 import 'package:oronbox/src/features/resources/controllers/resource_filter_controller.dart';
 import 'package:oronbox/src/features/resources/domain/community_resource.dart';
 import 'package:oronbox/src/features/resources/services/download_queue_notifier.dart';
-import 'package:oronbox/src/features/resources/services/install_queue_notifier.dart';
 import 'package:oronbox/src/features/resources/widgets/community_html_content.dart';
 import 'package:oronbox/src/features/resources/widgets/resource_detail_header.dart';
+import 'package:oronbox/src/features/resources/widgets/resource_detail_actions.dart';
 import 'package:oronbox/src/features/resources/widgets/resource_external_link.dart';
 import 'package:oronbox/src/features/settings/pages/feedback_page.dart';
 
@@ -35,7 +36,7 @@ import 'package:oronbox/src/app/widgets/markdown_style_sheet.dart';
 
 part 'comment_thread_page.dart';
 
-class ResourceDetailPage extends ConsumerWidget {
+class ResourceDetailPage extends ConsumerStatefulWidget {
   const ResourceDetailPage({
     super.key,
     required this.resource,
@@ -45,10 +46,42 @@ class ResourceDetailPage extends ConsumerWidget {
   final String targetCommentId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ResourceDetailPage> createState() => _ResourceDetailPageState();
+}
+
+class _ResourceDetailPageState extends ConsumerState<ResourceDetailPage> {
+  Animation<double>? _entryAnimation;
+  bool _entered = true;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final animation = ModalRoute.of(context)?.animation;
+    if (identical(animation, _entryAnimation)) return;
+    _entryAnimation?.removeStatusListener(_onEntryStatus);
+    _entryAnimation = animation;
+    _entered = animation == null || animation.isCompleted;
+    animation?.addStatusListener(_onEntryStatus);
+  }
+
+  void _onEntryStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed && !_entered) {
+      setState(() => _entered = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _entryAnimation?.removeStatusListener(_onEntryStatus);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final resource = widget.resource;
     final l10n = AppLocalizations.of(context)!;
     final detail = ref.watch(communityResourceDetailProvider(resource.ref));
-    final visibleResource = detail.value ?? resource;
+    final visibleResource = _entered ? detail.value ?? resource : resource;
     return Scaffold(
       appBar: SysAppBar(secondary: true, title: Text(l10n.resourceDetails)),
       body: ListView(
@@ -58,30 +91,35 @@ class ResourceDetailPage extends ConsumerWidget {
         children: [
           ResourceDetailHeader(
             resource: visibleResource,
-            mediaResource: visibleResource,
+            mediaResource: resource.iconUrl != null || resource.coverUrl != null
+                ? resource
+                : visibleResource,
             animateCover: resource.coverUrl != null,
             animateIcon: resource.iconUrl != null,
           ),
-          detail.when(
-            loading: () => const PageContainer(
-              padding: EdgeInsets.symmetric(
-                horizontal: StyleConstants.pagePadding,
-                vertical: 20,
+          if (_entered)
+            detail.when(
+              loading: () => const PageContainer(
+                padding: EdgeInsets.symmetric(
+                  horizontal: StyleConstants.pagePadding,
+                  vertical: 20,
+                ),
+                child: _DelayedLoadingIndicator(),
               ),
-              child: _DelayedLoadingIndicator(),
-            ),
-            error: (error, _) => PageContainer(
-              padding: const EdgeInsets.all(StyleConstants.pagePadding),
-              child: ErrorStateView(
-                message: localizedErrorMessage(l10n, error),
-                onRetry: () => ref.invalidate(
-                  communityResourceDetailProvider(resource.ref),
+              error: (error, _) => PageContainer(
+                padding: const EdgeInsets.all(StyleConstants.pagePadding),
+                child: ErrorStateView(
+                  message: localizedErrorMessage(l10n, error),
+                  onRetry: () => ref.invalidate(
+                    communityResourceDetailProvider(resource.ref),
+                  ),
                 ),
               ),
+              data: (value) => _DetailContent(
+                detail: value,
+                targetCommentId: widget.targetCommentId,
+              ),
             ),
-            data: (value) =>
-                _DetailContent(detail: value, targetCommentId: targetCommentId),
-          ),
         ],
       ),
     );
@@ -133,66 +171,45 @@ class _DetailContent extends ConsumerStatefulWidget {
 }
 
 class _DetailContentState extends ConsumerState<_DetailContent> {
-  var _unsupportedNoticeShown = false;
+  bool _accessNoticeShowing = false;
 
   CommunityResourceDetail get detail => widget.detail;
   String get targetCommentId => widget.targetCommentId;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _maybeShowUnsupportedDownloadNotice();
-  }
-
-  @override
-  void didUpdateWidget(covariant _DetailContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.detail.ref != widget.detail.ref) {
-      _unsupportedNoticeShown = false;
-    }
-    _maybeShowUnsupportedDownloadNotice();
-  }
-
-  void _maybeShowUnsupportedDownloadNotice() {
-    if (_unsupportedNoticeShown ||
-        detail.downloadRestriction !=
-            CommunityResourceDownloadRestriction.astroBoxCreatorEncrypted) {
-      return;
-    }
-    _unsupportedNoticeShown = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final l10n = AppLocalizations.of(context)!;
-      unawaited(
-        showDialog<void>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            icon: Icon(
-              Icons.lock_outline,
-              color: Theme.of(dialogContext).colorScheme.error,
-            ),
-            title: Text(l10n.resourceAstroBoxEncryptedTitle),
-            content: Text(l10n.resourceAstroBoxEncryptedMessage),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: Text(l10n.resourceAstroBoxEncryptedAction),
-              ),
-            ],
-          ),
-        ),
-      );
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
+    ref.listen(downloadQueueProvider, (previous, next) {
+      if (_accessNoticeShowing || ModalRoute.of(context)?.isCurrent == false) {
+        return;
+      }
+      for (final task in next) {
+        if (task.resource.ref != detail.ref ||
+            task.status != ResourceTaskStatus.failed ||
+            !isAstroBoxResourcePurchaseRequired(task.error)) {
+          continue;
+        }
+        final old = previous?.where((item) => item.id == task.id).firstOrNull;
+        if (old?.status == task.status && old?.error == task.error) continue;
+        _accessNoticeShowing = true;
+        unawaited(
+          showAstroBoxResourcePurchaseDialog(
+            context,
+            detail.ref,
+          ).whenComplete(() => _accessNoticeShowing = false),
+        );
+        break;
+      }
+    });
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context)!;
     final deviceState = ref.watch(deviceManagerProvider);
     final current = deviceState.currentDevice;
     final currentCodename = normalizeXiaomiWearableCodename(current?.codename);
     final isBandBbs = detail.ref.source == CommunitySourceId.bandbbs;
+    final isHuami = detail.ref.source == CommunitySourceId.huamiAppStore;
+    final deviceSource = isHuami
+        ? ref.read(deviceManagerProvider.notifier).currentZeppOsDeviceSource
+        : null;
     final previews = isBandBbs
         ? detail.previewImages
               .where(
@@ -215,54 +232,60 @@ class _DetailContentState extends ConsumerState<_DetailContent> {
             ),
             const SizedBox(height: 16),
           ],
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: _Actions(
-                  detail: detail,
-                  currentCodename: currentCodename,
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 108,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (detail.ref.source == CommunitySourceId.oronBox) ...[
-                      _CoinButton(resource: detail),
-                      const SizedBox(height: 6),
-                    ],
-                    FilledButton.tonalIcon(
-                      onPressed: () => showFeedbackComposer(
-                        context,
-                        target: FeedbackTarget(
-                          type: FeedbackTargetType.resource,
-                          source: detail.ref.source.name,
-                          id: detail.ref.id,
-                          name: detail.name,
-                          url: detail.links.firstOrNull?.url.toString() ?? '',
+          if (!isBandBbs &&
+              (isHuami
+                  ? deviceSource != null
+                  : currentCodename.isNotEmpty)) ...[
+            ResourceCompatibility(
+              detail: detail,
+              codename: deviceSource?.toString() ?? currentCodename,
+            ),
+            const SizedBox(height: 12),
+          ],
+          ResourceDetailActions(
+            detail: detail,
+            currentCodename: currentCodename,
+            secondaryActions: detail.ref.source == CommunitySourceId.oronBox
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(child: _CoinButton(resource: detail)),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: FilledButton.tonalIcon(
+                          onPressed: () => showFeedbackComposer(
+                            context,
+                            target: FeedbackTarget(
+                              type: FeedbackTargetType.resource,
+                              source: detail.ref.source.name,
+                              id: detail.ref.id,
+                              name: detail.name,
+                              url:
+                                  detail.links.firstOrNull?.url.toString() ??
+                                  '',
+                            ),
+                          ),
+                          icon: const Icon(Icons.flag_outlined),
+                          label: Text(
+                            l10n.report,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 36),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            visualDensity: VisualDensity.compact,
+                            backgroundColor: theme
+                                .colorScheme
+                                .surfaceContainerHighest
+                                .withValues(alpha: .62),
+                            foregroundColor: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
-                      icon: const Icon(Icons.flag_outlined),
-                      label: Text(l10n.report),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(36),
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        visualDensity: VisualDensity.compact,
-                        backgroundColor: theme
-                            .colorScheme
-                            .surfaceContainerHighest
-                            .withValues(alpha: .62),
-                        foregroundColor: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                    ],
+                  )
+                : null,
           ),
           if (detail.collectionName?.isNotEmpty == true) ...[
             const SizedBox(height: 12),
@@ -378,17 +401,6 @@ class _DetailContentState extends ConsumerState<_DetailContent> {
             const SizedBox(height: 24),
             _PreviewGallery(previews: previews),
           ],
-          if (!isBandBbs && currentCodename.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            _Compatibility(
-              detail: detail,
-              codename: currentCodename,
-              deviceName: xiaomiDisplayNameForIdentity(
-                name: current?.name.toString() ?? currentCodename,
-                codename: currentCodename,
-              ),
-            ),
-          ],
           if (detail.ref.source == CommunitySourceId.oronBox &&
               ref.watch(appSettingsProvider).clean.commentsEnabled) ...[
             const SizedBox(height: 28),
@@ -446,14 +458,14 @@ class _CoinButtonState extends ConsumerState<_CoinButton> {
           .read(oronBoxCoinServiceProvider)
           .coin(widget.resource.ref.id, count);
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
+      appScaffoldMessengerOf(context)
           .showSnackBar(SnackBar(content: Text(l10n.resourceCoinSuccess)));
       ref.invalidate(communityResourceDetailProvider(widget.resource.ref));
       ref.invalidate(oronBoxMyCoinsProvider(widget.resource.ref.id));
       ref.read(resourceRefreshProvider.notifier).refresh();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      appScaffoldMessengerOf(context).showSnackBar(
         SnackBar(content: Text(localizedErrorMessage(l10n, error))),
       );
     } finally {
@@ -506,9 +518,11 @@ class _CoinButtonState extends ConsumerState<_CoinButton> {
               : voted > 0
               ? l10n.resourceCoinVoted
               : l10n.resourceCoin,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(36),
+          minimumSize: const Size(0, 36),
           padding: const EdgeInsets.symmetric(horizontal: 10),
           visualDensity: VisualDensity.compact,
           backgroundColor: !isSignedIn || (voted > 0 && statusKnown)
@@ -788,7 +802,11 @@ class _CommentsSectionState extends ConsumerState<_CommentsSection> {
             label: Text(l10n.retry),
           )
         else if (_comments.isEmpty)
-          Text(l10n.commentEmpty)
+          EmptyStateView(
+            compact: true,
+            icon: Icons.chat_bubble_outline,
+            title: l10n.commentEmpty,
+          )
         else
           for (final comment in _comments) ...[
             _CommentTile(
@@ -1120,508 +1138,5 @@ class _PreviewGallery extends StatelessWidget {
     final height = image.height;
     if (width == null || height == null || height <= 0) return 3 / 2;
     return width / height;
-  }
-}
-
-class _Actions extends ConsumerStatefulWidget {
-  const _Actions({required this.detail, required this.currentCodename});
-  final CommunityResourceDetail detail;
-  final String currentCodename;
-
-  @override
-  ConsumerState<_Actions> createState() => _ActionsState();
-}
-
-class _ActionsState extends ConsumerState<_Actions> {
-  String? _sizeKey;
-  int? _preferredFileSize;
-  bool _probeScheduled = false;
-
-  CommunityResourceDetail get detail => widget.detail;
-  String get currentCodename => widget.currentCodename;
-
-  void _ensurePreferredFileSize(CommunityResourceFile? file) {
-    if (file == null) return;
-    final key = _fileSizeKey(file);
-    if (key == _sizeKey || _probeScheduled) return;
-    _probeScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _probeScheduled = false;
-      if (mounted) _probeFileSize(file, key);
-    });
-  }
-
-  Future<void> _probeFileSize(CommunityResourceFile file, String key) async {
-    if (!mounted) return;
-    setState(() {
-      _sizeKey = key;
-      _preferredFileSize = file.size;
-    });
-    if (file.size != null) return;
-    try {
-      final size = await ref
-          .read(communityCatalogProviderForSource(detail.ref.source))
-          .probeDownloadSize(file);
-      if (!mounted || _sizeKey != key) return;
-      setState(() => _preferredFileSize = size);
-    } catch (_) {
-      // A HEAD request is only an enhancement. The install action remains
-      // usable when a source does not expose Content-Length.
-    }
-  }
-
-  String _fileSizeKey(CommunityResourceFile file) =>
-      '${file.id}|${file.downloadUrl}';
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final files = detail.files;
-    final choices = buildResourceInstallChoices(detail);
-    final purchaseLink = detail.purchaseLink;
-    if (files.isEmpty && purchaseLink == null) {
-      return const SizedBox.shrink();
-    }
-    final preferred = preferredResourceInstallChoice(
-      detail,
-      choices,
-      currentCodename,
-    );
-    final preferredFile = preferred?.file;
-    _ensurePreferredFileSize(preferredFile);
-    final preferredFileKey = preferredFile == null
-        ? null
-        : _fileSizeKey(preferredFile);
-    final preferredFileSize = preferredFileKey == _sizeKey
-        ? _preferredFileSize
-        : preferredFile?.size;
-    final inDownloadQueue = ref.watch(
-      downloadQueueProvider.select(
-        (tasks) => tasks.any(
-          (task) =>
-              task.resource.ref == detail.ref &&
-              task.status != ResourceTaskStatus.completed,
-        ),
-      ),
-    );
-    final inInstallQueue = ref.watch(
-      installQueueProvider.select(
-        (state) => state.tasks.any(
-          (task) =>
-              task.resource?.ref == detail.ref &&
-              task.status != ResourceTaskStatus.completed,
-        ),
-      ),
-    );
-    final inQueue = inDownloadQueue || inInstallQueue;
-    final canInstall = detail.canDownload && !inQueue;
-    void enqueue(ResourceInstallChoice choice) {
-      final target = choice.codename.isNotEmpty
-          ? choice.codename
-          : currentCodename;
-      final accepted = ref
-          .read(downloadQueueProvider.notifier)
-          .enqueue(resource: detail, file: choice.file, codename: target);
-      if (!accepted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l10n.downloadStarted)));
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final expand = constraints.maxWidth < 520;
-        final color = Theme.of(context).colorScheme;
-        final baseLabel = inQueue ? l10n.productInQueue : l10n.install;
-        final sizeLabel = preferredFileSize == null
-            ? null
-            : _formatResourceFileSize(preferredFileSize);
-        final foreground = canInstall
-            ? context.appSelectionForeground
-            : color.onSurface.withValues(alpha: .38);
-        final buttonWidth = expand ? double.infinity : 200.0;
-        final installButton = files.isEmpty
-            ? null
-            : SizedBox(
-                width: buttonWidth,
-                child: MenuAnchor(
-                  style: const MenuStyle(
-                    alignment: AlignmentDirectional.topEnd,
-                  ),
-                  alignmentOffset: const Offset(0, 4),
-                  menuChildren: choices
-                      .map(
-                        (choice) => MenuItemButton(
-                          onPressed: canInstall ? () => enqueue(choice) : null,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 280),
-                            child: Text(
-                              choice.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  builder: (_, controller, _) => ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Material(
-                      color: canInstall
-                          ? context.appSelectionContainer
-                          : color.onSurface.withValues(alpha: .08),
-                      child: SizedBox(
-                        height: sizeLabel == null ? 48 : 58,
-                        child: preferred == null
-                            ? InkWell(
-                                onTap: canInstall
-                                    ? () => _toggleMenu(controller)
-                                    : null,
-                                child: _InstallButtonContent(
-                                  label: baseLabel,
-                                  sizeLabel: sizeLabel,
-                                  color: foreground,
-                                  trailing: const Icon(Icons.arrow_drop_down),
-                                ),
-                              )
-                            : Row(
-                                children: [
-                                  Expanded(
-                                    child: InkWell(
-                                      onTap: canInstall
-                                          ? () => enqueue(preferred)
-                                          : null,
-                                      child: _InstallButtonContent(
-                                        label: baseLabel,
-                                        sizeLabel: sizeLabel,
-                                        color: foreground,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(
-                                    height: 36,
-                                    child: VerticalDivider(
-                                      width: 1,
-                                      color: foreground.withValues(alpha: .20),
-                                    ),
-                                  ),
-                                  _InstallMenuHandle(
-                                    enabled: canInstall && choices.length > 1,
-                                    color: foreground,
-                                    onTap: () => _toggleMenu(controller),
-                                  ),
-                                ],
-                              ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-        final purchaseButton = purchaseLink == null
-            ? null
-            : SizedBox(
-                width: buttonWidth,
-                child: FilledButton.icon(
-                  onPressed: () =>
-                      openResourceExternalLink(context, purchaseLink),
-                  icon: const Icon(Icons.shopping_bag_outlined),
-                  label: Text(_purchaseLabel(l10n, detail)),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(48),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    alignment: Alignment.centerLeft,
-                    backgroundColor: context.appSelectionContainer.withValues(
-                      alpha: .58,
-                    ),
-                    foregroundColor: context.appSelectionForeground,
-                  ),
-                ),
-              );
-        return Column(
-          crossAxisAlignment: expand
-              ? CrossAxisAlignment.stretch
-              : CrossAxisAlignment.start,
-          children: [
-            if (installButton != null) installButton,
-            if (installButton != null && purchaseButton != null)
-              const SizedBox(height: 10),
-            if (purchaseButton != null) purchaseButton,
-          ],
-        );
-      },
-    );
-  }
-
-  String _purchaseLabel(AppLocalizations l10n, CommunityResourceDetail detail) {
-    final price = detail.purchasePrice;
-    if (price == null) return l10n.resourcePurchaseFullVersion;
-    final amount = price.toStringAsFixed(2);
-    final base = l10n.resourcePurchaseFullVersion;
-    return '$base (¥$amount)';
-  }
-
-  void _toggleMenu(MenuController controller) {
-    if (controller.isOpen) {
-      controller.close();
-    } else {
-      controller.open();
-    }
-  }
-}
-
-String _formatResourceFileSize(int bytes) {
-  if (bytes < 1024) return '$bytes B';
-  if (bytes < 1024 * 1024) {
-    final value = bytes / 1024;
-    return '${value.toStringAsFixed(value >= 100 ? 0 : 1)} KB';
-  }
-  if (bytes < 1024 * 1024 * 1024) {
-    final value = bytes / (1024 * 1024);
-    return '${value.toStringAsFixed(value >= 100 ? 0 : 1)} MB';
-  }
-  final value = bytes / (1024 * 1024 * 1024);
-  return '${value.toStringAsFixed(value >= 100 ? 0 : 2)} GB';
-}
-
-class ResourceInstallChoice {
-  const ResourceInstallChoice({
-    required this.file,
-    required this.codename,
-    required this.label,
-  });
-
-  final CommunityResourceFile file;
-  final String codename;
-  final String label;
-}
-
-List<ResourceInstallChoice> buildResourceInstallChoices(
-  CommunityResourceDetail detail,
-) {
-  final choices = <ResourceInstallChoice>[];
-  for (final file in detail.files) {
-    if (detail.ref.source == CommunitySourceId.bandbbs ||
-        detail.ref.source == CommunitySourceId.huamiAppStore) {
-      choices.add(
-        ResourceInstallChoice(file: file, codename: '', label: file.fileName),
-      );
-      continue;
-    }
-    final devices = file.supportedDevices.isNotEmpty
-        ? file.supportedDevices
-        : detail.supportedDevices;
-    if (devices.isEmpty) {
-      choices.add(
-        ResourceInstallChoice(file: file, codename: '', label: file.label),
-      );
-      continue;
-    }
-    for (final device in devices) {
-      final codename = normalizeXiaomiWearableCodename(device);
-      if (codename.isEmpty) continue;
-      choices.add(
-        ResourceInstallChoice(
-          file: file,
-          codename: codename,
-          label: xiaomiDisplayNameForIdentity(
-            name: codename,
-            codename: codename,
-          ),
-        ),
-      );
-    }
-  }
-  return choices;
-}
-
-ResourceInstallChoice? preferredResourceInstallChoice(
-  CommunityResourceDetail detail,
-  List<ResourceInstallChoice> choices,
-  String currentCodename,
-) {
-  if (detail.ref.source == CommunitySourceId.huamiAppStore ||
-      detail.ref.source == CommunitySourceId.bandbbs) {
-    return choices.firstOrNull;
-  }
-  return choices
-      .where((choice) => _matchesDevice(choice.file, currentCodename))
-      .where(
-        (choice) =>
-            choice.codename.isEmpty ||
-            normalizeXiaomiWearableCodename(choice.codename) == currentCodename,
-      )
-      .firstOrNull;
-}
-
-bool _matchesDevice(CommunityResourceFile file, String codename) {
-  if (file.supportedDevices.isEmpty) return true;
-  return file.supportedDevices
-      .map(normalizeXiaomiWearableCodename)
-      .contains(codename);
-}
-
-class _InstallButtonContent extends StatelessWidget {
-  const _InstallButtonContent({
-    required this.label,
-    required this.color,
-    this.sizeLabel,
-    this.trailing,
-  });
-
-  final String label;
-  final Color color;
-  final String? sizeLabel;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) => SizedBox.expand(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          Icon(Icons.download, color: color),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: color, fontWeight: FontWeight.w700),
-                ),
-                if (sizeLabel != null)
-                  Text(
-                    sizeLabel!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: color.withValues(alpha: .72),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (trailing != null) ...[
-            const SizedBox(width: 8),
-            IconTheme(
-              data: IconThemeData(color: color),
-              child: trailing!,
-            ),
-          ],
-        ],
-      ),
-    ),
-  );
-}
-
-class _InstallMenuHandle extends StatelessWidget {
-  const _InstallMenuHandle({
-    required this.enabled,
-    required this.color,
-    required this.onTap,
-  });
-
-  final bool enabled;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 48,
-      height: double.infinity,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        child: Icon(Icons.arrow_drop_down, color: color),
-      ),
-    );
-  }
-}
-
-class _Compatibility extends StatelessWidget {
-  const _Compatibility({
-    required this.detail,
-    required this.codename,
-    required this.deviceName,
-  });
-  final CommunityResourceDetail detail;
-  final String codename;
-  final String deviceName;
-  @override
-  Widget build(BuildContext context) {
-    final compatible = detail.files.any(
-      (file) => _matchesDevice(file, codename),
-    );
-    final versions = detail.files
-        .expand((file) => file.supportedDevices)
-        .map(normalizeXiaomiWearableCodename)
-        .where((value) => value.isNotEmpty)
-        .toSet();
-    final color = Theme.of(context).colorScheme;
-    final statusColor = compatible ? context.appColors.success : color.error;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          AppLocalizations.of(context)!.productDeviceRequirements,
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              compatible ? Icons.check_circle : Icons.cancel,
-              size: 20,
-              color: statusColor,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                compatible
-                    ? '${AppLocalizations.of(context)!.compatible} $deviceName'
-                    : '${AppLocalizations.of(context)!.incompatible} $deviceName ${AppLocalizations.of(context)!.incompatibleSuffix}',
-                style: Theme.of(context).textTheme.titleSmall
-                    ?.copyWith(color: statusColor, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        ),
-        if (versions.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
-            AppLocalizations.of(context)!.productOtherVersions,
-            style: Theme.of(context).textTheme.bodyMedium
-                ?.copyWith(color: color.onSurfaceVariant),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: versions.map((version) {
-              final selected = version == codename;
-              return Chip(
-                label: Text(
-                  xiaomiDisplayNameForIdentity(
-                    name: version,
-                    codename: version,
-                  ),
-                ),
-                backgroundColor: selected
-                    ? context.appSelectionContainer
-                    : color.surfaceContainerHighest,
-                side: BorderSide.none,
-                visualDensity: VisualDensity.compact,
-              );
-            }).toList(),
-          ),
-        ],
-      ],
-    );
   }
 }

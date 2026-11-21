@@ -150,5 +150,4 @@ tmp/
 # Local documentation & research
 docs/
 
-# Pinned dependencies for vendored WASM runtime backends.
-!/packages/wasm_run/native/locks/*.lock
+/pubspec_overrides.yaml

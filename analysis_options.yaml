@@ -12,7 +12,7 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - build/**
-    - packages/desktop_webview_window/example/**
+    - packages/**
     - android/**
     - ios/**
     - web/**

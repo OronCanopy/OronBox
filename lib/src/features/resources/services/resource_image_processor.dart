@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:oronbox/src/core/wasm/wasm_webp_encoder.dart';
+import 'package:oronbox/src/core/wasm/wasm_compatibility.dart';
+import 'package:oronbox/src/core/wasm/wasm_compilation_cache.dart';
 
 /// The canonical dimensions used by creator media.
 const creatorIconMaxDimension = 256;
@@ -26,6 +28,7 @@ Future<ProcessedResourceImage?> processResourceImage(
   int maxDimension = creatorMediaMaxDimension,
   double quality = 75,
 }) async {
+  await WasmCompatibility.shared.ensureAllowed(interactive: true);
   if (kIsWeb) {
     final encoder = await WasmWebpEncoder.instance();
     return _encodeResourceImage(
@@ -148,7 +151,7 @@ final class _ResourceImageWorker {
   static Future<_ResourceImageWorker> instance() {
     final existing = _shared;
     if (existing != null) return existing;
-    final started = _start();
+    final started = WasmCompatibility.shared.run('core', _start);
     _shared = started.catchError((Object error, StackTrace stack) {
       _shared = null;
       Error.throwWithStackTrace(error, stack);
@@ -180,6 +183,7 @@ final class _ResourceImageWorker {
           );
         }
       });
+      final cacheDirectory = await WasmCompilationCache.prepare();
       final data = await rootBundle.load(WasmWebpEncoder.assetPath);
       isolate = await Isolate.spawn<List<Object?>>(
         _resourceImageWorkerMain,
@@ -188,6 +192,7 @@ final class _ResourceImageWorker {
           TransferableTypedData.fromList([
             data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
           ]),
+          cacheDirectory,
         ],
         debugName: 'oronbox.resource-image-worker',
       );
@@ -319,6 +324,7 @@ void _resourceImageWorkerMain(List<Object?> bootstrap) {
 
   () async {
     try {
+      WasmCompilationCache.inheritConfiguration(bootstrap[2] as String?);
       final encoder = await WasmWebpEncoder.fromBytes(wasmData);
       responses.send(<String, Object?>{
         'type': 'ready',

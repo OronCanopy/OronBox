@@ -11,6 +11,8 @@ class BluetoothEndpoint {
     required this.connectType,
     this.rssi,
     this.serviceUuids = const [],
+    this.pdId,
+    this.xiaomiRegistered,
   });
 
   final String name;
@@ -18,6 +20,8 @@ class BluetoothEndpoint {
   final ConnectType connectType;
   final int? rssi;
   final List<String> serviceUuids;
+  final int? pdId;
+  final bool? xiaomiRegistered;
 }
 
 class BluetoothScanOptions {

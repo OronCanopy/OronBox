@@ -250,9 +250,11 @@ class _CreatorCollectionPageState extends ConsumerState<CreatorCollectionPage> {
         .resources
         .where(
           (w) =>
-              (w.resource.kind == CreatorResourceKind.watchface
-                      ? 'watchface'
-                      : 'quickapp') ==
+              (switch (w.resource.kind) {
+                    CreatorResourceKind.watchface => 'watchface',
+                    CreatorResourceKind.canopus => 'canopus',
+                    CreatorResourceKind.quickApp => 'quickapp',
+                  }) ==
                   _kind &&
               (w.resource.collectionId.isEmpty ||
                   w.resource.collectionId == widget.collectionId),

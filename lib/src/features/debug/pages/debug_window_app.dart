@@ -1,3 +1,4 @@
+import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 
 import 'dart:async';
@@ -282,11 +283,22 @@ class _DebugWindowPageState extends ConsumerState<DebugWindowPage>
         const Divider(height: 1),
         Expanded(
           child: _error != null
-              ? Center(child: Text(_error.toString()))
+              ? ErrorStateView(
+                  compact: true,
+                  message: _error.toString(),
+                  onRetry: _load,
+                )
               : TabBarView(
                   controller: _tabs,
+                  physics: const NeverScrollableScrollPhysics(),
                   children: [
-                    DebugConsole(records: _visibleRecords),
+                    DebugConsole(
+                      records: _visibleRecords,
+                      filtered:
+                          _source != 'all' ||
+                          _level != 'ALL' ||
+                          _search.text.trim().isNotEmpty,
+                    ),
                     DebugLayoutInspector(
                       nodes: debugLayoutNodes(_selectedPlugin?['layout']),
                     ),
@@ -467,7 +479,11 @@ class _ProtocolTraceInspector extends StatelessWidget {
         const Divider(height: 1),
         Expanded(
           child: traces.isEmpty
-              ? const Center(child: Text('No protocol events captured'))
+              ? EmptyStateView(
+                  compact: true,
+                  icon: Icons.swap_vert,
+                  title: AppLocalizations.of(context)!.debugNoProtocolEvents,
+                )
               : SelectionArea(
                   child: ListView.builder(
                     itemCount: traces.length,

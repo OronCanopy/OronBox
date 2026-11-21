@@ -620,6 +620,43 @@ class MiAccountService {
     );
   }
 
+  Future<Map<String, dynamic>> requestDeviceBinding({
+    required MiAccountToken token,
+    required String step,
+    required Map<String, Object?> data,
+    String? locale,
+  }) async {
+    if (!const {'hello', 'ecdh', 'bind'}.contains(step)) {
+      throw ArgumentError.value(step, 'step');
+    }
+    final url = Uri.https(
+      '${token.region.hostPrefix}hlth.io.mi.com',
+      '/healthapp/bind/$step',
+      locale == null ? null : {'locale': locale},
+    );
+    final body = await _miServiceCallEncrypted(
+      token: token,
+      url: url.toString(),
+      signaturePath: '/bind/$step',
+      paramsPlain: {'data': jsonEncode(data)},
+      userAgent: defaultUserAgent,
+    );
+    final payload = jsonDecode(body) as Map<String, dynamic>;
+    final code = _parseCode(payload);
+    if (_isSessionFailureCode(code)) {
+      await invalidateStoredToken(token);
+      throw MiAccountSessionExpired(statusCode: code);
+    }
+    if (code != 0 && code != 200) {
+      throw StateError('Xiaomi binding request rejected ($step: $code)');
+    }
+    final result = payload['result'];
+    if (result is! Map<String, dynamic>) {
+      throw FormatException('Xiaomi binding response is missing result ($step)');
+    }
+    return result;
+  }
+
   Future<String> _miServiceCallEncrypted({
     required MiAccountToken token,
     required String url,

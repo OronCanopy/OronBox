@@ -14,14 +14,10 @@ class PluginCatalogEntry {
     required this.description,
     required this.permissions,
     this.iconUrl,
-    this.uploaderId,
-    this.uploaderName,
-    this.owned = false,
-    this.moderationState,
-    this.moderationReason,
-    this.isLegacy = false,
+    this.runtime = 'wasm',
   });
 
+  final String runtime;
   final String source;
   final String id;
 
@@ -37,24 +33,8 @@ class PluginCatalogEntry {
   /// 图标 URL，可能为空；UI 直接按 URL 加载，不经命令通道传输。
   final String? iconUrl;
 
-  /// 上传者（仅 OronBox 源有）。与当前登录用户一致时提供更新/下架。
-  final String? uploaderId;
-  final String? uploaderName;
-
-  /// 当前登录用户即上传者（服务端判断，未登录时恒为 false）。
-  final bool owned;
-
-  /// 审核状态（仅 OronBox 源且 [owned] 时有值）：
-  /// pending/listed/rejected/delisted。
-  final String? moderationState;
-
-  /// 拒绝或下架原因（仅 [owned] 时有值）。
-  final String? moderationReason;
-
-  /// 遗产插件（如 ABv1）：不做更新检测，仅区分安装/已安装。
-  final bool isLegacy;
-
   Map<String, Object?> toJson() => {
+    'runtime': runtime,
     'source': source,
     'id': id,
     'installedId': installedId,
@@ -64,12 +44,6 @@ class PluginCatalogEntry {
     'description': description,
     'permissions': permissions,
     if (iconUrl != null) 'iconUrl': iconUrl,
-    if (uploaderId != null) 'uploaderId': uploaderId,
-    if (uploaderName != null) 'uploaderName': uploaderName,
-    if (owned) 'owned': true,
-    if (moderationState != null) 'state': moderationState,
-    if (moderationReason != null) 'moderationReason': moderationReason,
-    'legacy': isLegacy,
   };
 }
 
@@ -78,14 +52,11 @@ class PluginCatalogEntry {
 /// 一个仓库对应一个可枚举、可下载的插件目录。实现必须可独立
 /// 加载目录与下载插件包，安装本身由 [PluginManager] 统一处理。
 abstract interface class PluginRepository {
-  /// 源标识，跨进程传输时使用（如 `abv1`、`oronbox`）。
+  /// 源标识，跨进程传输时使用（如 `astrobox_ng`）。
   String get id;
 
   /// 展示名。
   String get displayName;
-
-  /// 是否为遗产插件源。
-  bool get isLegacy;
 
   /// 加载目录。调用方应缓存结果，[force] 为 true 时强制刷新。
   Future<List<PluginCatalogEntry>> load({bool force = false});

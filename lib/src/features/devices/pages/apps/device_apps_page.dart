@@ -1,7 +1,10 @@
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/utils/error_localization.dart';
+import 'package:oronbox/src/app/utils/picked_file.dart';
 import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:oronbox/src/app/widgets/page_container.dart';
 import 'package:oronbox/src/app/widgets/sys_app_bar.dart';
@@ -10,6 +13,8 @@ import 'package:oronbox/src/core/models/bt_models.dart';
 import 'package:oronbox/src/device/zeppos/app_side/zeppos_app_side_storage.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 import 'package:oronbox/src/features/devices/pages/tools/zeppos_setting_viewer_page.dart';
+import 'package:oronbox/src/features/resources/services/resource_payload_analyzer.dart';
+import 'package:oronbox/src/features/resources/widgets/resource_install_confirmation.dart';
 import 'package:oronbox/src/device/core/device_state.dart' as proto;
 
 class DeviceAppsPage extends ConsumerStatefulWidget {
@@ -44,6 +49,21 @@ class _DeviceAppsPageState extends ConsumerState<DeviceAppsPage> {
     }
   }
 
+  Future<void> _install() async {
+    final file = await pickFileData(
+      type: FileType.any,
+      loadBytes: shouldLoadPickedFileData,
+    );
+    final selected = file?.xFile;
+    if (selected == null || !mounted) return;
+    await confirmAndEnqueueResourceFile(
+      context: context,
+      ref: ref,
+      file: selected,
+      selectedType: LocalDeviceInstallType.app,
+    );
+  }
+
   List<AppInfo> _filterApps(List<AppInfo> apps) {
     if (_showSystemApps) return apps;
     return apps
@@ -63,6 +83,11 @@ class _DeviceAppsPageState extends ConsumerState<DeviceAppsPage> {
         secondary: true,
         title: Text(l10n.appManagementTitle),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: ready ? _install : null,
+            tooltip: l10n.deviceFeaturesInstallApp,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _refresh,
@@ -94,7 +119,15 @@ class _DeviceAppsPageState extends ConsumerState<DeviceAppsPage> {
           : displayedApps.isEmpty
           ? EmptyStateView(
               icon: Icons.apps_outlined,
-              title: l10n.appManagementNone,
+              title: state.apps.isEmpty
+                  ? l10n.appManagementNone
+                  : l10n.appManagementNoVisibleApps,
+              action: state.apps.isEmpty
+                  ? null
+                  : TextButton(
+                      onPressed: () => setState(() => _showSystemApps = true),
+                      child: Text(l10n.appManagementShowSystemApps),
+                    ),
             )
           : PageContainer(
               padding: EdgeInsets.zero,
@@ -168,7 +201,7 @@ class _AppActions extends StatelessWidget {
                 }
               } catch (e) {
                 if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
+                appScaffoldMessengerOf(context).showSnackBar(
                   SnackBar(content: Text(localizedErrorMessage(l10n, e))),
                 );
               }

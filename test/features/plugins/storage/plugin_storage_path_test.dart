@@ -30,9 +30,10 @@ void main() {
         '/data//secret',
         r'/data\secret',
         '/data/secret\u0000suffix',
-        '/data/.oronbox',
-        '/data/.oronbox-secret',
         '/unknown/file',
+        '/data/.meta/host.json',
+        '/data/.meta/permissions.json',
+        '/data/.oronbox/permissions.json',
       ]) {
         expect(
           () => PluginStoragePath.parse(path),

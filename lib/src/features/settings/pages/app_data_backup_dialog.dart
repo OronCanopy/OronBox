@@ -1,3 +1,4 @@
+import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 
@@ -60,7 +61,7 @@ Future<BackupSelection?> showBackupSelectionDialog(
           bool value,
           bool enabled,
           void Function(bool) changed,
-        ) => CheckboxListTile(
+        ) => AppCheckboxTile(
           contentPadding: EdgeInsets.zero,
           title: Text(title),
           subtitle: Text(

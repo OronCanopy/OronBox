@@ -1,3 +1,5 @@
+import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
+
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,11 @@ import 'package:oronbox/src/host/application_host_provider.dart';
 
 import 'global_modal_coordinator.dart';
 import 'global_modal_models.dart';
+import 'wasm_compatibility_dialog.dart';
+
+import 'package:oronbox/src/core/wasm/wasm_compatibility.dart';
+import 'package:oronbox/src/core/wasm/wasm_compatibility_probe.dart';
+import 'package:oronbox/src/core/logging/logging_service.dart';
 
 class GlobalModalHost extends ConsumerStatefulWidget {
   const GlobalModalHost({super.key, required this.child});
@@ -24,19 +31,70 @@ class GlobalModalHost extends ConsumerStatefulWidget {
 
 class _GlobalModalHostState extends ConsumerState<GlobalModalHost> {
   StreamSubscription<CommandEvent>? _commandEventSub;
+  Completer<bool>? _wasmResult;
   bool _isShowing = false;
   String? _currentShowingId;
+  DialogRoute<void>? _currentRoute;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_initializeWasm());
       _initEventListener();
       final active = ref.read(globalModalCoordinatorProvider).activeModal;
       if (active != null) {
         _presentModal(active);
       }
     });
+  }
+
+  Future<void> _initializeWasm() async {
+    final compatibility = WasmCompatibility.shared;
+    compatibility.requestTest = _requestWasmTest;
+    try {
+      await compatibility.initialize();
+      if (mounted && compatibility.shouldPromptOnStartup) {
+        await compatibility.ensureAllowed(interactive: true);
+      }
+    } on WasmCompatibilityRequired {
+      // Deferring startup leaves automatic tasks paused without another prompt.
+    } catch (error, stack) {
+      getLogger('WasmCompatibility')
+          .warning('Compatibility startup failed', error, stack);
+    }
+  }
+
+  Future<bool> _requestWasmTest() {
+    if (!mounted) return Future.value(false);
+    if (_wasmResult case final pending?) return pending.future;
+    final result = Completer<bool>();
+    _wasmResult = result;
+    ref
+        .read(globalModalCoordinatorProvider.notifier)
+        .enqueue(
+          WasmCompatibilityModalRequest(
+            test: testWasmCompatibility,
+            defer: WasmCompatibility.shared.defer,
+            onComplete: (passed) {
+              if (!result.isCompleted) result.complete(passed);
+              if (identical(_wasmResult, result)) _wasmResult = null;
+            },
+          ),
+        );
+    return result.future;
+  }
+
+  Future<void> _deferWasm(WasmCompatibilityModalRequest request) async {
+    try {
+      await request.defer();
+    } catch (error, stack) {
+      getLogger('WasmCompatibility')
+          .warning('Unable to save deferred test', error, stack);
+    } finally {
+      request.onComplete(false);
+    }
   }
 
   void _initEventListener() {
@@ -97,12 +155,12 @@ class _GlobalModalHostState extends ConsumerState<GlobalModalHost> {
   }
 
   void _presentModal(GlobalModalRequest modal) {
+    if (modal.isExpired) {
+      ref.read(globalModalCoordinatorProvider.notifier).dismiss(modal.id);
+      return;
+    }
     if (_isShowing) {
-      if (_currentShowingId == modal.id) return;
-      final navigator = rootNavigatorKey.currentState;
-      if (navigator != null && navigator.canPop()) {
-        navigator.pop();
-      }
+      if (_currentShowingId != modal.id) _removeCurrentRoute();
       return;
     }
 
@@ -124,35 +182,48 @@ class _GlobalModalHostState extends ConsumerState<GlobalModalHost> {
       handled = true;
     }
 
-    showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          routeSettings: RouteSettings(name: 'GlobalModal_${modal.id}'),
-          builder: (dialogContext) =>
-              _buildModalContent(dialogContext, modal, onComplete: markHandled),
-        )
-        .then((_) {
-          if (!handled) {
-            _handleDismiss(modal);
-          }
-          _isShowing = false;
-          _currentShowingId = null;
+    final route = _currentRoute = DialogRoute<void>(
+      context: context,
+      barrierDismissible: false,
+      settings: RouteSettings(name: 'GlobalModal_${modal.id}'),
+      builder: (dialogContext) =>
+          _buildModalContent(dialogContext, modal, onComplete: markHandled),
+    );
+    unawaited(
+      Navigator.of(context, rootNavigator: true).push(route).whenComplete(() {
+        if (!mounted) return;
+        final state = ref.read(globalModalCoordinatorProvider);
+        final preempted =
+            modal is UpdateModalRequest &&
+            state.queue.any((item) => item.id == modal.id);
+        if (!handled && !preempted) _handleDismiss(modal);
+        _isShowing = false;
+        _currentShowingId = null;
+        _currentRoute = null;
+        if (!preempted)
           ref.read(globalModalCoordinatorProvider.notifier).dismiss(modal.id);
-        })
-        .catchError((_) {
-          _isShowing = false;
-          _currentShowingId = null;
-          ref.read(globalModalCoordinatorProvider.notifier).dismiss(modal.id);
-        });
+        final next = ref.read(globalModalCoordinatorProvider).activeModal;
+        if (next != null) _presentModal(next);
+      }),
+    );
+  }
+
+  void _removeCurrentRoute() {
+    final route = _currentRoute;
+    if (route?.isActive == true) route!.navigator?.removeRoute(route);
   }
 
   void _handleDismiss(GlobalModalRequest request) {
-    if (request is LocalServerPairingModalRequest) {
+    if (request is WasmCompatibilityModalRequest) {
+      unawaited(_deferWasm(request));
+    } else if (request is LocalServerPairingModalRequest) {
       request.onReject();
     } else if (request is DeviceWifiPasswordModalRequest) {
       request.onCancel();
     } else if (request is AnnouncementModalRequest) {
       request.onAcknowledge();
+    } else if (request is UpdateModalRequest) {
+      request.onDismiss();
     }
   }
 
@@ -161,6 +232,9 @@ class _GlobalModalHostState extends ConsumerState<GlobalModalHost> {
     GlobalModalRequest request, {
     required VoidCallback onComplete,
   }) {
+    if (request is WasmCompatibilityModalRequest) {
+      return WasmCompatibilityDialog(modal: request, onComplete: onComplete);
+    }
     if (request is LocalServerPairingModalRequest) {
       return _LocalServerPairingDialog(modal: request, onComplete: onComplete);
     }
@@ -170,11 +244,17 @@ class _GlobalModalHostState extends ConsumerState<GlobalModalHost> {
     if (request is AnnouncementModalRequest) {
       return _AnnouncementDialog(modal: request, onComplete: onComplete);
     }
+    if (request is UpdateModalRequest) {
+      return request.buildDialog(context, onComplete);
+    }
     return const SizedBox.shrink();
   }
 
   @override
   void dispose() {
+    WasmCompatibility.shared.requestTest = null;
+    final result = _wasmResult;
+    if (result != null && !result.isCompleted) result.complete(false);
     _commandEventSub?.cancel();
     super.dispose();
   }
@@ -185,12 +265,17 @@ class _GlobalModalHostState extends ConsumerState<GlobalModalHost> {
       previous,
       next,
     ) {
-      final active = next.activeModal;
-      if (active != null && active.id != _currentShowingId) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _presentModal(active);
-        });
-      }
+      if (next.activeModal?.id == _currentShowingId) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final active = ref.read(globalModalCoordinatorProvider).activeModal;
+        if (active != null) {
+          _presentModal(active);
+        } else {
+          _removeCurrentRoute();
+        }
+      });
+      WidgetsBinding.instance.ensureVisualUpdate();
     });
 
     return widget.child;
@@ -263,7 +348,7 @@ class _LocalServerPairingDialogState extends State<_LocalServerPairingDialog> {
               ),
             ],
             const SizedBox(height: 12),
-            CheckboxListTile(
+            AppCheckboxTile(
               value: _remember,
               onChanged: (v) => setState(() => _remember = v ?? true),
               title: Text(l10n.localServerPairingAlwaysAllow),

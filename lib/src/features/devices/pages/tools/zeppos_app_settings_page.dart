@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:segmented_list/segmented_list.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
@@ -61,7 +62,7 @@ class _ZeppOsAppSettingsPageState extends State<ZeppOsAppSettingsPage> {
       }
       _reload();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      appScaffoldMessengerOf(context).showSnackBar(
         SnackBar(
           content: Text(
             l10n.zeppOsAppCompatibilitySaved(_formatId(result.appId)),
@@ -70,7 +71,7 @@ class _ZeppOsAppSettingsPageState extends State<ZeppOsAppSettingsPage> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      appScaffoldMessengerOf(context).showSnackBar(
         SnackBar(content: Text(localizedErrorMessage(l10n, error))),
       );
     }
@@ -86,7 +87,7 @@ class _ZeppOsAppSettingsPageState extends State<ZeppOsAppSettingsPage> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      appScaffoldMessengerOf(context).showSnackBar(
         SnackBar(content: Text(localizedErrorMessage(l10n, error))),
       );
     }
@@ -109,14 +110,14 @@ class _ZeppOsAppSettingsPageState extends State<ZeppOsAppSettingsPage> {
       if (updated == null) return;
       await coordinator.replace(item.appId, updated, origin: this);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      appScaffoldMessengerOf(context).showSnackBar(
         SnackBar(
           content: Text(l10n.zeppOsAppStorageSaved(_formatId(item.appId))),
         ),
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      appScaffoldMessengerOf(context).showSnackBar(
         SnackBar(content: Text(localizedErrorMessage(l10n, error))),
       );
     }
@@ -141,8 +142,9 @@ class _ZeppOsAppSettingsPageState extends State<ZeppOsAppSettingsPage> {
         future: _items,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(
-              child: Text(localizedErrorMessage(l10n, snapshot.error)),
+            return ErrorStateView(
+              message: localizedErrorMessage(l10n, snapshot.error),
+              onRetry: _reload,
             );
           }
           if (!snapshot.hasData) {
@@ -150,8 +152,10 @@ class _ZeppOsAppSettingsPageState extends State<ZeppOsAppSettingsPage> {
           }
           final items = snapshot.data!;
           if (items.isEmpty) {
-            return Center(
-              child: FilledButton.icon(
+            return EmptyStateView(
+              icon: Icons.apps_outlined,
+              title: l10n.zeppOsAppCompatibilityEmpty,
+              action: FilledButton.icon(
                 onPressed: _supplement,
                 icon: const Icon(Icons.add),
                 label: Text(l10n.zeppOsAppSupplementCompatibility),

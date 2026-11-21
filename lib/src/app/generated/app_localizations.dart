@@ -145,11 +145,17 @@ abstract class AppLocalizations {
   /// **'Plugin market'**
   String get pluginMarket;
 
-  /// No description provided for @pluginMarketUnavailable.
+  /// No description provided for @pluginMarketEmpty.
   ///
   /// In en, this message translates to:
-  /// **'The plugin market is not available yet'**
-  String get pluginMarketUnavailable;
+  /// **'No plugins available'**
+  String get pluginMarketEmpty;
+
+  /// No description provided for @pluginSearchEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching plugins'**
+  String get pluginSearchEmpty;
 
   /// No description provided for @pluginEmpty.
   ///
@@ -211,18 +217,6 @@ abstract class AppLocalizations {
   /// **'Permissions'**
   String get pluginPermissions;
 
-  /// No description provided for @pluginInstallConfirmTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Confirm plugin installation'**
-  String get pluginInstallConfirmTitle;
-
-  /// No description provided for @pluginUpdateConfirmTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Confirm plugin update'**
-  String get pluginUpdateConfirmTitle;
-
   /// No description provided for @pluginDeclaredPermissions.
   ///
   /// In en, this message translates to:
@@ -252,72 +246,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The plugin\'s data will also be removed'**
   String get pluginUninstallMessage;
-
-  /// No description provided for @pluginUpload.
-  ///
-  /// In en, this message translates to:
-  /// **'Upload plugin'**
-  String get pluginUpload;
-
-  /// No description provided for @pluginPublishTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Publish plugin'**
-  String get pluginPublishTitle;
-
-  /// No description provided for @pluginPublishNew.
-  ///
-  /// In en, this message translates to:
-  /// **'Will be published as a new plugin'**
-  String get pluginPublishNew;
-
-  /// No description provided for @pluginPublishUpdate.
-  ///
-  /// In en, this message translates to:
-  /// **'Will update the published plugin with the same ID'**
-  String get pluginPublishUpdate;
-
-  /// No description provided for @pluginTakedown.
-  ///
-  /// In en, this message translates to:
-  /// **'Take down'**
-  String get pluginTakedown;
-
-  /// No description provided for @pluginTakedownConfirm.
-  ///
-  /// In en, this message translates to:
-  /// **'The plugin will be permanently removed from the market'**
-  String get pluginTakedownConfirm;
-
-  /// No description provided for @pluginLoginRequired.
-  ///
-  /// In en, this message translates to:
-  /// **'Sign in to upload plugins'**
-  String get pluginLoginRequired;
-
-  /// No description provided for @pluginSubmittedForReview.
-  ///
-  /// In en, this message translates to:
-  /// **'Submitted for review. It will be listed once approved'**
-  String get pluginSubmittedForReview;
-
-  /// No description provided for @pluginStatePending.
-  ///
-  /// In en, this message translates to:
-  /// **'Pending review'**
-  String get pluginStatePending;
-
-  /// No description provided for @pluginStateRejected.
-  ///
-  /// In en, this message translates to:
-  /// **'Rejected'**
-  String get pluginStateRejected;
-
-  /// No description provided for @pluginStateDelisted.
-  ///
-  /// In en, this message translates to:
-  /// **'Delisted'**
-  String get pluginStateDelisted;
 
   /// No description provided for @pluginLegacyWarningTitle.
   ///
@@ -426,6 +354,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Resource summary'**
   String get creatorResourceSummary;
+
+  /// No description provided for @creatorSummaryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Brief one or two sentences, single-line plain text'**
+  String get creatorSummaryHint;
+
+  /// No description provided for @creatorDescriptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Detailed description, supports multi-line Markdown'**
+  String get creatorDescriptionHint;
 
   /// No description provided for @creatorResourceMetadataRequired.
   ///
@@ -631,23 +571,11 @@ abstract class AppLocalizations {
   /// **'Each resource file must bind at least one device'**
   String get creatorAtLeastOneDevice;
 
-  /// No description provided for @resourceAstroBoxEncryptedTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'OronBox cannot process this AstroBox resource'**
-  String get resourceAstroBoxEncryptedTitle;
-
-  /// No description provided for @resourceAstroBoxEncryptedMessage.
-  ///
-  /// In en, this message translates to:
-  /// **'This resource uses AstroBox Creator Console\'s private encrypted upload. OronBox cannot decrypt, download, or install it. Please open it with AstroBox instead.'**
-  String get resourceAstroBoxEncryptedMessage;
-
-  /// No description provided for @resourceAstroBoxEncryptedAction.
+  /// No description provided for @resourceAstroBoxPurchaseAction.
   ///
   /// In en, this message translates to:
   /// **'Got it'**
-  String get resourceAstroBoxEncryptedAction;
+  String get resourceAstroBoxPurchaseAction;
 
   /// No description provided for @filter.
   ///
@@ -1075,6 +1003,18 @@ abstract class AppLocalizations {
   /// **'Watchface count'**
   String get deviceWatchfaceCount;
 
+  /// No description provided for @deviceModuleCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Module count'**
+  String get deviceModuleCount;
+
+  /// No description provided for @modules.
+  ///
+  /// In en, this message translates to:
+  /// **'Modules'**
+  String get modules;
+
   /// No description provided for @connection.
   ///
   /// In en, this message translates to:
@@ -1483,6 +1423,12 @@ abstract class AppLocalizations {
   /// **'Install watchface'**
   String get deviceFeaturesInstallWatchface;
 
+  /// No description provided for @deviceFeaturesInstallModule.
+  ///
+  /// In en, this message translates to:
+  /// **'Install module'**
+  String get deviceFeaturesInstallModule;
+
   /// No description provided for @deviceFeaturesInstallFirmware.
   ///
   /// In en, this message translates to:
@@ -1555,11 +1501,17 @@ abstract class AppLocalizations {
   /// **'Download latest full package'**
   String get firmwareDownloadLatestFull;
 
-  /// No description provided for @firmwareUpdateNow.
+  /// No description provided for @firmwareUpdateIncrementalPackage.
   ///
   /// In en, this message translates to:
-  /// **'Update'**
-  String get firmwareUpdateNow;
+  /// **'Install incremental update'**
+  String get firmwareUpdateIncrementalPackage;
+
+  /// No description provided for @firmwareUpdateFullPackage.
+  ///
+  /// In en, this message translates to:
+  /// **'Install full update'**
+  String get firmwareUpdateFullPackage;
 
   /// No description provided for @firmwareReleaseNotes.
   ///
@@ -1692,18 +1644,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Request the next recording when the current one ends'**
   String get voiceLabContinuousCaptureDescription;
-
-  /// No description provided for @voiceLabDisableMonitoring.
-  ///
-  /// In en, this message translates to:
-  /// **'Disable live monitoring'**
-  String get voiceLabDisableMonitoring;
-
-  /// No description provided for @voiceLabEnableMonitoring.
-  ///
-  /// In en, this message translates to:
-  /// **'Enable live monitoring'**
-  String get voiceLabEnableMonitoring;
 
   /// No description provided for @voiceLabReplyLabel.
   ///
@@ -2731,18 +2671,6 @@ abstract class AppLocalizations {
   /// **'Music transfer complete'**
   String get deviceMusicTransferred;
 
-  /// No description provided for @deviceMusicLibrary.
-  ///
-  /// In en, this message translates to:
-  /// **'Device music'**
-  String get deviceMusicLibrary;
-
-  /// No description provided for @deviceMusicLibraryDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Manage songs and playlists on the device'**
-  String get deviceMusicLibraryDescription;
-
   /// No description provided for @deviceMusicSongs.
   ///
   /// In en, this message translates to:
@@ -2874,18 +2802,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sync and export recordings from the watch'**
   String get deviceRecordingsDescription;
-
-  /// No description provided for @deviceRecordingsLibrary.
-  ///
-  /// In en, this message translates to:
-  /// **'Device recordings'**
-  String get deviceRecordingsLibrary;
-
-  /// No description provided for @deviceRecordingsLibraryDescription.
-  ///
-  /// In en, this message translates to:
-  /// **'Export recordings from the watch'**
-  String get deviceRecordingsLibraryDescription;
 
   /// No description provided for @deviceRecordingsHint.
   ///
@@ -3379,6 +3295,48 @@ abstract class AppLocalizations {
   /// **'No installed watchfaces'**
   String get watchfaceManagementNone;
 
+  /// No description provided for @moduleManagementTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Module management'**
+  String get moduleManagementTitle;
+
+  /// No description provided for @moduleManagementNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No installed modules'**
+  String get moduleManagementNone;
+
+  /// No description provided for @moduleUninstallConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to uninstall module \"{name}\"?'**
+  String moduleUninstallConfirm(String name);
+
+  /// No description provided for @moduleStatusEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get moduleStatusEnabled;
+
+  /// No description provided for @moduleStatusDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get moduleStatusDisabled;
+
+  /// No description provided for @moduleEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get moduleEnable;
+
+  /// No description provided for @moduleDisable.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable'**
+  String get moduleDisable;
+
   /// No description provided for @open.
   ///
   /// In en, this message translates to:
@@ -3859,6 +3817,12 @@ abstract class AppLocalizations {
   /// **'Enter your Xiaomi account and password'**
   String get settingsMiAccountMissingCredentials;
 
+  /// No description provided for @settingsMiAccountTwoFactorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Xiaomi account verification'**
+  String get settingsMiAccountTwoFactorTitle;
+
   /// No description provided for @settingsMiAccountTwoFactorPrompt.
   ///
   /// In en, this message translates to:
@@ -4036,7 +4000,7 @@ abstract class AppLocalizations {
   /// No description provided for @deviceReconnectAttempting.
   ///
   /// In en, this message translates to:
-  /// **'Device connection lost, trying to reconnect'**
+  /// **'Reconnecting to device...'**
   String get deviceReconnectAttempting;
 
   /// No description provided for @deviceReconnectSucceeded.
@@ -4813,12 +4777,6 @@ abstract class AppLocalizations {
   /// **'export a file to the host'**
   String get pluginPermissionExportFile;
 
-  /// No description provided for @pluginPermissionNetwork.
-  ///
-  /// In en, this message translates to:
-  /// **'access the network'**
-  String get pluginPermissionNetwork;
-
   /// No description provided for @pluginPermissionInterconnect.
   ///
   /// In en, this message translates to:
@@ -5057,6 +5015,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'quick app'**
   String get resourceTypeQuickApp;
+
+  /// No description provided for @resourceTypeResPack.
+  ///
+  /// In en, this message translates to:
+  /// **'Resource pack'**
+  String get resourceTypeResPack;
 
   /// No description provided for @resourceTypeWatchface.
   ///
@@ -5397,8 +5361,56 @@ abstract class AppLocalizations {
   /// No description provided for @installQueueFixWatchfaceIdHint.
   ///
   /// In en, this message translates to:
-  /// **'Enter up to 12 digits'**
+  /// **'Enter a new watchface ID'**
   String get installQueueFixWatchfaceIdHint;
+
+  /// No description provided for @installQueueReinstallWatchface.
+  ///
+  /// In en, this message translates to:
+  /// **'Reinstall watch face'**
+  String get installQueueReinstallWatchface;
+
+  /// No description provided for @installQueueRetryDirectly.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry directly'**
+  String get installQueueRetryDirectly;
+
+  /// No description provided for @installLowStorageMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The device has insufficient reserved storage or has reached its item limit'**
+  String get installLowStorageMessage;
+
+  /// No description provided for @installLowBatteryMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The device battery is too low'**
+  String get installLowBatteryMessage;
+
+  /// No description provided for @installQuantityLimitMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The device has reached its installation limit'**
+  String get installQuantityLimitMessage;
+
+  /// No description provided for @installQueueReplaceWatchface.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete and reinstall'**
+  String get installQueueReplaceWatchface;
+
+  /// No description provided for @installQueueReplaceWatchfaceMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'A watch face with ID {id} is already installed on the device, and this version cannot be installed directly\nYou can retry directly, or delete the existing watch face and reinstall\nIf installation fails after deletion, the original watch face cannot be restored automatically'**
+  String installQueueReplaceWatchfaceMessage(String id);
+
+  /// No description provided for @watchfaceDowngradeMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'A watch face with the same ID is already installed on the device, and this version cannot be installed directly'**
+  String get watchfaceDowngradeMessage;
 
   /// No description provided for @authorize.
   ///
@@ -7440,6 +7452,12 @@ abstract class AppLocalizations {
   /// **'Alarm management'**
   String get alarmManagementTitle;
 
+  /// No description provided for @alarmManagementNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No alarms configured'**
+  String get alarmManagementNone;
+
   /// No description provided for @alarmManagementDescription.
   ///
   /// In en, this message translates to:
@@ -9001,7 +9019,7 @@ abstract class AppLocalizations {
   /// No description provided for @errorSppBondRemovalFailed.
   ///
   /// In en, this message translates to:
-  /// **'On Android below 11 the system does not support removeBond. If the device disconnects frequently, switch to another device in Xiaomi Fitness or turn off its Nearby devices permission'**
+  /// **'Could not remove Bluetooth pairing\nUnpair the device in your phone’s Bluetooth settings and try again'**
   String get errorSppBondRemovalFailed;
 
   /// No description provided for @viewAllResources.
@@ -9355,7 +9373,7 @@ abstract class AppLocalizations {
   /// No description provided for @qrScanCameraUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Camera unavailable\nYou can scan a QR code from an image'**
+  /// **'Camera unavailable'**
   String get qrScanCameraUnavailable;
 
   /// No description provided for @qrScanChooseCode.
@@ -9847,7 +9865,7 @@ abstract class AppLocalizations {
   /// No description provided for @appDataClearCacheDescription.
   ///
   /// In en, this message translates to:
-  /// **'Clear image, plugin and document caches and expired temporary files\nRunning plugins and device apps will stop'**
+  /// **'Clear image, WebAssembly compilation, plugin and document caches, and expired temporary files\nRegenerated or downloaded when needed\nRunning plugins and device apps will stop'**
   String get appDataClearCacheDescription;
 
   /// No description provided for @appDataCacheCleared.
@@ -10009,7 +10027,7 @@ abstract class AppLocalizations {
   /// No description provided for @appDataPluginCacheDescription.
   ///
   /// In en, this message translates to:
-  /// **'Plugin cache and disposable temporary files'**
+  /// **'Caches and temporary files created by plugins'**
   String get appDataPluginCacheDescription;
 
   /// No description provided for @appDataImagesDescription.
@@ -10267,7 +10285,7 @@ abstract class AppLocalizations {
   /// No description provided for @appDataClearCachedCategoryDescription.
   ///
   /// In en, this message translates to:
-  /// **'Only unused cached files will be removed\nFiles may be downloaded again when needed'**
+  /// **'Clear unused cached files\nRegenerated or downloaded when needed'**
   String get appDataClearCachedCategoryDescription;
 
   /// No description provided for @appDataClearModelsDescription.
@@ -11242,18 +11260,6 @@ abstract class AppLocalizations {
   /// **'Delete'**
   String get globalAiDelete;
 
-  /// No description provided for @globalAiNoProvidersPrompt.
-  ///
-  /// In en, this message translates to:
-  /// **'No providers added\nPlease add a new provider above'**
-  String get globalAiNoProvidersPrompt;
-
-  /// No description provided for @globalAiNoModelsPrompt.
-  ///
-  /// In en, this message translates to:
-  /// **'No models available, please add a model first'**
-  String get globalAiNoModelsPrompt;
-
   /// No description provided for @globalAiSystemPrompt.
   ///
   /// In en, this message translates to:
@@ -11452,24 +11458,6 @@ abstract class AppLocalizations {
   /// **'Start Test'**
   String get globalAiTestStart;
 
-  /// No description provided for @wasmUnsupportedTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Wasm Runtime Unavailable on This System'**
-  String get wasmUnsupportedTitle;
-
-  /// No description provided for @wasmUnsupportedMessage.
-  ///
-  /// In en, this message translates to:
-  /// **'Due to Android 8 kernel security policy restrictions,\nreal-time voice streaming and creator image compression are unavailable\n\nTo use these features, update your system to Android 9+\nor use a device running a non-Android 8 system'**
-  String get wasmUnsupportedMessage;
-
-  /// No description provided for @doNotShowAgainThisSession.
-  ///
-  /// In en, this message translates to:
-  /// **'Do not show again this session'**
-  String get doNotShowAgainThisSession;
-
   /// No description provided for @settingsMiAccountRegion.
   ///
   /// In en, this message translates to:
@@ -11511,6 +11499,876 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'India (IN)'**
   String get settingsMiAccountRegionIn;
+
+  /// No description provided for @pluginPermissionReadClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'read the clipboard'**
+  String get pluginPermissionReadClipboard;
+
+  /// No description provided for @pluginPermissionWriteClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'write to the clipboard'**
+  String get pluginPermissionWriteClipboard;
+
+  /// No description provided for @pluginPermissionHostServer.
+  ///
+  /// In en, this message translates to:
+  /// **'run a local HTTP server'**
+  String get pluginPermissionHostServer;
+
+  /// No description provided for @pluginPermissionReceiveLink.
+  ///
+  /// In en, this message translates to:
+  /// **'receive application links'**
+  String get pluginPermissionReceiveLink;
+
+  /// No description provided for @pluginProviderUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This plugin resource provider is currently unavailable'**
+  String get pluginProviderUnavailable;
+
+  /// No description provided for @pluginDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Plugin is disabled'**
+  String get pluginDisabled;
+
+  /// No description provided for @pluginOpenWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in new window'**
+  String get pluginOpenWindow;
+
+  /// No description provided for @pluginRunSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Run settings'**
+  String get pluginRunSettings;
+
+  /// No description provided for @pluginEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get pluginEnable;
+
+  /// No description provided for @pluginDisable.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable'**
+  String get pluginDisable;
+
+  /// No description provided for @pluginEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable plugin'**
+  String get pluginEnabled;
+
+  /// No description provided for @pluginBackground.
+  ///
+  /// In en, this message translates to:
+  /// **'Background execution'**
+  String get pluginBackground;
+
+  /// No description provided for @pluginBackgroundDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop after 10 minutes of inactivity'**
+  String get pluginBackgroundDescription;
+
+  /// No description provided for @pluginBackgroundForbidden.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get pluginBackgroundForbidden;
+
+  /// No description provided for @pluginBackgroundActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep active'**
+  String get pluginBackgroundActive;
+
+  /// No description provided for @pluginBackgroundContinuous.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep running'**
+  String get pluginBackgroundContinuous;
+
+  /// No description provided for @pluginBackgroundForbiddenDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop when leaving the plugin'**
+  String get pluginBackgroundForbiddenDescription;
+
+  /// No description provided for @pluginBackgroundContinuousDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue running after leaving the plugin'**
+  String get pluginBackgroundContinuousDescription;
+
+  /// No description provided for @pluginAutoStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start automatically'**
+  String get pluginAutoStart;
+
+  /// No description provided for @pluginAutoStartDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Start when OronBox opens'**
+  String get pluginAutoStartDescription;
+
+  /// No description provided for @pluginRunStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get pluginRunStatus;
+
+  /// No description provided for @pluginStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped'**
+  String get pluginStopped;
+
+  /// No description provided for @pluginExistingGrant.
+  ///
+  /// In en, this message translates to:
+  /// **'Existing authorization'**
+  String get pluginExistingGrant;
+
+  /// No description provided for @pluginPermissionAsk.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask'**
+  String get pluginPermissionAsk;
+
+  /// No description provided for @pluginPermissionAllow.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get pluginPermissionAllow;
+
+  /// No description provided for @pluginTargetPermissions.
+  ///
+  /// In en, this message translates to:
+  /// **'Operation and target authorizations'**
+  String get pluginTargetPermissions;
+
+  /// No description provided for @pluginNoTargetPermissions.
+  ///
+  /// In en, this message translates to:
+  /// **'No device or application authorizations'**
+  String get pluginNoTargetPermissions;
+
+  /// No description provided for @errorPlatformCapabilityUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This feature is unavailable on this platform or browser'**
+  String get errorPlatformCapabilityUnavailable;
+
+  /// No description provided for @oauthPopupBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow pop-ups for this site and try signing in again'**
+  String get oauthPopupBlocked;
+
+  /// No description provided for @oauthBrowserCompleting.
+  ///
+  /// In en, this message translates to:
+  /// **'Completing sign-in in the original page'**
+  String get oauthBrowserCompleting;
+
+  /// No description provided for @oauthBrowserCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in successfully, you can close this page'**
+  String get oauthBrowserCompleted;
+
+  /// No description provided for @oauthBrowserOriginalClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'The original page has not responded, you can continue signing in here'**
+  String get oauthBrowserOriginalClosed;
+
+  /// No description provided for @oauthBrowserContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue signing in'**
+  String get oauthBrowserContinue;
+
+  /// No description provided for @wasmCompatibilityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Runtime compatibility test'**
+  String get wasmCompatibilityTitle;
+
+  /// No description provided for @wasmCompatibilityMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'OronBox needs to test whether this device can run WebAssembly\n\nYou may see this prompt because\n• Your device runs Android 8~9 with a Linux 4.x kernel\n• The app exited unexpectedly while loading a runtime or running a test\n\nThe app may crash during the test due to a known compatibility risk\nYour device’s security policy may be incompatible with the runtime\n\nIf the app crashes, reopen OronBox\nRuntime loading will be paused to prevent another crash\n\nImage processing, voice processing, some plugins and Huami app background scripts may then be unavailable until you pass the test before using these features again'**
+  String get wasmCompatibilityMessage;
+
+  /// No description provided for @wasmCompatibilityDefer.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get wasmCompatibilityDefer;
+
+  /// No description provided for @wasmCompatibilityStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start test'**
+  String get wasmCompatibilityStart;
+
+  /// No description provided for @wasmCompatibilityTesting.
+  ///
+  /// In en, this message translates to:
+  /// **'Testing, please wait'**
+  String get wasmCompatibilityTesting;
+
+  /// No description provided for @wasmCompatibilityPassed.
+  ///
+  /// In en, this message translates to:
+  /// **'Compatibility test passed'**
+  String get wasmCompatibilityPassed;
+
+  /// No description provided for @wasmCompatibilityTestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Test incomplete, retry or choose Not now'**
+  String get wasmCompatibilityTestFailed;
+
+  /// No description provided for @wasmCompatibilityRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete the compatibility test before using this feature'**
+  String get wasmCompatibilityRequired;
+
+  /// No description provided for @pluginType.
+  ///
+  /// In en, this message translates to:
+  /// **'Plugin type'**
+  String get pluginType;
+
+  /// No description provided for @pluginTypeAstroBox.
+  ///
+  /// In en, this message translates to:
+  /// **'AstroBox-NG'**
+  String get pluginTypeAstroBox;
+
+  /// No description provided for @pluginTypeOronBox.
+  ///
+  /// In en, this message translates to:
+  /// **'OronBox'**
+  String get pluginTypeOronBox;
+
+  /// No description provided for @appDataCompilationCache.
+  ///
+  /// In en, this message translates to:
+  /// **'Compilation cache'**
+  String get appDataCompilationCache;
+
+  /// No description provided for @appDataCompilationCacheDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'WebAssembly compilation cache'**
+  String get appDataCompilationCacheDescription;
+
+  /// No description provided for @openExternally.
+  ///
+  /// In en, this message translates to:
+  /// **'Open externally'**
+  String get openExternally;
+
+  /// No description provided for @externalOpenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to open the browser'**
+  String get externalOpenFailed;
+
+  /// No description provided for @resourceAstroBoxPurchaseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This file requires purchase or authorization'**
+  String get resourceAstroBoxPurchaseTitle;
+
+  /// No description provided for @resourceAstroBoxPurchaseMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'This resource was encrypted and uploaded through AstroBox Creator Console\nPurchase or authorization is required to decrypt it\nPlease open it with AstroBox'**
+  String get resourceAstroBoxPurchaseMessage;
+
+  /// No description provided for @resourceAstroBoxAccessCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to check access to this file\nPlease try again'**
+  String get resourceAstroBoxAccessCheckFailed;
+
+  /// No description provided for @resourceAstroBoxDecryptionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to decrypt this file\nPlease try again'**
+  String get resourceAstroBoxDecryptionFailed;
+
+  /// No description provided for @appDataClearPluginCacheDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear plugin caches and temporary files\nRegenerated or downloaded when needed'**
+  String get appDataClearPluginCacheDescription;
+
+  /// No description provided for @appDataClearCompilationCacheDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear the WebAssembly compilation cache\nRegenerated when needed'**
+  String get appDataClearCompilationCacheDescription;
+
+  /// No description provided for @resourceMoreDevicesDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download for more devices'**
+  String get resourceMoreDevicesDownload;
+
+  /// No description provided for @resourceCompatibleWithDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'This resource supports your device'**
+  String get resourceCompatibleWithDevice;
+
+  /// No description provided for @resourceIncompatibleWithDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'This resource does not support your device yet'**
+  String get resourceIncompatibleWithDevice;
+
+  /// No description provided for @resourceInstallSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed successfully'**
+  String get resourceInstallSucceeded;
+
+  /// No description provided for @installStorageFullTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device storage is full'**
+  String get installStorageFullTitle;
+
+  /// No description provided for @installQuantityLimitTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Installation limit reached'**
+  String get installQuantityLimitTitle;
+
+  /// No description provided for @installStorageFullHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The device has insufficient reserved storage or has reached its resource limit\nDelete some resources, then retry the installation'**
+  String get installStorageFullHelp;
+
+  /// No description provided for @installQuantityLimitHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The device has reached its resource installation limit\nDelete some resources, then retry the installation'**
+  String get installQuantityLimitHelp;
+
+  /// No description provided for @installTargetDeviceChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to the device for this installation task first'**
+  String get installTargetDeviceChanged;
+
+  /// No description provided for @debugNoLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'No logs'**
+  String get debugNoLogs;
+
+  /// No description provided for @debugNoLayoutTree.
+  ///
+  /// In en, this message translates to:
+  /// **'This source has no layout tree'**
+  String get debugNoLayoutTree;
+
+  /// No description provided for @debugSelectElement.
+  ///
+  /// In en, this message translates to:
+  /// **'Select an element to inspect'**
+  String get debugSelectElement;
+
+  /// No description provided for @debugEmptyDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty directory'**
+  String get debugEmptyDirectory;
+
+  /// No description provided for @debugNoProtocolEvents.
+  ///
+  /// In en, this message translates to:
+  /// **'No protocol events captured'**
+  String get debugNoProtocolEvents;
+
+  /// No description provided for @globalAiNoProvidersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No providers added'**
+  String get globalAiNoProvidersTitle;
+
+  /// No description provided for @globalAiNoProvidersMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a provider above'**
+  String get globalAiNoProvidersMessage;
+
+  /// No description provided for @globalAiNoModelsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No models available'**
+  String get globalAiNoModelsTitle;
+
+  /// No description provided for @globalAiNoModelsMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a model first'**
+  String get globalAiNoModelsMessage;
+
+  /// No description provided for @debugNoMatchingLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching logs'**
+  String get debugNoMatchingLogs;
+
+  /// No description provided for @appManagementNoVisibleApps.
+  ///
+  /// In en, this message translates to:
+  /// **'No apps to display'**
+  String get appManagementNoVisibleApps;
+
+  /// No description provided for @zeppOsAppCompatibilityEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No app compatibility files added'**
+  String get zeppOsAppCompatibilityEmpty;
+
+  /// No description provided for @qrScanCameraUnavailableMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'You can scan a QR code from an image'**
+  String get qrScanCameraUnavailableMessage;
+
+  /// No description provided for @resourceFeaturesDisabledTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Resource features are disabled'**
+  String get resourceFeaturesDisabledTitle;
+
+  /// No description provided for @pairingConnectStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect device'**
+  String get pairingConnectStep;
+
+  /// No description provided for @pairingAccountStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Bind account'**
+  String get pairingAccountStep;
+
+  /// No description provided for @pairingLocalStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair locally'**
+  String get pairingLocalStep;
+
+  /// No description provided for @pairingAuthStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Authenticate device'**
+  String get pairingAuthStep;
+
+  /// No description provided for @pairingUnbound.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpaired'**
+  String get pairingUnbound;
+
+  /// No description provided for @pairingContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get pairingContinue;
+
+  /// No description provided for @pairingStartPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'This device is not bound\nFollow the prompts to complete binding'**
+  String get pairingStartPrompt;
+
+  /// No description provided for @pairingSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected successfully'**
+  String get pairingSuccess;
+
+  /// No description provided for @pairingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bind device'**
+  String get pairingTitle;
+
+  /// No description provided for @pairingConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to device'**
+  String get pairingConnecting;
+
+  /// No description provided for @pairingConfirmOnDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm binding on your device'**
+  String get pairingConfirmOnDevice;
+
+  /// No description provided for @pairingCompareCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Check that the binding code matches'**
+  String get pairingCompareCode;
+
+  /// No description provided for @pairingRebind.
+  ///
+  /// In en, this message translates to:
+  /// **'This device needs to be bound again'**
+  String get pairingRebind;
+
+  /// No description provided for @pairingAlreadyBound.
+  ///
+  /// In en, this message translates to:
+  /// **'This device is already paired'**
+  String get pairingAlreadyBound;
+
+  /// No description provided for @pairingUseExistingKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect with an existing key'**
+  String get pairingUseExistingKey;
+
+  /// No description provided for @engineeringTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'MiWear engineering mode'**
+  String get engineeringTitle;
+
+  /// No description provided for @engineeringDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Device modes and firmware updates'**
+  String get engineeringDescription;
+
+  /// No description provided for @engineeringMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Device mode'**
+  String get engineeringMode;
+
+  /// No description provided for @engineeringUser.
+  ///
+  /// In en, this message translates to:
+  /// **'User mode'**
+  String get engineeringUser;
+
+  /// No description provided for @engineeringUserDebug.
+  ///
+  /// In en, this message translates to:
+  /// **'User debug mode'**
+  String get engineeringUserDebug;
+
+  /// No description provided for @engineeringEng.
+  ///
+  /// In en, this message translates to:
+  /// **'Engineering mode'**
+  String get engineeringEng;
+
+  /// No description provided for @engineeringModeConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'The device will restart and disconnect\nReconnect after it restarts'**
+  String get engineeringModeConfirm;
+
+  /// No description provided for @engineeringConnectDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect device'**
+  String get engineeringConnectDevice;
+
+  /// No description provided for @engineeringConnectConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'The current device will disconnect\nConnect to the device you want to operate'**
+  String get engineeringConnectConfirm;
+
+  /// No description provided for @engineeringFirmwareHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Select the firmware file for your device'**
+  String get engineeringFirmwareHint;
+
+  /// No description provided for @engineeringOtaConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Update the connected device with this firmware?\nCheck that the model matches\nKeep the device sufficiently charged during the update'**
+  String get engineeringOtaConfirm;
+
+  /// No description provided for @engineeringReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart in user mode'**
+  String get engineeringReturn;
+
+  /// No description provided for @engineeringIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get engineeringIdle;
+
+  /// No description provided for @engineeringScanning.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning for engineering devices'**
+  String get engineeringScanning;
+
+  /// No description provided for @engineeringConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting'**
+  String get engineeringConnecting;
+
+  /// No description provided for @engineeringUpdateBackBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware update in progress\nWait for the current operation to finish'**
+  String get engineeringUpdateBackBlocked;
+
+  /// No description provided for @engineeringUploading.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading firmware'**
+  String get engineeringUploading;
+
+  /// No description provided for @engineeringRestarting.
+  ///
+  /// In en, this message translates to:
+  /// **'Requesting device restart'**
+  String get engineeringRestarting;
+
+  /// No description provided for @engineeringWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for the device to restart\nReconnect after it starts'**
+  String get engineeringWaiting;
+
+  /// No description provided for @engineeringFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Update interrupted'**
+  String get engineeringFailed;
+
+  /// No description provided for @engineeringEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No engineering devices found\nCheck that the device is in engineering mode, then scan again'**
+  String get engineeringEmpty;
+
+  /// No description provided for @engineeringFirmwareError.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a non-empty firmware file'**
+  String get engineeringFirmwareError;
+
+  /// No description provided for @engineeringResponseError.
+  ///
+  /// In en, this message translates to:
+  /// **'The device rejected the request or returned an unexpected response'**
+  String get engineeringResponseError;
+
+  /// No description provided for @engineeringTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'The device did not respond in time\nReconnect and try again'**
+  String get engineeringTimeout;
+
+  /// No description provided for @engineeringMtuError.
+  ///
+  /// In en, this message translates to:
+  /// **'The Bluetooth connection cannot carry the control message\nReconnect or use SPP'**
+  String get engineeringMtuError;
+
+  /// No description provided for @engineeringBusyError.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish or cancel the current operation first'**
+  String get engineeringBusyError;
+
+  /// No description provided for @engineeringConnectionError.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to an engineering device first'**
+  String get engineeringConnectionError;
+
+  /// No description provided for @deviceSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device settings'**
+  String get deviceSettingsTitle;
+
+  /// No description provided for @deviceSettingsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust preferences for this device'**
+  String get deviceSettingsDescription;
+
+  /// No description provided for @deviceSettingsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No settings are available for this device'**
+  String get deviceSettingsUnavailable;
+
+  /// No description provided for @deviceNotificationSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification sync'**
+  String get deviceNotificationSync;
+
+  /// No description provided for @deviceNotificationSyncDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Send notifications from selected apps to this device'**
+  String get deviceNotificationSyncDescription;
+
+  /// No description provided for @deviceNotificationApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced apps'**
+  String get deviceNotificationApps;
+
+  /// No description provided for @deviceNotificationAppsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No apps found'**
+  String get deviceNotificationAppsEmpty;
+
+  /// No description provided for @updateReminderInbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Inbox notifications'**
+  String get updateReminderInbox;
+
+  /// No description provided for @inboxNotificationUnread.
+  ///
+  /// In en, this message translates to:
+  /// **'You have unread messages'**
+  String get inboxNotificationUnread;
+
+  /// No description provided for @notificationPermissionsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Notification permissions'**
+  String get notificationPermissionsSection;
+
+  /// No description provided for @notificationPermissionDisplay.
+  ///
+  /// In en, this message translates to:
+  /// **'Show notifications'**
+  String get notificationPermissionDisplay;
+
+  /// No description provided for @notificationPermissionRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Read notifications'**
+  String get notificationPermissionRead;
+
+  /// No description provided for @notificationPermissionEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enabled'**
+  String get notificationPermissionEnabled;
+
+  /// No description provided for @notificationPermissionDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Disabled'**
+  String get notificationPermissionDisabled;
+
+  /// No description provided for @notificationPermissionUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to check permission status'**
+  String get notificationPermissionUnavailable;
+
+  /// No description provided for @updateReminderFirmwareTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware update available'**
+  String get updateReminderFirmwareTitle;
+
+  /// No description provided for @updateReminderResourcesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Resource updates available'**
+  String get updateReminderResourcesTitle;
+
+  /// No description provided for @updateReminderPluginsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Plugin updates available'**
+  String get updateReminderPluginsTitle;
+
+  /// No description provided for @updateReminderFirmwareMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'A firmware update is available for your device'**
+  String get updateReminderFirmwareMessage;
+
+  /// No description provided for @updateReminderResourcesMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Updates are available for resources on your device'**
+  String get updateReminderResourcesMessage;
+
+  /// No description provided for @updateReminderCurrentVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Current version  {version}'**
+  String updateReminderCurrentVersion(String version);
+
+  /// No description provided for @updateReminderLatestFirmware.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest firmware  {version}'**
+  String updateReminderLatestFirmware(String version);
+
+  /// No description provided for @updateReminderSilence.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute until the next update'**
+  String get updateReminderSilence;
+
+  /// No description provided for @updateReminderInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Update'**
+  String get updateReminderInstall;
+
+  /// No description provided for @updateReminderInstallAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Update all'**
+  String get updateReminderInstallAll;
+
+  /// No description provided for @updateReminderChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The update is no longer available for the connected device'**
+  String get updateReminderChanged;
 }
 
 class _AppLocalizationsDelegate

@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:segmented_list/segmented_list.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
@@ -258,7 +260,7 @@ class _ZeppOsAppSideDebugPageState
 
   void _show(Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    appScaffoldMessengerOf(context).showSnackBar(
       SnackBar(
         content: Text(
           localizedErrorMessage(AppLocalizations.of(context)!, error),
@@ -315,9 +317,10 @@ class _ZeppOsAppSideDebugPageState
                 SectionHeader(title: l10n.zeppOsDebugAppList),
                 if (_observed.isEmpty)
                   Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(l10n.zeppOsDebugNoApps),
+                    child: EmptyStateView(
+                      compact: true,
+                      icon: Icons.apps_outlined,
+                      title: l10n.zeppOsDebugNoApps,
                     ),
                   )
                 else
@@ -530,9 +533,10 @@ class _ZeppOsAppSideDebugPageState
                   const SizedBox(height: 8),
                   if (events.isEmpty)
                     Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(l10n.zeppOsDebugNoEvents),
+                      child: EmptyStateView(
+                        compact: true,
+                        icon: Icons.event_note_outlined,
+                        title: l10n.zeppOsDebugNoEvents,
                       ),
                     )
                   else

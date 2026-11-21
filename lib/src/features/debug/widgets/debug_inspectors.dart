@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:oronbox/src/app/generated/app_localizations.dart';
+import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/commands/command_protocol.dart';
 
@@ -26,7 +28,11 @@ class _DebugLayoutInspectorState extends State<DebugLayoutInspector> {
   @override
   Widget build(BuildContext context) {
     if (widget.nodes.isEmpty) {
-      return const Center(child: Text('This source has no layout tree'));
+      return EmptyStateView(
+        compact: true,
+        icon: Icons.account_tree_outlined,
+        title: AppLocalizations.of(context)!.debugNoLayoutTree,
+      );
     }
     final selected = _selected == null ? null : widget.nodes[_selected!];
     return LayoutBuilder(
@@ -35,19 +41,15 @@ class _DebugLayoutInspectorState extends State<DebugLayoutInspector> {
           itemCount: widget.nodes.length,
           itemBuilder: (context, index) {
             final node = widget.nodes[index];
-            final content = (node['content'] as Map?)?.cast<String, Object?>();
-            final props = (node['props'] as Map?)?.cast<String, Object?>();
+            final props = node['props'] as Map?;
             return ListTile(
               dense: true,
               selected: _selected == index,
               leading: const Icon(Icons.widgets_outlined, size: 18),
-              title: Text(
-                node['type']?.toString() ??
-                    content?['type']?.toString() ??
-                    'Unknown',
-              ),
+              title: Text(node['type']?.toString() ?? 'Unknown'),
               subtitle: Text(
-                node['node_id']?.toString() ??
+                node['id']?.toString() ??
+                    node['node_id']?.toString() ??
                     (props == null ? '' : props.keys.join(', ')),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -57,7 +59,11 @@ class _DebugLayoutInspectorState extends State<DebugLayoutInspector> {
           },
         );
         final details = selected == null
-            ? const Center(child: Text('Select an element'))
+            ? EmptyStateView(
+                compact: true,
+                icon: Icons.ads_click,
+                title: AppLocalizations.of(context)!.debugSelectElement,
+              )
             : _JsonView(value: selected);
         if (constraints.maxWidth < 760) {
           return Column(
@@ -161,7 +167,13 @@ class _DebugRuntimeInspectorState extends State<DebugRuntimeInspector> {
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) return Center(child: Text(_error.toString()));
+    if (_error != null) {
+      return ErrorStateView(
+        compact: true,
+        message: _error.toString(),
+        onRetry: _refresh,
+      );
+    }
     final environment = _environment;
     if (environment == null) {
       return const Center(child: CircularProgressIndicator());
@@ -400,9 +412,19 @@ class _DebugStorageInspectorState extends State<DebugStorageInspector> {
   }
 
   Widget _storageBody() {
-    if (_error != null) return Center(child: Text(_error.toString()));
+    if (_error != null) {
+      return ErrorStateView(
+        compact: true,
+        message: _error.toString(),
+        onRetry: _loadDirectory,
+      );
+    }
     final files = _entries.isEmpty
-        ? const Center(child: Text('Empty directory'))
+        ? EmptyStateView(
+            compact: true,
+            icon: Icons.folder_open_outlined,
+            title: AppLocalizations.of(context)!.debugEmptyDirectory,
+          )
         : ListView.separated(
             itemCount: _entries.length,
             separatorBuilder: (_, _) => const Divider(height: 1),

@@ -217,9 +217,11 @@ class _CreatorResourceListState extends State<CreatorResourceList> {
     final representative = widget.state.resources
         .where((entry) => entry.resource.id == representativeId)
         .firstOrNull;
-    final kind = item['kind'] == 'watchface'
-        ? CreatorResourceKind.watchface
-        : CreatorResourceKind.quickApp;
+    final kind = switch (item['kind']) {
+      'watchface' => CreatorResourceKind.watchface,
+      'canopus' => CreatorResourceKind.canopus,
+      _ => CreatorResourceKind.quickApp,
+    };
     final revision = CreatorRevision(
       id: metadata?['id']?.toString() ?? '',
       number: (metadata?['revision_no'] as num?)?.toInt() ?? 0,
@@ -368,10 +370,11 @@ class CreatorResourceCard extends StatelessWidget {
                     ),
                   _CreatorResourceTag(
                     label: creatorKindLabel(l10n, workspace.resource.kind),
-                    color:
-                        workspace.resource.kind == CreatorResourceKind.quickApp
-                        ? colors.error
-                        : colors.primary,
+                    color: switch (workspace.resource.kind) {
+                      CreatorResourceKind.quickApp => colors.error,
+                      CreatorResourceKind.watchface => colors.primary,
+                      CreatorResourceKind.canopus => colors.secondary,
+                    },
                   ),
                   if (isCollection)
                     _CreatorResourceTag(

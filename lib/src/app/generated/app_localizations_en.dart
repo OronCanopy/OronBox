@@ -31,8 +31,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pluginMarket => 'Plugin market';
 
   @override
-  String get pluginMarketUnavailable =>
-      'The plugin market is not available yet';
+  String get pluginMarketEmpty => 'No plugins available';
+
+  @override
+  String get pluginSearchEmpty => 'No matching plugins';
 
   @override
   String get pluginEmpty => 'No plugins installed';
@@ -65,12 +67,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pluginPermissions => 'Permissions';
 
   @override
-  String get pluginInstallConfirmTitle => 'Confirm plugin installation';
-
-  @override
-  String get pluginUpdateConfirmTitle => 'Confirm plugin update';
-
-  @override
   String get pluginDeclaredPermissions =>
       'This plugin declares the following permissions:';
 
@@ -86,42 +82,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get pluginUninstallMessage =>
       'The plugin\'s data will also be removed';
-
-  @override
-  String get pluginUpload => 'Upload plugin';
-
-  @override
-  String get pluginPublishTitle => 'Publish plugin';
-
-  @override
-  String get pluginPublishNew => 'Will be published as a new plugin';
-
-  @override
-  String get pluginPublishUpdate =>
-      'Will update the published plugin with the same ID';
-
-  @override
-  String get pluginTakedown => 'Take down';
-
-  @override
-  String get pluginTakedownConfirm =>
-      'The plugin will be permanently removed from the market';
-
-  @override
-  String get pluginLoginRequired => 'Sign in to upload plugins';
-
-  @override
-  String get pluginSubmittedForReview =>
-      'Submitted for review. It will be listed once approved';
-
-  @override
-  String get pluginStatePending => 'Pending review';
-
-  @override
-  String get pluginStateRejected => 'Rejected';
-
-  @override
-  String get pluginStateDelisted => 'Delisted';
 
   @override
   String get pluginLegacyWarningTitle => 'Legacy plugin';
@@ -177,6 +137,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get creatorResourceSummary => 'Resource summary';
+
+  @override
+  String get creatorSummaryHint =>
+      'Brief one or two sentences, single-line plain text';
+
+  @override
+  String get creatorDescriptionHint =>
+      'Detailed description, supports multi-line Markdown';
 
   @override
   String get creatorResourceMetadataRequired =>
@@ -302,15 +270,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Each resource file must bind at least one device';
 
   @override
-  String get resourceAstroBoxEncryptedTitle =>
-      'OronBox cannot process this AstroBox resource';
-
-  @override
-  String get resourceAstroBoxEncryptedMessage =>
-      'This resource uses AstroBox Creator Console\'s private encrypted upload. OronBox cannot decrypt, download, or install it. Please open it with AstroBox instead.';
-
-  @override
-  String get resourceAstroBoxEncryptedAction => 'Got it';
+  String get resourceAstroBoxPurchaseAction => 'Got it';
 
   @override
   String get filter => 'Filter';
@@ -545,6 +505,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deviceWatchfaceCount => 'Watchface count';
+
+  @override
+  String get deviceModuleCount => 'Module count';
+
+  @override
+  String get modules => 'Modules';
 
   @override
   String get connection => 'Connection';
@@ -790,6 +756,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceFeaturesInstallWatchface => 'Install watchface';
 
   @override
+  String get deviceFeaturesInstallModule => 'Install module';
+
+  @override
   String get deviceFeaturesInstallFirmware => 'Firmware update';
 
   @override
@@ -829,7 +798,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get firmwareDownloadLatestFull => 'Download latest full package';
 
   @override
-  String get firmwareUpdateNow => 'Update';
+  String get firmwareUpdateIncrementalPackage => 'Install incremental update';
+
+  @override
+  String get firmwareUpdateFullPackage => 'Install full update';
 
   @override
   String get firmwareReleaseNotes => 'Release notes';
@@ -902,12 +874,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get voiceLabContinuousCaptureDescription =>
       'Request the next recording when the current one ends';
-
-  @override
-  String get voiceLabDisableMonitoring => 'Disable live monitoring';
-
-  @override
-  String get voiceLabEnableMonitoring => 'Enable live monitoring';
 
   @override
   String get voiceLabReplyLabel => 'Reply sent to the watch';
@@ -1495,13 +1461,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceMusicTransferred => 'Music transfer complete';
 
   @override
-  String get deviceMusicLibrary => 'Device music';
-
-  @override
-  String get deviceMusicLibraryDescription =>
-      'Manage songs and playlists on the device';
-
-  @override
   String get deviceMusicSongs => 'Songs';
 
   @override
@@ -1582,13 +1541,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get deviceRecordingsDescription =>
       'Sync and export recordings from the watch';
-
-  @override
-  String get deviceRecordingsLibrary => 'Device recordings';
-
-  @override
-  String get deviceRecordingsLibraryDescription =>
-      'Export recordings from the watch';
 
   @override
   String get deviceRecordingsHint =>
@@ -1868,6 +1820,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get watchfaceManagementNone => 'No installed watchfaces';
 
   @override
+  String get moduleManagementTitle => 'Module management';
+
+  @override
+  String get moduleManagementNone => 'No installed modules';
+
+  @override
+  String moduleUninstallConfirm(String name) {
+    return 'Are you sure you want to uninstall module \"$name\"?';
+  }
+
+  @override
+  String get moduleStatusEnabled => 'Enabled';
+
+  @override
+  String get moduleStatusDisabled => 'Disabled';
+
+  @override
+  String get moduleEnable => 'Enable';
+
+  @override
+  String get moduleDisable => 'Disable';
+
+  @override
   String get open => 'Open';
 
   @override
@@ -2133,6 +2108,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Enter your Xiaomi account and password';
 
   @override
+  String get settingsMiAccountTwoFactorTitle => 'Xiaomi account verification';
+
+  @override
   String get settingsMiAccountTwoFactorPrompt =>
       'Complete Xiaomi account two-factor verification in the verification page';
 
@@ -2233,8 +2211,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Try to reconnect when the device is disconnected unexpectedly';
 
   @override
-  String get deviceReconnectAttempting =>
-      'Device connection lost, trying to reconnect';
+  String get deviceReconnectAttempting => 'Reconnecting to device...';
 
   @override
   String get deviceReconnectSucceeded => 'Reconnected successfully';
@@ -2675,9 +2652,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pluginPermissionExportFile => 'export a file to the host';
 
   @override
-  String get pluginPermissionNetwork => 'access the network';
-
-  @override
   String get pluginPermissionInterconnect =>
       'communicate with device applications';
 
@@ -2821,6 +2795,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get resourceTypeQuickApp => 'quick app';
+
+  @override
+  String get resourceTypeResPack => 'Resource pack';
 
   @override
   String get resourceTypeWatchface => 'watchface';
@@ -3011,7 +2988,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String get installQueueFixWatchfaceId => 'Fix watchface ID';
 
   @override
-  String get installQueueFixWatchfaceIdHint => 'Enter up to 12 digits';
+  String get installQueueFixWatchfaceIdHint => 'Enter a new watchface ID';
+
+  @override
+  String get installQueueReinstallWatchface => 'Reinstall watch face';
+
+  @override
+  String get installQueueRetryDirectly => 'Retry directly';
+
+  @override
+  String get installLowStorageMessage =>
+      'The device has insufficient reserved storage or has reached its item limit';
+
+  @override
+  String get installLowBatteryMessage => 'The device battery is too low';
+
+  @override
+  String get installQuantityLimitMessage =>
+      'The device has reached its installation limit';
+
+  @override
+  String get installQueueReplaceWatchface => 'Delete and reinstall';
+
+  @override
+  String installQueueReplaceWatchfaceMessage(String id) {
+    return 'A watch face with ID $id is already installed on the device, and this version cannot be installed directly\nYou can retry directly, or delete the existing watch face and reinstall\nIf installation fails after deletion, the original watch face cannot be restored automatically';
+  }
+
+  @override
+  String get watchfaceDowngradeMessage =>
+      'A watch face with the same ID is already installed on the device, and this version cannot be installed directly';
 
   @override
   String get authorize => 'Authorize';
@@ -4153,6 +4159,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get alarmManagementTitle => 'Alarm management';
 
   @override
+  String get alarmManagementNone => 'No alarms configured';
+
+  @override
   String get alarmManagementDescription =>
       'Add, edit, enable, or delete device alarms';
 
@@ -4983,7 +4992,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get errorSppBondRemovalFailed =>
-      'On Android below 11 the system does not support removeBond. If the device disconnects frequently, switch to another device in Xiaomi Fitness or turn off its Nearby devices permission';
+      'Could not remove Bluetooth pairing\nUnpair the device in your phone’s Bluetooth settings and try again';
 
   @override
   String get viewAllResources => 'View all';
@@ -5185,8 +5194,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get qrScanImageFailed => 'Unable to read this image';
 
   @override
-  String get qrScanCameraUnavailable =>
-      'Camera unavailable\nYou can scan a QR code from an image';
+  String get qrScanCameraUnavailable => 'Camera unavailable';
 
   @override
   String get qrScanChooseCode => 'Choose a QR code';
@@ -5464,7 +5472,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get appDataClearCacheDescription =>
-      'Clear image, plugin and document caches and expired temporary files\nRunning plugins and device apps will stop';
+      'Clear image, WebAssembly compilation, plugin and document caches, and expired temporary files\nRegenerated or downloaded when needed\nRunning plugins and device apps will stop';
 
   @override
   String get appDataCacheCleared => 'Cache cleared';
@@ -5562,7 +5570,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get appDataPluginCacheDescription =>
-      'Plugin cache and disposable temporary files';
+      'Caches and temporary files created by plugins';
 
   @override
   String get appDataImagesDescription =>
@@ -5709,7 +5717,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get appDataClearCachedCategoryDescription =>
-      'Only unused cached files will be removed\nFiles may be downloaded again when needed';
+      'Clear unused cached files\nRegenerated or downloaded when needed';
 
   @override
   String get appDataClearModelsDescription =>
@@ -6237,14 +6245,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get globalAiDelete => 'Delete';
 
   @override
-  String get globalAiNoProvidersPrompt =>
-      'No providers added\nPlease add a new provider above';
-
-  @override
-  String get globalAiNoModelsPrompt =>
-      'No models available, please add a model first';
-
-  @override
   String get globalAiSystemPrompt => 'System prompt';
 
   @override
@@ -6353,16 +6353,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get globalAiTestStart => 'Start Test';
 
   @override
-  String get wasmUnsupportedTitle => 'Wasm Runtime Unavailable on This System';
-
-  @override
-  String get wasmUnsupportedMessage =>
-      'Due to Android 8 kernel security policy restrictions,\nreal-time voice streaming and creator image compression are unavailable\n\nTo use these features, update your system to Android 9+\nor use a device running a non-Android 8 system';
-
-  @override
-  String get doNotShowAgainThisSession => 'Do not show again this session';
-
-  @override
   String get settingsMiAccountRegion => 'Server Region';
 
   @override
@@ -6382,4 +6372,488 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsMiAccountRegionIn => 'India (IN)';
+
+  @override
+  String get pluginPermissionReadClipboard => 'read the clipboard';
+
+  @override
+  String get pluginPermissionWriteClipboard => 'write to the clipboard';
+
+  @override
+  String get pluginPermissionHostServer => 'run a local HTTP server';
+
+  @override
+  String get pluginPermissionReceiveLink => 'receive application links';
+
+  @override
+  String get pluginProviderUnavailable =>
+      'This plugin resource provider is currently unavailable';
+
+  @override
+  String get pluginDisabled => 'Plugin is disabled';
+
+  @override
+  String get pluginOpenWindow => 'Open in new window';
+
+  @override
+  String get pluginRunSettings => 'Run settings';
+
+  @override
+  String get pluginEnable => 'Enable';
+
+  @override
+  String get pluginDisable => 'Disable';
+
+  @override
+  String get pluginEnabled => 'Enable plugin';
+
+  @override
+  String get pluginBackground => 'Background execution';
+
+  @override
+  String get pluginBackgroundDescription =>
+      'Stop after 10 minutes of inactivity';
+
+  @override
+  String get pluginBackgroundForbidden => 'Disabled';
+
+  @override
+  String get pluginBackgroundActive => 'Keep active';
+
+  @override
+  String get pluginBackgroundContinuous => 'Keep running';
+
+  @override
+  String get pluginBackgroundForbiddenDescription =>
+      'Stop when leaving the plugin';
+
+  @override
+  String get pluginBackgroundContinuousDescription =>
+      'Continue running after leaving the plugin';
+
+  @override
+  String get pluginAutoStart => 'Start automatically';
+
+  @override
+  String get pluginAutoStartDescription => 'Start when OronBox opens';
+
+  @override
+  String get pluginRunStatus => 'Status';
+
+  @override
+  String get pluginStopped => 'Stopped';
+
+  @override
+  String get pluginExistingGrant => 'Existing authorization';
+
+  @override
+  String get pluginPermissionAsk => 'Ask';
+
+  @override
+  String get pluginPermissionAllow => 'Allow';
+
+  @override
+  String get pluginTargetPermissions => 'Operation and target authorizations';
+
+  @override
+  String get pluginNoTargetPermissions =>
+      'No device or application authorizations';
+
+  @override
+  String get errorPlatformCapabilityUnavailable =>
+      'This feature is unavailable on this platform or browser';
+
+  @override
+  String get oauthPopupBlocked =>
+      'Allow pop-ups for this site and try signing in again';
+
+  @override
+  String get oauthBrowserCompleting =>
+      'Completing sign-in in the original page';
+
+  @override
+  String get oauthBrowserCompleted =>
+      'Signed in successfully, you can close this page';
+
+  @override
+  String get oauthBrowserOriginalClosed =>
+      'The original page has not responded, you can continue signing in here';
+
+  @override
+  String get oauthBrowserContinue => 'Continue signing in';
+
+  @override
+  String get wasmCompatibilityTitle => 'Runtime compatibility test';
+
+  @override
+  String get wasmCompatibilityMessage =>
+      'OronBox needs to test whether this device can run WebAssembly\n\nYou may see this prompt because\n• Your device runs Android 8~9 with a Linux 4.x kernel\n• The app exited unexpectedly while loading a runtime or running a test\n\nThe app may crash during the test due to a known compatibility risk\nYour device’s security policy may be incompatible with the runtime\n\nIf the app crashes, reopen OronBox\nRuntime loading will be paused to prevent another crash\n\nImage processing, voice processing, some plugins and Huami app background scripts may then be unavailable until you pass the test before using these features again';
+
+  @override
+  String get wasmCompatibilityDefer => 'Not now';
+
+  @override
+  String get wasmCompatibilityStart => 'Start test';
+
+  @override
+  String get wasmCompatibilityTesting => 'Testing, please wait';
+
+  @override
+  String get wasmCompatibilityPassed => 'Compatibility test passed';
+
+  @override
+  String get wasmCompatibilityTestFailed =>
+      'Test incomplete, retry or choose Not now';
+
+  @override
+  String get wasmCompatibilityRequired =>
+      'Complete the compatibility test before using this feature';
+
+  @override
+  String get pluginType => 'Plugin type';
+
+  @override
+  String get pluginTypeAstroBox => 'AstroBox-NG';
+
+  @override
+  String get pluginTypeOronBox => 'OronBox';
+
+  @override
+  String get appDataCompilationCache => 'Compilation cache';
+
+  @override
+  String get appDataCompilationCacheDescription =>
+      'WebAssembly compilation cache';
+
+  @override
+  String get openExternally => 'Open externally';
+
+  @override
+  String get externalOpenFailed => 'Unable to open the browser';
+
+  @override
+  String get resourceAstroBoxPurchaseTitle =>
+      'This file requires purchase or authorization';
+
+  @override
+  String get resourceAstroBoxPurchaseMessage =>
+      'This resource was encrypted and uploaded through AstroBox Creator Console\nPurchase or authorization is required to decrypt it\nPlease open it with AstroBox';
+
+  @override
+  String get resourceAstroBoxAccessCheckFailed =>
+      'Unable to check access to this file\nPlease try again';
+
+  @override
+  String get resourceAstroBoxDecryptionFailed =>
+      'Unable to decrypt this file\nPlease try again';
+
+  @override
+  String get appDataClearPluginCacheDescription =>
+      'Clear plugin caches and temporary files\nRegenerated or downloaded when needed';
+
+  @override
+  String get appDataClearCompilationCacheDescription =>
+      'Clear the WebAssembly compilation cache\nRegenerated when needed';
+
+  @override
+  String get resourceMoreDevicesDownload => 'Download for more devices';
+
+  @override
+  String get resourceCompatibleWithDevice =>
+      'This resource supports your device';
+
+  @override
+  String get resourceIncompatibleWithDevice =>
+      'This resource does not support your device yet';
+
+  @override
+  String get resourceInstallSucceeded => 'Installed successfully';
+
+  @override
+  String get installStorageFullTitle => 'Device storage is full';
+
+  @override
+  String get installQuantityLimitTitle => 'Installation limit reached';
+
+  @override
+  String get installStorageFullHelp =>
+      'The device has insufficient reserved storage or has reached its resource limit\nDelete some resources, then retry the installation';
+
+  @override
+  String get installQuantityLimitHelp =>
+      'The device has reached its resource installation limit\nDelete some resources, then retry the installation';
+
+  @override
+  String get installTargetDeviceChanged =>
+      'Switch to the device for this installation task first';
+
+  @override
+  String get debugNoLogs => 'No logs';
+
+  @override
+  String get debugNoLayoutTree => 'This source has no layout tree';
+
+  @override
+  String get debugSelectElement => 'Select an element to inspect';
+
+  @override
+  String get debugEmptyDirectory => 'Empty directory';
+
+  @override
+  String get debugNoProtocolEvents => 'No protocol events captured';
+
+  @override
+  String get globalAiNoProvidersTitle => 'No providers added';
+
+  @override
+  String get globalAiNoProvidersMessage => 'Add a provider above';
+
+  @override
+  String get globalAiNoModelsTitle => 'No models available';
+
+  @override
+  String get globalAiNoModelsMessage => 'Add a model first';
+
+  @override
+  String get debugNoMatchingLogs => 'No matching logs';
+
+  @override
+  String get appManagementNoVisibleApps => 'No apps to display';
+
+  @override
+  String get zeppOsAppCompatibilityEmpty => 'No app compatibility files added';
+
+  @override
+  String get qrScanCameraUnavailableMessage =>
+      'You can scan a QR code from an image';
+
+  @override
+  String get resourceFeaturesDisabledTitle => 'Resource features are disabled';
+
+  @override
+  String get pairingConnectStep => 'Connect device';
+
+  @override
+  String get pairingAccountStep => 'Bind account';
+
+  @override
+  String get pairingLocalStep => 'Pair locally';
+
+  @override
+  String get pairingAuthStep => 'Authenticate device';
+
+  @override
+  String get pairingUnbound => 'Unpaired';
+
+  @override
+  String get pairingContinue => 'Continue';
+
+  @override
+  String get pairingStartPrompt =>
+      'This device is not bound\nFollow the prompts to complete binding';
+
+  @override
+  String get pairingSuccess => 'Connected successfully';
+
+  @override
+  String get pairingTitle => 'Bind device';
+
+  @override
+  String get pairingConnecting => 'Connecting to device';
+
+  @override
+  String get pairingConfirmOnDevice => 'Confirm binding on your device';
+
+  @override
+  String get pairingCompareCode => 'Check that the binding code matches';
+
+  @override
+  String get pairingRebind => 'This device needs to be bound again';
+
+  @override
+  String get pairingAlreadyBound => 'This device is already paired';
+
+  @override
+  String get pairingUseExistingKey => 'Connect with an existing key';
+
+  @override
+  String get engineeringTitle => 'MiWear engineering mode';
+
+  @override
+  String get engineeringDescription => 'Device modes and firmware updates';
+
+  @override
+  String get engineeringMode => 'Device mode';
+
+  @override
+  String get engineeringUser => 'User mode';
+
+  @override
+  String get engineeringUserDebug => 'User debug mode';
+
+  @override
+  String get engineeringEng => 'Engineering mode';
+
+  @override
+  String get engineeringModeConfirm =>
+      'The device will restart and disconnect\nReconnect after it restarts';
+
+  @override
+  String get engineeringConnectDevice => 'Connect device';
+
+  @override
+  String get engineeringConnectConfirm =>
+      'The current device will disconnect\nConnect to the device you want to operate';
+
+  @override
+  String get engineeringFirmwareHint =>
+      'Select the firmware file for your device';
+
+  @override
+  String get engineeringOtaConfirm =>
+      'Update the connected device with this firmware?\nCheck that the model matches\nKeep the device sufficiently charged during the update';
+
+  @override
+  String get engineeringReturn => 'Restart in user mode';
+
+  @override
+  String get engineeringIdle => 'Ready';
+
+  @override
+  String get engineeringScanning => 'Scanning for engineering devices';
+
+  @override
+  String get engineeringConnecting => 'Connecting';
+
+  @override
+  String get engineeringUpdateBackBlocked =>
+      'Firmware update in progress\nWait for the current operation to finish';
+
+  @override
+  String get engineeringUploading => 'Uploading firmware';
+
+  @override
+  String get engineeringRestarting => 'Requesting device restart';
+
+  @override
+  String get engineeringWaiting =>
+      'Waiting for the device to restart\nReconnect after it starts';
+
+  @override
+  String get engineeringFailed => 'Update interrupted';
+
+  @override
+  String get engineeringEmpty =>
+      'No engineering devices found\nCheck that the device is in engineering mode, then scan again';
+
+  @override
+  String get engineeringFirmwareError => 'Select a non-empty firmware file';
+
+  @override
+  String get engineeringResponseError =>
+      'The device rejected the request or returned an unexpected response';
+
+  @override
+  String get engineeringTimeout =>
+      'The device did not respond in time\nReconnect and try again';
+
+  @override
+  String get engineeringMtuError =>
+      'The Bluetooth connection cannot carry the control message\nReconnect or use SPP';
+
+  @override
+  String get engineeringBusyError =>
+      'Finish or cancel the current operation first';
+
+  @override
+  String get engineeringConnectionError =>
+      'Connect to an engineering device first';
+
+  @override
+  String get deviceSettingsTitle => 'Device settings';
+
+  @override
+  String get deviceSettingsDescription => 'Adjust preferences for this device';
+
+  @override
+  String get deviceSettingsUnavailable =>
+      'No settings are available for this device';
+
+  @override
+  String get deviceNotificationSync => 'Notification sync';
+
+  @override
+  String get deviceNotificationSyncDescription =>
+      'Send notifications from selected apps to this device';
+
+  @override
+  String get deviceNotificationApps => 'Synced apps';
+
+  @override
+  String get deviceNotificationAppsEmpty => 'No apps found';
+
+  @override
+  String get updateReminderInbox => 'Inbox notifications';
+
+  @override
+  String get inboxNotificationUnread => 'You have unread messages';
+
+  @override
+  String get notificationPermissionsSection => 'Notification permissions';
+
+  @override
+  String get notificationPermissionDisplay => 'Show notifications';
+
+  @override
+  String get notificationPermissionRead => 'Read notifications';
+
+  @override
+  String get notificationPermissionEnabled => 'Enabled';
+
+  @override
+  String get notificationPermissionDisabled => 'Disabled';
+
+  @override
+  String get notificationPermissionUnavailable =>
+      'Unable to check permission status';
+
+  @override
+  String get updateReminderFirmwareTitle => 'Firmware update available';
+
+  @override
+  String get updateReminderResourcesTitle => 'Resource updates available';
+
+  @override
+  String get updateReminderPluginsTitle => 'Plugin updates available';
+
+  @override
+  String get updateReminderFirmwareMessage =>
+      'A firmware update is available for your device';
+
+  @override
+  String get updateReminderResourcesMessage =>
+      'Updates are available for resources on your device';
+
+  @override
+  String updateReminderCurrentVersion(String version) {
+    return 'Current version  $version';
+  }
+
+  @override
+  String updateReminderLatestFirmware(String version) {
+    return 'Latest firmware  $version';
+  }
+
+  @override
+  String get updateReminderSilence => 'Mute until the next update';
+
+  @override
+  String get updateReminderInstall => 'Update';
+
+  @override
+  String get updateReminderInstallAll => 'Update all';
+
+  @override
+  String get updateReminderChanged =>
+      'The update is no longer available for the connected device';
 }

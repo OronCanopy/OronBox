@@ -6,3 +6,6 @@ import 'plugin_storage_stub.dart'
 
 Future<PluginStorage> createPluginStorage() =>
     implementation.createPluginStorage();
+
+Future<void> cleanupPluginTemporaryFiles() =>
+    implementation.cleanupPluginTemporaryFiles();

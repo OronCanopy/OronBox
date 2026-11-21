@@ -1,4 +1,4 @@
-import 'package:oronbox/src/device/core/xiaomi_wearable_catalog.dart';
+import 'package:oronbox/src/device/xiaomi/xiaomi_device_catalog.dart';
 import 'package:oronbox/src/features/resources/domain/creator_workspace.dart';
 
 class CreatorBandBbsTarget {
@@ -115,9 +115,9 @@ CreatorPublicationPlan buildCreatorPublicationPlan({
   } else if (sharedCategory) {
     problem = CreatorBandBbsPlanProblem.sharedCategoryArtifacts;
   }
-  final prefixId = workspace.resource.kind == CreatorResourceKind.watchface
-      ? 81
-      : 82;
+  final prefixId = workspace.resource.kind == CreatorResourceKind.quickApp
+      ? 82
+      : 81;
   return CreatorPublicationPlan(
     deviceNames: boundDeviceNames,
     astroBoxDeviceIds: [
@@ -179,13 +179,13 @@ CreatorPublicationPlan _configuredPublicationPlan(
   };
   final mappings = config['bandbbs'] as Map? ?? const {};
   final prefixes = config['resource_prefixes'] as Map? ?? const {};
+  final prefixKind = switch (workspace.resource.kind) {
+    CreatorResourceKind.quickApp => 'quickapp',
+    CreatorResourceKind.watchface => 'watchface',
+    CreatorResourceKind.canopus => 'canopus',
+  };
   final prefix =
-      (prefixes[workspace.resource.kind == CreatorResourceKind.watchface
-                  ? 'watchface'
-                  : 'quickapp']
-              as num?)
-          ?.toInt() ??
-      0;
+      ((prefixes[prefixKind] ?? prefixes['watchface']) as num?)?.toInt() ?? 0;
   final byId = {for (final d in devices) d.id: d};
   final groups = <int, ({CreatorArtifact artifact, List<String> names})>{};
   final unresolved = <String>[];

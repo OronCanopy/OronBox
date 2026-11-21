@@ -1,7 +1,5 @@
-import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:wasm_run_flutter/wasm_run_flutter.dart';
 import 'package:oronbox/src/core/wasm/wasm_runtime.dart';
 
 final class WasmOpusDecoder {
@@ -23,7 +21,7 @@ final class WasmOpusDecoder {
 
   final WasmScope _scope;
   final ScopedWasmInstance _instance;
-  final WasmMemory _memory;
+  final WasmMemoryView _memory;
   int _decoderPointer;
   final int _sampleRate;
   final int _mappingPointer;
@@ -31,11 +29,6 @@ final class WasmOpusDecoder {
   final int _outputPointer;
   int _inputCapacity;
   bool _disposed = false;
-
-  late final WasmFunction _decodeFunction = _instance.function('k');
-  late final WasmFunction _destroyFunction = _instance.function('l');
-  late final WasmFunction _mallocFunction = _instance.function('j');
-  late final WasmFunction _freeFunction = _instance.function('m');
 
   static Future<WasmOpusDecoder> create({
     int sampleRate = 16000,
@@ -47,26 +40,21 @@ final class WasmOpusDecoder {
 
     final scope = WasmRuntime.shared.openScope('system.opus-decoder');
     try {
-      final instance = await scope.instantiateAsset(
-        _assetPath,
-        configure: _configureEmscriptenImports,
-      );
-      final memory = instance.memory('g');
-      instance.function('h')();
+      final instance = await scope.instantiateAsset(_assetPath);
+      final memory = instance.memory();
 
-      final malloc = instance.function('j');
-      final mappingPointer = _intResult(malloc([channels]));
-      final inputPointer = _intResult(malloc([_initialInputCapacity]));
+      final mappingPointer = _intResult(instance.call('opus_alloc', [channels]));
+      final inputPointer = _intResult(instance.call('opus_alloc', [_initialInputCapacity]));
       final outputPointer = _intResult(
-        malloc([_outputCapacity * channels * Float32List.bytesPerElement]),
+        instance.call('opus_alloc', [_outputCapacity * channels * Float32List.bytesPerElement]),
       );
       if (mappingPointer == 0 || inputPointer == 0 || outputPointer == 0) {
         throw StateError('libopus WASM memory allocation failed');
       }
-      memory.view[mappingPointer] = 0;
+      memory.write(mappingPointer, Uint8List(1));
 
       final decoderPointer = _intResult(
-        instance.function('i')([
+        instance.call('opus_decoder_create', [
           sampleRate,
           channels,
           1,
@@ -102,9 +90,9 @@ final class WasmOpusDecoder {
     if (packet.isEmpty) return Float32List(0);
     _ensureInputCapacity(packet.length);
 
-    _memory.view.setRange(_inputPointer, _inputPointer + packet.length, packet);
+    _memory.write(_inputPointer, packet);
     final samples = _intResult(
-      _decodeFunction([
+      _instance.call('opus_decode_float', [
         _decoderPointer,
         _inputPointer,
         packet.length,
@@ -118,22 +106,21 @@ final class WasmOpusDecoder {
       throw StateError('libopus returned too many samples: $samples');
     }
 
-    final view = _memory.view;
-    return Float32List.fromList(
-      Float32List.view(
-        view.buffer,
-        view.offsetInBytes + _outputPointer,
-        samples,
-      ),
+    final bytes = _memory.read(
+      _outputPointer,
+      samples * Float32List.bytesPerElement,
+    );
+    return Float32List.sublistView(
+      ByteData.sublistView(bytes),
     );
   }
 
   void reset() {
     _ensureActive();
-    _destroyFunction([_decoderPointer]);
-    _freeFunction([_decoderPointer]);
+    _instance.call('opus_decoder_destroy', [_decoderPointer]);
+    _instance.call('opus_free', [_decoderPointer]);
     _decoderPointer = _intResult(
-      _instance.function('i')([_sampleRate, 1, 1, 0, _mappingPointer, 0, 0]),
+      _instance.call('opus_decoder_create', [_sampleRate, 1, 1, 0, _mappingPointer, 0, 0]),
     );
     if (_decoderPointer == 0) {
       throw StateError('libopus WASM decoder reset failed');
@@ -144,11 +131,11 @@ final class WasmOpusDecoder {
     if (_disposed) return;
     _disposed = true;
     try {
-      _destroyFunction([_decoderPointer]);
-      _freeFunction([_decoderPointer]);
-      _freeFunction([_mappingPointer]);
-      _freeFunction([_inputPointer]);
-      _freeFunction([_outputPointer]);
+      _instance.call('opus_decoder_destroy', [_decoderPointer]);
+      _instance.call('opus_free', [_decoderPointer]);
+      _instance.call('opus_free', [_mappingPointer]);
+      _instance.call('opus_free', [_inputPointer]);
+      _instance.call('opus_free', [_outputPointer]);
     } finally {
       _scope.dispose();
     }
@@ -156,11 +143,11 @@ final class WasmOpusDecoder {
 
   void _ensureInputCapacity(int required) {
     if (required <= _inputCapacity) return;
-    final replacement = _intResult(_mallocFunction([required]));
+    final replacement = _intResult(_instance.call('opus_alloc', [required]));
     if (replacement == 0) {
       throw StateError('libopus WASM input allocation failed');
     }
-    _freeFunction([_inputPointer]);
+    _instance.call('opus_free', [_inputPointer]);
     _inputPointer = replacement;
     _inputCapacity = required;
   }
@@ -169,59 +156,11 @@ final class WasmOpusDecoder {
     if (_disposed) throw StateError('Opus decoder is disposed');
   }
 
-  static void _configureEmscriptenImports(WasmInstanceBuilder builder) {
-    builder
-      ..addImport(
-        'a',
-        'a',
-        WasmFunction(
-          math.cos,
-          params: const [ValueTy.f64],
-          results: const [ValueTy.f64],
-        ),
-      )
-      ..addImport(
-        'a',
-        'b',
-        WasmFunction.voidReturn(
-          (int code) => throw StateError('libopus exited with code $code'),
-          params: const [ValueTy.i32],
-        ),
-      )
-      ..addImport('a', 'c', WasmFunction.voidReturn(() {}, params: const []))
-      ..addImport(
-        'a',
-        'd',
-        WasmFunction.voidReturn(
-          () => throw StateError('libopus aborted'),
-          params: const [],
-        ),
-      )
-      ..addImport(
-        'a',
-        'e',
-        WasmFunction(
-          (int _, double _) => 0,
-          params: const [ValueTy.i32, ValueTy.f64],
-          results: const [ValueTy.i32],
-        ),
-      )
-      ..addImport(
-        'a',
-        'f',
-        WasmFunction(
-          (int _) => 0,
-          params: const [ValueTy.i32],
-          results: const [ValueTy.i32],
-        ),
-      );
-  }
-
-  static int _intResult(List<Object?> result) {
-    if (result.length != 1 || result.first is! int) {
-      throw StateError('Unexpected WASM result: $result');
+  static int _intResult(List<int> result) {
+    if (result.isEmpty) {
+      throw StateError('Unexpected empty WASM result');
     }
-    return result.first! as int;
+    return result.first;
   }
 
   static String _opusError(int code) => switch (code) {

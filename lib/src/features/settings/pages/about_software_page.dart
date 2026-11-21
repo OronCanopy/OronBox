@@ -1,3 +1,4 @@
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:oronbox/src/features/devices/widgets/device_import_dialog.dart';
 
 import 'dart:async';
@@ -298,7 +299,7 @@ class _UpdatePillState extends ConsumerState<_UpdatePill> {
           await _openUrl(url);
         } catch (error) {
           if (mounted) {
-            ScaffoldMessenger.of(context)
+            appScaffoldMessengerOf(context)
                 .showSnackBar(SnackBar(content: Text(error.toString())));
           }
         } finally {
@@ -457,7 +458,7 @@ class _RuntimeLogsPageState extends ConsumerState<RuntimeLogsPage> {
       _log.info('Exported runtime logs to $path');
     }
     setState(() => _busy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
+    appScaffoldMessengerOf(context).showSnackBar(
       SnackBar(
         content: Text(
           path == null
@@ -583,7 +584,7 @@ class _RuntimeLogsPageState extends ConsumerState<RuntimeLogsPage> {
       await _reload();
       _log.info('Pulled device logs: ${value['name']}');
       if (mounted && !cancelRequested) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        appScaffoldMessengerOf(context).showSnackBar(
           SnackBar(
             content: Text(
               l10n.settingsDeviceLogsSaved(value['name']?.toString() ?? ''),
@@ -593,7 +594,7 @@ class _RuntimeLogsPageState extends ConsumerState<RuntimeLogsPage> {
       }
     } catch (error) {
       if (mounted && !cancelRequested) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        appScaffoldMessengerOf(context).showSnackBar(
           SnackBar(
             content: Text(
               l10n.settingsDeviceLogsFailed(localizedErrorMessage(l10n, error)),
@@ -625,7 +626,7 @@ class _RuntimeLogsPageState extends ConsumerState<RuntimeLogsPage> {
     if (confirmed != true || !mounted) return;
     final opened = await openLogDirectory();
     if (!opened && mounted) {
-      ScaffoldMessenger.of(
+      appScaffoldMessengerOf(
         context,
       ).showSnackBar(SnackBar(content: Text(l10n.settingsAboutLogsOpenFailed)));
     }
@@ -641,7 +642,7 @@ class _RuntimeLogsPageState extends ConsumerState<RuntimeLogsPage> {
     if (confirmed != true || !mounted) return;
     final opened = await openLogFile(file);
     if (!opened && mounted) {
-      ScaffoldMessenger.of(
+      appScaffoldMessengerOf(
         context,
       ).showSnackBar(SnackBar(content: Text(l10n.settingsAboutLogsOpenFailed)));
     }

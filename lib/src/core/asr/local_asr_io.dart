@@ -13,6 +13,9 @@ import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
+// Allows this isolate to release the downloaded DLL handles when it closes.
+// ignore: implementation_imports
+import 'package:sherpa_onnx/src/sherpa_onnx_bindings.dart';
 
 import 'asr.dart';
 import 'asr_model_store.dart';
@@ -195,6 +198,7 @@ void _workerMain(SendPort output) {
   output.send(input.sendPort);
   sherpa.OnlineRecognizer? recognizer;
   sherpa.OnlineStream? stream;
+  ({DynamicLibrary dependency, DynamicLibrary sherpa})? libraries;
   var previous = '';
   input.listen((dynamic message) {
     final values = message as List;
@@ -205,10 +209,13 @@ void _workerMain(SendPort output) {
           final args = values[2] as List;
           final root = args[0] as String;
           final libraryPath = args[1] as String?;
-          if (Platform.isAndroid && libraryPath != null) {
-            DynamicLibrary.open('$libraryPath/libonnxruntime.so');
+          if (libraryPath == null) {
+            sherpa.initBindings();
+          } else {
+            final loaded = openDownloadedAsrRuntime(libraryPath);
+            libraries = loaded;
+            SherpaOnnxBindings.init(loaded.sherpa);
           }
-          sherpa.initBindings(libraryPath);
           recognizer = sherpa.OnlineRecognizer(
             sherpa.OnlineRecognizerConfig(
               model: sherpa.OnlineModelConfig(
@@ -261,6 +268,9 @@ void _workerMain(SendPort output) {
           stream = null;
           recognizer?.free();
           recognizer = null;
+          libraries?.sherpa.close();
+          libraries?.dependency.close();
+          libraries = null;
           input.close();
       }
       output.send(['ok', id]);

@@ -1,3 +1,6 @@
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
+import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
+
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -195,7 +198,7 @@ class _DeviceMusicUploadPageState extends ConsumerState<DeviceMusicUploadPage> {
       }
       if (!mounted) return;
       setState(() => _progress = 1);
-      ScaffoldMessenger.of(context)
+      appScaffoldMessengerOf(context)
           .showSnackBar(SnackBar(content: Text(l10n.deviceMusicTransferred)));
       if (widget.xiaomi) await _loadLibrary();
     } catch (error) {
@@ -554,7 +557,6 @@ class _DeviceMusicUploadPageState extends ConsumerState<DeviceMusicUploadPage> {
     AppLocalizations l10n, {
     required bool ready,
   }) {
-    final colors = Theme.of(context).colorScheme;
     final library = _library;
     return SectionCard(
       // spacing to the next card is handled by the SizedBox below
@@ -562,20 +564,13 @@ class _DeviceMusicUploadPageState extends ConsumerState<DeviceMusicUploadPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionHeader(title: l10n.deviceMusicLibrary),
-          Text(
-            l10n.deviceMusicLibraryDescription,
-            style: TextStyle(color: colors.onSurfaceVariant),
-          ),
           if (!ready) ...[
-            const SizedBox(height: 16),
             EmptyStateView(
               compact: true,
               icon: Icons.bluetooth_disabled_outlined,
               title: l10n.deviceNotConnected,
             ),
           ] else if (_loadingLibrary && library == null) ...[
-            const SizedBox(height: 24),
             const Center(
               child: SizedBox.square(
                 dimension: 28,
@@ -584,14 +579,12 @@ class _DeviceMusicUploadPageState extends ConsumerState<DeviceMusicUploadPage> {
             ),
             const SizedBox(height: 16),
           ] else if (_libraryError != null && library == null) ...[
-            const SizedBox(height: 16),
             ErrorStateView(
               compact: true,
               message: _libraryError!,
               onRetry: _loadLibrary,
             ),
           ] else if (library != null) ...[
-            const SizedBox(height: 16),
             Row(
               children: [
                 Text(
@@ -742,7 +735,7 @@ class _DeviceMusicUploadPageState extends ConsumerState<DeviceMusicUploadPage> {
       await _loadLibrary();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        appScaffoldMessengerOf(context).showSnackBar(
           SnackBar(
             content: Text(
               localizedErrorMessage(AppLocalizations.of(context)!, error),
@@ -769,7 +762,7 @@ class _DeviceMusicUploadPageState extends ConsumerState<DeviceMusicUploadPage> {
       await _loadLibrary();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        appScaffoldMessengerOf(context).showSnackBar(
           SnackBar(
             content: Text(
               localizedErrorMessage(AppLocalizations.of(context)!, error),
@@ -791,7 +784,7 @@ class _DeviceMusicUploadPageState extends ConsumerState<DeviceMusicUploadPage> {
       await _loadLibrary();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        appScaffoldMessengerOf(context).showSnackBar(
           SnackBar(
             content: Text(
               localizedErrorMessage(AppLocalizations.of(context)!, error),
@@ -826,9 +819,9 @@ class _DeviceMusicUploadPageState extends ConsumerState<DeviceMusicUploadPage> {
                 shrinkWrap: true,
                 children: [
                   for (final playlist in library.playlists)
-                    CheckboxListTile(
+                    AppCheckboxTile(
                       contentPadding: const EdgeInsetsDirectional.only(end: 12),
-                      value: values[playlist.id],
+                      value: values[playlist.id] ?? false,
                       title: Text(playlist.name),
                       onChanged: (value) => setDialogState(
                         () => values[playlist.id] = value ?? false,
@@ -866,7 +859,7 @@ class _DeviceMusicUploadPageState extends ConsumerState<DeviceMusicUploadPage> {
       await _loadLibrary();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        appScaffoldMessengerOf(context).showSnackBar(
           SnackBar(
             content: Text(
               localizedErrorMessage(AppLocalizations.of(context)!, error),

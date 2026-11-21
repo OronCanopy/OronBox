@@ -1,9 +1,12 @@
+import 'package:oronbox/src/app/generated/app_localizations.dart';
+import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/app/theme/app_theme.dart';
 import 'package:oronbox/src/core/logging/diagnostic_event.dart';
 
 class DebugConsole extends StatefulWidget {
-  const DebugConsole({super.key, required this.records});
+  const DebugConsole({super.key, required this.records, this.filtered = false});
+  final bool filtered;
   final List<DiagnosticEvent> records;
 
   @override
@@ -52,7 +55,13 @@ class _DebugConsoleState extends State<DebugConsole> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     if (widget.records.isEmpty) {
-      return const Center(child: Text('No logs'));
+      return EmptyStateView(
+        compact: true,
+        icon: Icons.article_outlined,
+        title: widget.filtered
+            ? AppLocalizations.of(context)!.debugNoMatchingLogs
+            : AppLocalizations.of(context)!.debugNoLogs,
+      );
     }
 
     // A single selectable text surface preserves line boundaries when a

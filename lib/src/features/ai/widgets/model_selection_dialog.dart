@@ -1,3 +1,4 @@
+import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/core/ai/ai_models.dart';
@@ -18,7 +19,9 @@ class _ModelSelectionDialogState extends State<ModelSelectionDialog> {
   @override
   void initState() {
     super.initState();
-    _providers = AiSettingsStore.providers;
+    _providers = AiSettingsStore.providers
+        .where((provider) => provider.models.isNotEmpty)
+        .toList();
     _selectedProviderId = AiSettingsStore.activeProviderId;
     _selectedModelId = AiSettingsStore.activeModelId;
   }
@@ -54,14 +57,14 @@ class _ModelSelectionDialogState extends State<ModelSelectionDialog> {
               ),
               const SizedBox(height: 12),
               if (_providers.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
-                    child: Text(
-                      l10n.globalAiNoModelsPrompt,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    primary: false,
+                    child: EmptyStateView(
+                      compact: true,
+                      icon: Icons.smart_toy_outlined,
+                      title: l10n.globalAiNoModelsTitle,
+                      message: l10n.globalAiNoModelsMessage,
                     ),
                   ),
                 )

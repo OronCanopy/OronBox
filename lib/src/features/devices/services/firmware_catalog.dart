@@ -1,9 +1,13 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/core/network/dio_provider.dart';
 import 'package:oronbox/src/core/network/github_release.dart';
+import 'package:oronbox/src/core/network/oronbox_metadata_client.dart';
 import 'package:oronbox/src/device/core/device_kind.dart';
-import 'package:oronbox/src/device/core/xiaomi_wearable_catalog.dart';
+import 'package:oronbox/src/device/xiaomi/xiaomi_device_catalog.dart';
 
 class FirmwareCatalogQuery {
   const FirmwareCatalogQuery({
@@ -11,23 +15,27 @@ class FirmwareCatalogQuery {
     required this.codename,
     required this.model,
     required this.currentVersion,
+    this.productDevice,
   });
 
   final DeviceKind kind;
   final String? codename;
   final String model;
   final String currentVersion;
+  final String? productDevice;
 }
 
 class FirmwareRelease {
   const FirmwareRelease({
     required this.version,
     required this.fullPackage,
+    required this.product,
     this.incrementalPackages = const [],
     this.releaseNotes,
   });
 
   final String version;
+  final String product;
   final FirmwarePackage fullPackage;
   final List<FirmwarePackage> incrementalPackages;
   final String? releaseNotes;
@@ -80,13 +88,11 @@ class FirmwareCatalogUnavailable implements Exception {
 }
 
 class DeviceFirmwareCatalog implements FirmwareCatalog {
-  DeviceFirmwareCatalog(this._dio);
+  DeviceFirmwareCatalog(Dio dio) : _metadata = OronBoxMetadataClient(dio);
 
-  static const _releasesUrl =
-      'https://api.github.com/repos/AstralSightStudios/'
-      'MiWearFirmwareArchives/releases';
+  static final _log = getLogger('DeviceFirmwareCatalog');
 
-  final Dio _dio;
+  final OronBoxMetadataClient _metadata;
 
   @override
   Future<List<FirmwareRelease>> findUpdates(FirmwareCatalogQuery query) async {
@@ -96,19 +102,26 @@ class DeviceFirmwareCatalog implements FirmwareCatalog {
     }
 
     final products = _resolveProducts(query);
-    if (products.isEmpty) return const [];
-    final response = await _dio.get<List<dynamic>>(
-      _releasesUrl,
-      queryParameters: const {'per_page': 100},
-      options: Options(
-        headers: const {
-          'Accept': 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-      ),
+    _log.info(
+      'firmware lookup model="${query.model}" productDevice="${query.productDevice ?? ''}" '
+      'codename="${query.codename ?? ''}" products=${products.join(',')}',
     );
+    if (products.isEmpty) return const [];
+    for (var page = 1; ; page++) {
+      final payload = jsonDecode(
+        await _metadata.get('firmware/xiaomi/catalog?page=$page'),
+      ) as Map<String, dynamic>;
+      final releases = _matchingReleases(payload['releases'] as List, products);
+      if (releases.isNotEmpty || payload['has_next'] != true) return releases;
+    }
+  }
+
+  List<FirmwareRelease> _matchingReleases(
+    List rawReleases,
+    List<String> products,
+  ) {
     final releasesByProduct = <String, List<FirmwareRelease>>{};
-    for (final raw in response.data ?? const []) {
+    for (final raw in rawReleases) {
       if (raw is! Map) continue;
       final release = GitHubRelease.fromJson(raw.cast<String, Object?>());
       final name = release.name;
@@ -134,6 +147,7 @@ class DeviceFirmwareCatalog implements FirmwareCatalog {
             FirmwareRelease(
               version: version,
               fullPackage: fullPackage,
+              product: product,
               incrementalPackages: incrementalPackages,
               releaseNotes: release.body,
             ),
@@ -142,13 +156,23 @@ class DeviceFirmwareCatalog implements FirmwareCatalog {
     for (final product in products) {
       final releases = releasesByProduct[product];
       if (releases == null || releases.isEmpty) continue;
-      releases.sort((a, b) => _compareVersions(b.version, a.version));
+      releases.sort((a, b) => compareFirmwareVersions(b.version, a.version));
       return releases;
     }
     return const [];
   }
 
   List<String> _resolveProducts(FirmwareCatalogQuery query) {
+    final registered = XiaomiDeviceCatalog.instance.find(
+      model: query.model,
+      product: query.productDevice,
+    );
+    if (registered != null && registered.product.isNotEmpty) {
+      return [registered.product.trim().toLowerCase()];
+    }
+
+    final productDevice = query.productDevice?.trim().toLowerCase() ?? '';
+    if (productDevice.contains('.watch.')) return [productDevice];
     final model = query.model.trim().toLowerCase();
     if (model.contains('.watch.')) return [model];
     final codename = query.codename?.trim().toLowerCase();
@@ -206,19 +230,25 @@ class DeviceFirmwareCatalog implements FirmwareCatalog {
     final version = normalizeFirmwareVersion(match.group(1) ?? '');
     return version.isEmpty ? null : version;
   }
+}
 
-  int _compareVersions(String left, String right) {
-    final a = left.split('.').map((part) => int.tryParse(part) ?? 0).toList();
-    final b = right.split('.').map((part) => int.tryParse(part) ?? 0).toList();
-    final length = a.length > b.length ? a.length : b.length;
-    for (var index = 0; index < length; index++) {
-      final result = (index < a.length ? a[index] : 0).compareTo(
-        index < b.length ? b[index] : 0,
-      );
-      if (result != 0) return result;
-    }
-    return 0;
+int compareFirmwareVersions(String left, String right) {
+  final a = normalizeFirmwareVersion(left)
+      .split('.')
+      .map((part) => int.tryParse(part) ?? 0)
+      .toList();
+  final b = normalizeFirmwareVersion(right)
+      .split('.')
+      .map((part) => int.tryParse(part) ?? 0)
+      .toList();
+  final length = a.length > b.length ? a.length : b.length;
+  for (var index = 0; index < length; index++) {
+    final result = (index < a.length ? a[index] : 0).compareTo(
+      index < b.length ? b[index] : 0,
+    );
+    if (result != 0) return result;
   }
+  return 0;
 }
 
 String normalizeFirmwareVersion(String value) => value

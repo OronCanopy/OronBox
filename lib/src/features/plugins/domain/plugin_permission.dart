@@ -1,3 +1,18 @@
+import 'dart:convert';
+
+bool isRetiredPluginPermission(String capability) =>
+    capability.trim().toLowerCase() == 'network';
+
+bool isRetiredPluginPermissionKey(String key) {
+  if (key.startsWith('["network",')) return true;
+  return isRetiredPluginPermission(key.split(':').first);
+}
+
+bool isRetiredPluginPermissionPolicy(String key, Object? value) =>
+    isRetiredPluginPermissionKey(key) ||
+    (value is Map &&
+        isRetiredPluginPermission(value['capability']?.toString() ?? ''));
+
 enum PluginPermissionRisk { low, medium, high }
 
 enum PluginPermissionDecision { once, session, always, deny }
@@ -23,11 +38,9 @@ class PluginPermissionRequest {
   final String? resource;
   final String? scope;
 
-  String get grantKey => [
-    capability,
-    operation,
-    if (scope != null && scope!.isNotEmpty) scope,
-  ].join(':');
+  String get grantKey => scope == null
+      ? '$capability:$operation'
+      : jsonEncode([capability, operation, scope]);
 
   Map<String, Object?> toJson() => {
     'pluginId': pluginId,
@@ -37,6 +50,7 @@ class PluginPermissionRequest {
     'risk': risk.name,
     'description': description,
     if (resource != null) 'resource': resource,
+    if (scope != null) 'scope': scope,
   };
 }
 

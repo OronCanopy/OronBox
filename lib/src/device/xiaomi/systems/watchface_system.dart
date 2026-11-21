@@ -1,13 +1,17 @@
 import 'dart:async';
 
 import 'package:oronbox/src/core/logging/logging_service.dart';
+import 'package:oronbox/src/device/core/device_state.dart';
 import 'package:oronbox/src/device/xiaomi/systems/xiaomi_system.dart';
-import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart' as pb;
+import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart'
+    as pb;
 import 'package:oronbox/src/device/xiaomi/protocol/generated/wear_watch_face.pb.dart'
     as pb_watchface;
 
 class XiaomiWatchfaceSystem extends XiaomiPbSystem {
   static final _log = getLogger('XiaomiWatchfaceSystem');
+  final _uninstallCancellation = StreamController<void>.broadcast(sync: true);
+  bool _disposed = false;
 
   final _editWaiters = <Completer<pb_watchface.EditResponse>>[];
   final _bgImageWaiters = <Completer<pb_watchface.BgImageResult>>[];
@@ -20,8 +24,30 @@ class XiaomiWatchfaceSystem extends XiaomiPbSystem {
   }
 
   Future<void> uninstallWatchface(String watchfaceId) async {
+    if (_disposed || entity.isDisposed) {
+      throw StateError('Watchface system has been disposed');
+    }
     _log.info('[${entity.id}] uninstall watchface: $watchfaceId');
-    await component.sendPbPacket(_buildWatchfaceUninstall(watchfaceId));
+    final success = await component.requestPool.request<bool>(
+      packet: _buildWatchfaceUninstall(watchfaceId),
+      typeMatcher: (packet) =>
+          packet.type == pb.WearPacket_Type.WATCH_FACE &&
+          packet.id ==
+              pb_watchface.WatchFace_WatchFaceID.REMOVE_WATCH_FACE.value &&
+          packet.watchFace.hasSuccess(),
+      responseMapper: (packet) => packet.watchFace.success,
+      cancellation: _uninstallCancellation.stream,
+    );
+    if (!success) throw ProtocolException('Watch rejected watchface removal');
+  }
+
+  @override
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    _uninstallCancellation.add(null);
+    await _uninstallCancellation.close();
+    await super.dispose();
   }
 
   Future<pb_watchface.EditResponse> requestEdit(

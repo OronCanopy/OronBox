@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:oronbox_location/oronbox_location.dart';
+import 'package:wear_location/wear_location.dart';
 import 'package:oronbox/src/core/services/device_location_service.dart';
 
-class _LocationPlatform extends OronboxLocation {
+class _LocationPlatform extends WearLocation {
   bool enabled = true;
   bool precise = true;
   LocationPermission permission = LocationPermission.whileInUse;

@@ -28,4 +28,12 @@
     <comment>AstroBox plugin package</comment>
     <glob pattern="*.abp"/>
   </mime-type>
+  <mime-type type="application/x-oronbox-canopus">
+    <comment>OronBox Canopus module</comment>
+    <glob pattern="*.canopus"/>
+  </mime-type>
+  <mime-type type="application/x-oronbox-crpack">
+    <comment>Corona resource pack</comment>
+    <glob pattern="*.crpack"/>
+  </mime-type>
 </mime-info>

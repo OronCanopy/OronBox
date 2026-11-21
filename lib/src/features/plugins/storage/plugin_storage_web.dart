@@ -15,13 +15,32 @@ Future<PluginStorage> createPluginStorage() async {
 }
 
 class _WebPluginStorage implements PluginStorage {
+  @override
+  Future<void> moveToHost(
+    String pluginId,
+    PluginStoragePath path,
+    String destination,
+  ) async => throw UnsupportedError(
+    'platform_capability_unavailable: Native install files',
+  );
+
+  @override
+  Future<void> restoreFromHost(
+    String pluginId,
+    PluginStoragePath path,
+    String source,
+  ) async => throw UnsupportedError(
+    'platform_capability_unavailable: Native install files',
+  );
   static const _databaseName = 'oronbox.plugins';
   static const _databaseVersion = 2;
   static const _filesStore = 'files';
   static const _sizesStore = 'sizes';
   static const _separator = '\u0001';
-  static const _configFile = '.oronbox/config.json';
-  static const _permissionsFile = '.oronbox/permissions.json';
+  static const _configFile = '.meta/config.json';
+  static const _legacyConfigFile = '.oronbox/config.json';
+  static const _permissionsFile = '.meta/permissions.json';
+  static const _legacyPermissionsFile = '.oronbox/permissions.json';
 
   web.IDBDatabase? _database;
 
@@ -86,7 +105,8 @@ class _WebPluginStorage implements PluginStorage {
                 manifest.iconPath!,
               )];
         final configBytes =
-            entries[_fileKey(id, PluginStorageArea.data, _configFile)];
+            entries[_fileKey(id, PluginStorageArea.data, _configFile)] ??
+            entries[_fileKey(id, PluginStorageArea.data, _legacyConfigFile)];
         plugins.add(
           InstalledPlugin(
             manifest: manifest,
@@ -150,13 +170,57 @@ class _WebPluginStorage implements PluginStorage {
   }
 
   @override
-  Future<Set<String>> readPermissionGrants(String pluginId) async {
+  Future<Map<String, Object?>> readHostSettings(String pluginId) async {
     final transaction = _db.transaction(_filesStore.toJS, 'readonly');
     final value = await _request(
       transaction
           .objectStore(_filesStore)
+          .get('$pluginId${_separator}host${_separator}settings.json'.toJS),
+    );
+    if (value == null) return {};
+    final raw = value.dartify();
+    final bytes = raw is Uint8List
+        ? raw
+        : Uint8List.fromList((raw as List).cast<int>());
+    return (jsonDecode(utf8.decode(bytes)) as Map).cast<String, Object?>();
+  }
+
+  @override
+  Future<void> writeHostSettings(
+    String pluginId,
+    Map<String, Object?> settings,
+  ) async {
+    final transaction = _db.transaction(
+      [_filesStore.toJS, _sizesStore.toJS].toJS,
+      'readwrite',
+    );
+    _put(
+      transaction,
+      Uint8List.fromList(utf8.encode(jsonEncode(settings))),
+      '$pluginId${_separator}host${_separator}settings.json',
+    );
+    await _transaction(transaction);
+  }
+
+  @override
+  Future<Set<String>> readPermissionGrants(String pluginId) async {
+    final transaction = _db.transaction(_filesStore.toJS, 'readonly');
+    var value = await _request(
+      transaction
+          .objectStore(_filesStore)
           .get(
             _fileKey(pluginId, PluginStorageArea.data, _permissionsFile).toJS,
+          ),
+    );
+    value ??= await _request(
+      transaction
+          .objectStore(_filesStore)
+          .get(
+            _fileKey(
+              pluginId,
+              PluginStorageArea.data,
+              _legacyPermissionsFile,
+            ).toJS,
           ),
     );
     if (value == null) return <String>{};
@@ -223,7 +287,12 @@ class _WebPluginStorage implements PluginStorage {
   }
 
   @override
-  Future<Uint8List> readFile(String pluginId, PluginStoragePath path) async {
+  Future<Uint8List> readFile(
+    String pluginId,
+    PluginStoragePath path, {
+    int offset = 0,
+    int? length,
+  }) async {
     if (path.relativePath.isEmpty) {
       throw const FormatException('A file path is required');
     }
@@ -237,22 +306,26 @@ class _WebPluginStorage implements PluginStorage {
       throw StateError('Plugin file does not exist: ${path.virtualPath}');
     }
     final dartValue = value.dartify();
-    if (dartValue is Uint8List) return dartValue;
-    if (dartValue is List) {
-      return Uint8List.fromList(
-        dartValue.whereType<num>().map((v) => v.toInt()).toList(),
-      );
-    }
-    throw StateError('Invalid plugin file: ${path.virtualPath}');
+    final bytes = switch (dartValue) {
+      Uint8List value => value,
+      List value => Uint8List.fromList(
+        value.whereType<num>().map((v) => v.toInt()).toList(),
+      ),
+      _ => throw StateError('Invalid plugin file: ${path.virtualPath}'),
+    };
+    if (offset == 0 && length == null) return bytes;
+    final count = pluginFileReadLength(bytes.length, offset, length);
+    return Uint8List.sublistView(bytes, offset, offset + count);
   }
 
   @override
   Future<void> writeFile(
     String pluginId,
     PluginStoragePath path,
-    Uint8List bytes,
-  ) async {
-    if (path.area == PluginStorageArea.package) {
+    Uint8List bytes, {
+    bool allowPackageWrite = false,
+  }) async {
+    if (path.area == PluginStorageArea.package && !allowPackageWrite) {
       throw UnsupportedError('/plugin is read-only');
     }
     if (path.relativePath.isEmpty) {
@@ -304,7 +377,11 @@ class _WebPluginStorage implements PluginStorage {
       if (remainder.isEmpty) continue;
       final slash = remainder.indexOf('/');
       final name = slash < 0 ? remainder : remainder.substring(0, slash);
-      if (name.startsWith('.oronbox')) continue;
+      if (name.startsWith('.meta') ||
+          name.startsWith('.oronbox') ||
+          name == '.dir') {
+        continue;
+      }
       final virtual = '${path.virtualPath}/$name';
       children[name] = PluginFileStat(
         path: virtual,
@@ -323,7 +400,7 @@ class _WebPluginStorage implements PluginStorage {
       throw UnsupportedError('/plugin is read-only');
     }
     if (path.relativePath.isEmpty) return;
-    final marker = '${path.relativePath}/.oronbox-directory';
+    final marker = '${path.relativePath}/.dir';
     final transaction = _db.transaction(
       [_filesStore.toJS, _sizesStore.toJS].toJS,
       'readwrite',
@@ -502,3 +579,5 @@ Future<Map<PluginStorageArea, int>> collectWebPluginStorageUsage() async {
     await storage.close();
   }
 }
+
+Future<void> cleanupPluginTemporaryFiles() async {}

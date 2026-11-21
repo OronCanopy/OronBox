@@ -1,5 +1,7 @@
 package org.zxor.oronbox
 
+import org.oroncanopy.oronbox.R
+
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -8,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 
@@ -58,16 +61,27 @@ class BackgroundTaskService : Service() {
             MODE_CONNECTION -> ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
             else -> ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
         }
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            notification,
-            serviceType,
-        )
+        try {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                serviceType,
+            )
+        } catch (error: IllegalStateException) {
+            Log.w("BackgroundTaskService", "Foreground execution was rejected", error)
+            onTaskTimeout?.invoke()
+            stopSelf(startId)
+        } catch (error: SecurityException) {
+            Log.w("BackgroundTaskService", "Foreground execution permission was rejected", error)
+            onTaskTimeout?.invoke()
+            stopSelf(startId)
+        }
         return START_NOT_STICKY
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
+        onTaskTimeout?.invoke()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf(startId)
     }
@@ -86,6 +100,7 @@ class BackgroundTaskService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        var onTaskTimeout: (() -> Unit)? = null
         const val EXTRA_LABEL = "label"
         const val EXTRA_MODE = "mode"
         const val EXTRA_BATTERY = "battery"

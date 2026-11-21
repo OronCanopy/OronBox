@@ -24,6 +24,13 @@ class FeatureLabPage extends StatelessWidget {
           SegmentedSection(
             tiles: [
               SegmentedTile.navigation(
+                leading: const Icon(Icons.developer_board_outlined),
+                title: Text(l10n.engineeringTitle),
+                description: Text(l10n.engineeringDescription),
+                onPressed: (_) =>
+                    context.push('/settings/labs/miwear-engineering'),
+              ),
+              SegmentedTile.navigation(
                 leading: const Icon(Icons.auto_awesome),
                 title: Text(l10n.globalAiTitle),
                 description: Text(l10n.globalAiDescription),

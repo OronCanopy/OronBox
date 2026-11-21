@@ -7,3 +7,8 @@ Future<String> create(
 ) => throw UnsupportedError('Temporary file paths are unavailable');
 Future<void> release(String path, {bool delete = true}) async {}
 Future<int> cleanup(Duration minimumAge, Set<String> protectedPaths) async => 0;
+Future<void> releaseImport(String path) async {}
+Future<int> cleanupImports(
+  Duration minimumAge,
+  Set<String> protectedPaths,
+) async => 0;

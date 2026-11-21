@@ -354,10 +354,14 @@ class _AppDataPageState extends ConsumerState<AppDataPage> {
     final removable = {
       AppDataCategory.health,
       AppDataCategory.cache,
+      AppDataCategory.compilation,
       AppDataCategory.images,
       AppDataCategory.downloads,
       AppDataCategory.models,
       AppDataCategory.documents,
+      AppDataCategory.logs,
+      AppDataCategory.plugins,
+      AppDataCategory.zeppos,
     };
     if (!removable.contains(category)) return;
     final l10n = AppLocalizations.of(context)!;
@@ -366,8 +370,14 @@ class _AppDataPageState extends ConsumerState<AppDataPage> {
       builder: (context) => AlertDialog(
         title: Text(l10n.appDataClearCategoryTitle(_title(category, l10n))),
         content: Text(switch (category) {
+          AppDataCategory.compilation =>
+            l10n.appDataClearCompilationCacheDescription,
+          AppDataCategory.cache => l10n.appDataClearPluginCacheDescription,
           AppDataCategory.health => l10n.appDataClearHealthDescription,
-          AppDataCategory.models => l10n.appDataClearModelsDescription,
+          AppDataCategory.models => l10n.appDataModelsDescription,
+          AppDataCategory.plugins => l10n.appDataPluginDescription,
+          AppDataCategory.logs => l10n.appDataLogsDescription,
+          AppDataCategory.zeppos => l10n.appDataZepposDescription,
           _ => l10n.appDataClearCachedCategoryDescription,
         }),
         actions: [
@@ -394,9 +404,9 @@ class _AppDataPageState extends ConsumerState<AppDataPage> {
         AppDataCategory.recovery => l10n.appDataRecovery,
         AppDataCategory.downloads => l10n.appDataDownloads,
         AppDataCategory.cache => l10n.appDataPluginCache,
+        AppDataCategory.compilation => l10n.appDataCompilationCache,
         AppDataCategory.images => l10n.appDataImageCache,
         AppDataCategory.models => l10n.appDataModels,
-        AppDataCategory.tasks => l10n.appDataTasks,
         AppDataCategory.documents => l10n.appDataDocuments,
       };
 
@@ -409,9 +419,9 @@ class _AppDataPageState extends ConsumerState<AppDataPage> {
         AppDataCategory.recovery => l10n.appDataRecoveryDescription,
         AppDataCategory.downloads => l10n.appDataDownloadsDescription,
         AppDataCategory.cache => l10n.appDataPluginCacheDescription,
+        AppDataCategory.compilation => l10n.appDataCompilationCacheDescription,
         AppDataCategory.images => l10n.appDataImagesDescription,
         AppDataCategory.models => l10n.appDataModelsDescription,
-        AppDataCategory.tasks => l10n.appDataTasksDescription,
         AppDataCategory.documents => l10n.appDataDocumentsDescription,
       };
 

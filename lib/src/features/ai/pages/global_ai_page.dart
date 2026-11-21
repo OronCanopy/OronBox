@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:oronbox/src/core/wasm/wasm_compatibility.dart';
+import 'package:oronbox/src/app/utils/error_localization.dart';
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/widgets/page_container.dart';
@@ -40,6 +43,24 @@ class _GlobalAiPageState extends ConsumerState<GlobalAiPage> {
       _streamEnabled = AiSettingsStore.streamEnabled;
       _wearableEnabled = AiSettingsStore.wearableEnabled;
     });
+  }
+
+  Future<bool> _allowWearableVoice() async {
+    try {
+      await WasmCompatibility.shared.ensureAllowed(interactive: true);
+      return mounted;
+    } catch (error) {
+      if (mounted) {
+        appScaffoldMessengerOf(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              localizedErrorMessage(AppLocalizations.of(context)!, error),
+            ),
+          ),
+        );
+      }
+      return false;
+    }
   }
 
   Future<void> _openProviderManagement(BuildContext context) async {
@@ -119,8 +140,12 @@ class _GlobalAiPageState extends ConsumerState<GlobalAiPage> {
                 title: Text(l10n.globalAiEnableSwitch),
                 description: Text(l10n.globalAiEnableSwitchDesc),
                 initialValue: _globalAiEnabled,
-                onToggle: (v) {
+                onToggle: (v) async {
                   final val = v ?? false;
+                  if (val && _wearableEnabled && !await _allowWearableVoice()) {
+                    return;
+                  }
+                  if (!mounted) return;
                   AiSettingsStore.globalAiEnabled = val;
                   setState(() => _globalAiEnabled = val);
                   ref
@@ -189,8 +214,10 @@ class _GlobalAiPageState extends ConsumerState<GlobalAiPage> {
                   title: Text(l10n.globalAiWearableEnable),
                   description: Text(l10n.globalAiWearableEnableDesc),
                   initialValue: _wearableEnabled,
-                  onToggle: (v) {
+                  onToggle: (v) async {
                     final val = v ?? false;
+                    if (val && !await _allowWearableVoice()) return;
+                    if (!mounted) return;
                     AiSettingsStore.wearableEnabled = val;
                     setState(() => _wearableEnabled = val);
                     ref

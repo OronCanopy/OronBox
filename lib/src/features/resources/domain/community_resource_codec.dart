@@ -6,11 +6,14 @@ Map<String, Object?> communityResourceFileToJson(CommunityResourceFile file) =>
       'id': file.id,
       'fileName': file.fileName,
       'version': file.version,
+      if (file.versionCode != null) 'versionCode': file.versionCode,
+      if (file.sha256 != null) 'sha256': file.sha256,
       if (file.displayName != null) 'displayName': file.displayName,
       if (file.downloadUrl != null) 'downloadUrl': file.downloadUrl.toString(),
       if (file.size != null) 'size': file.size,
       'devices': file.supportedDevices.toList(growable: false),
       if (file.encrypted) 'encrypted': true,
+      if (file.purchaseRequired) 'purchaseRequired': true,
     };
 
 CommunityResourceFile communityResourceFileFromJson(
@@ -19,11 +22,14 @@ CommunityResourceFile communityResourceFileFromJson(
   id: json['id']?.toString() ?? '',
   fileName: json['fileName']?.toString() ?? '',
   version: json['version']?.toString() ?? '',
+  versionCode: (json['versionCode'] as num?)?.toInt(),
+  sha256: json['sha256']?.toString(),
   displayName: json['displayName']?.toString(),
   downloadUrl: _uri(json['downloadUrl']),
   size: (json['size'] as num?)?.toInt(),
   supportedDevices: _strings(json['devices']).toSet(),
   encrypted: json['encrypted'] == true,
+  purchaseRequired: json['purchaseRequired'] == true,
 );
 
 Map<String, Object?> communityResourceToJson(CommunityResource resource) => {
@@ -104,10 +110,6 @@ Map<String, Object?> communityResourceDetailToJson(
       .map((link) => {'title': link.title, 'url': link.url.toString()})
       .toList(growable: false),
   'canDownload': detail.canDownload,
-  if (detail.downloadRestriction != CommunityResourceDownloadRestriction.none)
-    'downloadRestriction': communityResourceDownloadRestrictionToWire(
-      detail.downloadRestriction,
-    ),
 };
 
 CommunityResource communityResourceFromJson(Map<String, Object?> json) {
@@ -201,10 +203,10 @@ CommunityResourceDetail communityResourceDetailFromJson(
         url: Uri.parse(link['url']!.toString()),
       );
     }).toList(),
-    canDownload: json['canDownload'] != false,
-    downloadRestriction: communityResourceDownloadRestrictionFromWire(
-      json['downloadRestriction'],
-    ),
+    canDownload:
+        json['canDownload'] != false ||
+        (common.ref.source == CommunitySourceId.astroboxRepo &&
+            json['downloadRestriction'] == 'astrobox_creator_encrypted'),
   );
 }
 

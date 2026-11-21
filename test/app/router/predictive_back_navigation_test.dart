@@ -26,7 +26,117 @@ Future<void> _gesture(WidgetTester tester, {bool cancel = false}) async {
 }
 
 void main() {
-  for (final mode in ['gesture', 'cancel then gesture', 'arrow']) {
+  for (final custom in [false, true]) {
+    testWidgets(
+      'Android page return continues the slide after release (custom $custom)',
+      (tester) async {
+        const pageKey = ValueKey('returning-page');
+        final router = GoRouter(
+          routes: [
+            GoRoute(
+              path: '/',
+              builder: (_, _) => const Scaffold(
+                key: ValueKey('home-page'),
+                body: Text('home'),
+              ),
+              routes: [
+                GoRoute(
+                  path: 'detail',
+                  builder: custom
+                      ? null
+                      : (_, _) =>
+                            const Scaffold(key: pageKey, body: Text('detail')),
+                  pageBuilder: !custom
+                      ? null
+                      : (_, state) => CustomTransitionPage<void>(
+                          key: state.pageKey,
+                          transitionsBuilder:
+                              AppTheme.buildPlatformPageTransition,
+                          child: const Scaffold(
+                            key: pageKey,
+                            body: Text('detail'),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ],
+        );
+        addTearDown(router.dispose);
+        await tester.pumpWidget(
+          MaterialApp.router(
+            theme: AppTheme.light.copyWith(platform: TargetPlatform.android),
+            routerConfig: router,
+          ),
+        );
+        await tester.pumpAndSettle();
+        router.push('/detail');
+        await tester.pumpAndSettle();
+        Future<void> event(String method, [double? progress]) async {
+          await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+            'flutter/backgesture',
+            const StandardMethodCodec().encodeMethodCall(
+              MethodCall(
+                method,
+                progress == null
+                    ? null
+                    : {
+                        'touchOffset': <double>[0, 250],
+                        'progress': progress,
+                        'swipeEdge': 0,
+                      },
+              ),
+            ),
+            (_) {},
+          );
+          await tester.pump();
+        }
+
+        await event('startBackGesture', 0);
+        await event('updateBackGestureProgress', .45);
+        expect(
+          tester.getTopLeft(find.byKey(pageKey)).dx,
+          greaterThan(
+            tester.view.physicalSize.width / tester.view.devicePixelRatio * .25,
+          ),
+        );
+        await event('cancelBackGesture');
+        await tester.pumpAndSettle();
+        expect(tester.getTopLeft(find.byKey(pageKey)).dx, closeTo(0, .001));
+        await event('startBackGesture', 0);
+        await event('updateBackGestureProgress', .45);
+        final beforeRelease = tester.getTopLeft(find.byKey(pageKey));
+        final homeFinder = find.byKey(
+          const ValueKey('home-page'),
+          skipOffstage: false,
+        );
+        final homeBeforeRelease = tester.getTopLeft(homeFinder);
+        await event('commitBackGesture');
+        expect(tester.getTopLeft(find.byKey(pageKey)), beforeRelease);
+        expect(tester.getTopLeft(homeFinder), homeBeforeRelease);
+        var previousPageX = beforeRelease.dx;
+        var previousHomeX = homeBeforeRelease.dx;
+        for (var frame = 0; frame < 8; frame++) {
+          await tester.pump(const Duration(milliseconds: 16));
+          final pageX = tester.getTopLeft(find.byKey(pageKey)).dx;
+          final homeX = tester.getTopLeft(homeFinder).dx;
+          expect(pageX, greaterThanOrEqualTo(previousPageX));
+          expect(homeX, greaterThanOrEqualTo(previousHomeX));
+          previousPageX = pageX;
+          previousHomeX = homeX;
+        }
+        await tester.pumpAndSettle();
+        expect(find.byKey(pageKey), findsNothing);
+        expect(router.routeInformationProvider.value.uri.path, '/');
+      },
+    );
+  }
+  for (final mode in [
+    'gesture',
+    'cancel then gesture',
+    'arrow',
+    'system back',
+  ]) {
     testWidgets(
       'root DevTools returns once and preserves secondary route: $mode',
       (tester) async {
@@ -79,7 +189,10 @@ void main() {
           expect(find.text('DevTools'), findsOneWidget);
           expect(find.text('voice'), findsNothing);
         }
-        if (mode == 'arrow') {
+        if (mode == 'system back') {
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+        } else if (mode == 'arrow') {
           await tester.tap(find.byType(BackButton));
           await tester.pumpAndSettle();
         } else {

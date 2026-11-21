@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:segmented_list/segmented_list.dart';
@@ -93,7 +94,7 @@ class _XiaomiAppOrderPageState extends ConsumerState<XiaomiAppOrderPage> {
           _savedApps = List.unmodifiable(_apps);
           _dirty = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
+        appScaffoldMessengerOf(context).showSnackBar(
           SnackBar(content: Text(AppLocalizations.of(context)!.appOrderSaved)),
         );
       }
@@ -113,7 +114,7 @@ class _XiaomiAppOrderPageState extends ConsumerState<XiaomiAppOrderPage> {
   }
 
   void _showError(Object error) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    appScaffoldMessengerOf(context).showSnackBar(
       SnackBar(
         content: Text(
           localizedErrorMessage(AppLocalizations.of(context)!, error),
@@ -616,7 +617,7 @@ class _XiaomiAlarmsPageState extends ConsumerState<XiaomiAlarmsPage> {
   }
 
   void _showError(Object error) {
-    ScaffoldMessenger.of(context).showSnackBar(
+    appScaffoldMessengerOf(context).showSnackBar(
       SnackBar(
         content: Text(
           localizedErrorMessage(AppLocalizations.of(context)!, error),
@@ -701,8 +702,7 @@ class _XiaomiAlarmsPageState extends ConsumerState<XiaomiAlarmsPage> {
           : _alarms.isEmpty
           ? EmptyStateView(
               icon: Icons.alarm_off_outlined,
-              title: l10n.alarmManagementTitle,
-              message: l10n.noContent,
+              title: l10n.alarmManagementNone,
             )
           : SegmentedList(
               maxWidth: StyleConstants.pageMaxWidth,

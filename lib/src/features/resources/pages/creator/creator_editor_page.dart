@@ -1,3 +1,6 @@
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
+import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -13,6 +16,8 @@ import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/utils/error_localization.dart';
 import 'package:oronbox/src/app/utils/picked_file.dart';
 import 'package:oronbox/src/core/constants/style_constants.dart';
+import 'package:oronbox/src/device/core/watchface_install_policy.dart'
+    show isValidVelaWatchfaceId;
 import 'package:oronbox/src/features/settings/pages/legal_documents_page.dart';
 import 'package:oronbox/src/features/accounts/application/host_accounts.dart';
 import 'package:oronbox/src/features/resources/application/creator/creator_workspace_controller.dart';
@@ -83,10 +88,6 @@ String? _invalidPackageIdReason(
   }
   return null;
 }
-
-bool _isValidWatchfaceIdOverride(String value) =>
-    RegExp(r'^[0-9]{1,12}$').hasMatch(value.trim()) &&
-    !RegExp(r'^[0]+$').hasMatch(value.trim());
 
 class _CreatorEditorViewState extends State<CreatorEditorView> {
   int _editorStage = 0;
@@ -178,6 +179,7 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
           : const <String, Object?>{};
       switch (publication['target']) {
         case 'bandbbs':
+          if (!_supportsBandBbs) continue;
           _publishBandBbs = true;
           _overwritePreviousBandBbs =
               config['overwrite_previous_version'] == true;
@@ -211,7 +213,7 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
       for (final binding in importedIdentities) {
         switch (binding['provider']) {
           case 'bandbbs':
-            _publishBandBbs = true;
+            _publishBandBbs = _supportsBandBbs;
           case 'astrobox':
             _publishAstroBox = true;
         }
@@ -442,11 +444,13 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
                     ),
                     const SizedBox(height: 8),
                     if (_editorStage == 2) ...[
-                      CreatorSectionTitle(
-                        icon: Icons.edit_outlined,
-                        title: l10n.creatorReviewStatus,
-                      ),
-                      const SizedBox(height: 8),
+                      if (workspace.review != null) ...[
+                        CreatorSectionTitle(
+                          icon: Icons.edit_outlined,
+                          title: l10n.creatorReviewStatus,
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       if (widget.state.error != null) ...[
                         MaterialBanner(
                           content: Text(
@@ -612,11 +616,12 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
                             const SizedBox(height: 12),
                             TextField(
                               controller: _summary,
-                              minLines: 3,
-                              maxLines: 8,
+                              maxLength: 120,
                               onChanged: (_) => setState(() {}),
                               decoration: InputDecoration(
                                 labelText: l10n.creatorResourceSummary,
+                                helperText: l10n.creatorSummaryHint,
+                                helperMaxLines: 2,
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -626,6 +631,8 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
                               maxLines: 16,
                               decoration: InputDecoration(
                                 labelText: l10n.description,
+                                helperText: l10n.creatorDescriptionHint,
+                                helperMaxLines: 2,
                               ),
                             ),
                             if (_name.text.trim().isEmpty ||
@@ -876,7 +883,7 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
                           padding: const EdgeInsets.all(14),
                           child: Column(
                             children: [
-                              CheckboxListTile(
+                              AppCheckboxTile(
                                 value: _externalPurchaseEnabled,
                                 onChanged: widget.state.loading
                                     ? null
@@ -1188,18 +1195,29 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
         );
     final isApp = analysis?.type == LocalDeviceInstallType.app;
     final isWatchface = analysis?.type == LocalDeviceInstallType.watchface;
+    final isCanopus = analysis?.type == LocalDeviceInstallType.canopus;
     if (analysis == null ||
         analysis.platform != ResourcePlatform.vela ||
-        (!isApp && !isWatchface)) {
+        (!isApp && !isWatchface && !isCanopus)) {
       _showFailure(l10n.creatorInvalidPackage);
       return;
     }
-    final expectApp =
-        widget.workspace.resource.kind == CreatorResourceKind.quickApp;
-    if (expectApp != isApp) {
+    final kindMatches = switch (widget.workspace.resource.kind) {
+      CreatorResourceKind.quickApp => isApp,
+      CreatorResourceKind.watchface => isWatchface,
+      CreatorResourceKind.canopus => isCanopus,
+    };
+    if (!kindMatches) {
+      final detectedKindLabel = switch (analysis.type) {
+        LocalDeviceInstallType.app => l10n.quickApp,
+        LocalDeviceInstallType.watchface => l10n.watchface,
+        LocalDeviceInstallType.canopus => l10n.module,
+        LocalDeviceInstallType.resPack => l10n.resourceTypeResPack,
+        LocalDeviceInstallType.firmware => l10n.resourceTypeFirmware,
+      };
       _showFailure(
         l10n.creatorKindMismatchMessage(
-          isApp ? l10n.quickApp : l10n.watchface,
+          detectedKindLabel,
           creatorKindLabel(l10n, widget.workspace.resource.kind),
         ),
       );
@@ -1247,7 +1265,15 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
       packageId: analysis.identifier ?? '',
       version: analysis.version ?? '',
       versionCode: analysis.versionCode,
-      type: isApp ? 'velaos_quickapp' : 'velaos_watchface',
+      type: switch (analysis.type) {
+        LocalDeviceInstallType.app => 'velaos_quickapp',
+        LocalDeviceInstallType.watchface => 'velaos_watchface',
+        LocalDeviceInstallType.canopus => 'velaos_canopus',
+        LocalDeviceInstallType.resPack => throw StateError(
+          'Resource packs cannot be published',
+        ),
+        LocalDeviceInstallType.firmware => 'velaos_firmware',
+      },
     );
     setState(() {
       if (replace == null) {
@@ -1272,7 +1298,7 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
           content: TextField(
             controller: controller,
             autofocus: true,
-            keyboardType: TextInputType.number,
+            keyboardType: TextInputType.text,
             inputFormatters: [
               FilteringTextInputFormatter.digitsOnly,
               LengthLimitingTextInputFormatter(12),
@@ -1289,7 +1315,7 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: controller,
               builder: (context, value, _) => FilledButton(
-                onPressed: _isValidWatchfaceIdOverride(value.text)
+                onPressed: isValidVelaWatchfaceId(value.text.trim())
                     ? () => Navigator.pop(context, value.text.trim())
                     : null,
                 child: Text(l10n.save),
@@ -1352,7 +1378,7 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
         if (otherSelection?.contains(deviceId) != true) continue;
         if ((otherSelection?.length ?? 0) <= 1) {
           final l10n = AppLocalizations.of(context)!;
-          ScaffoldMessenger.of(context)
+          appScaffoldMessengerOf(context)
             ..hideCurrentSnackBar()
             ..showSnackBar(
               SnackBar(
@@ -1374,6 +1400,9 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
     });
     _rebuildPlan();
   }
+
+  bool get _supportsBandBbs =>
+      widget.workspace.resource.kind != CreatorResourceKind.canopus;
 
   Future<void> _loadPublicationPlan() async {
     if (_loadingPublicationPlan) return;
@@ -1492,22 +1521,23 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CheckboxListTile(
+                AppCheckboxTile(
                   value: true,
                   onChanged: null,
                   title: Text(l10n.creatorGithubPr),
                 ),
-                CheckboxListTile(
+                AppCheckboxTile(
                   value: true,
                   onChanged: null,
                   title: Text(l10n.creatorConfirmOronBox),
                 ),
-                CheckboxListTile(
-                  value: selectedBandBbs,
-                  onChanged: (value) =>
-                      setDialogState(() => selectedBandBbs = value ?? false),
-                  title: Text(l10n.bandbbs),
-                ),
+                if (_supportsBandBbs)
+                  AppCheckboxTile(
+                    value: selectedBandBbs,
+                    onChanged: (value) =>
+                        setDialogState(() => selectedBandBbs = value ?? false),
+                    title: Text(l10n.bandbbs),
+                  ),
               ],
             ),
             actions: [
@@ -1764,7 +1794,7 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
 
   void _showFailure(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
+    appScaffoldMessengerOf(context)
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
@@ -1975,7 +2005,7 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
                 Text(l10n.creatorDeletePublishedConfirm),
                 const SizedBox(height: 8),
                 if (providers.contains('bandbbs'))
-                  CheckboxListTile(
+                  AppCheckboxTile(
                     value: selected.contains('bandbbs'),
                     onChanged: (value) => toggle('bandbbs', value == true),
                     title: Text(l10n.creatorDeleteExternalBandbbs),
@@ -1983,7 +2013,7 @@ class _CreatorEditorViewState extends State<CreatorEditorView> {
                     contentPadding: EdgeInsets.zero,
                   ),
                 if (providers.contains('astrobox'))
-                  CheckboxListTile(
+                  AppCheckboxTile(
                     value: selected.contains('astrobox'),
                     onChanged: (value) => toggle('astrobox', value == true),
                     title: Text(l10n.creatorDeleteExternalAstrobox),

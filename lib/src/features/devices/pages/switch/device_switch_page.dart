@@ -1,3 +1,6 @@
+import 'package:oronbox/src/app/widgets/dialog_helper.dart';
+import 'package:oronbox/src/features/devices/pages/switch/xiaomi_pairing_page.dart' show offerXiaomiRebind;
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:oronbox/src/features/devices/widgets/device_import_dialog.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,7 +24,7 @@ import 'package:oronbox/src/device/core/connect_type.dart';
 import 'package:oronbox/src/device/core/device_kind.dart';
 import 'package:oronbox/src/device/core/device_profile.dart';
 import 'package:oronbox/src/device/xiaomi/esim/esim_activation_code.dart';
-import 'package:oronbox/src/device/core/xiaomi_wearable_catalog.dart';
+import 'package:oronbox/src/device/xiaomi/xiaomi_device_catalog.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_device_catalog.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 import 'package:oronbox/src/features/devices/domain/device_connection_endpoint.dart';
@@ -30,7 +33,9 @@ import 'package:oronbox/src/features/devices/widgets/device_connection_text.dart
 import 'package:oronbox/src/features/devices/widgets/xiaomi_fitness_logo.dart';
 import 'package:oronbox/src/features/devices/services/device_share_link.dart';
 import 'package:oronbox/src/features/devices/providers/pending_shared_device_provider.dart';
-import 'package:oronbox/src/features/settings/pages/settings_page.dart';
+import 'package:oronbox/src/features/accounts/widgets/mi_account_login_dialog.dart';
+import 'package:oronbox/src/features/settings/pages/settings_page.dart'
+    show MiLogo;
 import 'package:oronbox/src/device/core/device_state.dart' as proto;
 
 List<BTDeviceInfo> _visibleScannedDevices(DeviceManagerState state) {
@@ -88,8 +93,6 @@ class DeviceSwitchPage extends ConsumerStatefulWidget {
 }
 
 class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
-  String? _lastErrorToast;
-
   @override
   void initState() {
     super.initState();
@@ -131,7 +134,7 @@ class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
 
     final activationCode = XiaomiEsimActivationCode.parse(value);
     if (activationCode == null) {
-      ScaffoldMessenger.of(context)
+      appScaffoldMessengerOf(context)
           .showSnackBar(SnackBar(content: Text(l10n.errorContentNotFound)));
       return;
     }
@@ -153,7 +156,7 @@ class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
     if (current == null ||
         state.protocolState != proto.ProtocolState.ready ||
         profile.kind != DeviceKind.xiaomi) {
-      ScaffoldMessenger.of(context)
+      appScaffoldMessengerOf(context)
           .showSnackBar(SnackBar(content: Text(l10n.errorDeviceNotReady)));
       return;
     }
@@ -193,11 +196,11 @@ class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
             confirmationCode: confirmationCode,
           );
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
+      appScaffoldMessengerOf(context)
           .showSnackBar(SnackBar(content: Text(l10n.downloadStarted)));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
+      appScaffoldMessengerOf(context)
           .showSnackBar(SnackBar(content: Text(error.toString())));
     } finally {
       confirmationController.dispose();
@@ -213,7 +216,10 @@ class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
         : null;
 
     ref.listen<DeviceManagerState>(deviceManagerProvider, (previous, next) {
-      if (next.error == null) _lastErrorToast = null;
+      if (ModalRoute.of(context)?.isCurrent != true ||
+          next.error == DeviceManager.errorXiaomiPairingRequired) {
+        return;
+      }
       final wasConnecting = previous?.connecting ?? false;
       final isReady = next.protocolState == proto.ProtocolState.ready;
       final connectedTarget = next.connectionTargetAddr;
@@ -225,7 +231,7 @@ class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
           previous?.connectionTargetAddr == connectedTarget &&
           next.currentDevice?.addr == connectedTarget;
       if (wasConnecting && justBecameReady) {
-        ScaffoldMessenger.of(context)
+        appScaffoldMessengerOf(context)
             .showSnackBar(SnackBar(content: Text(l10n.deviceConnected)));
         if (context.mounted) {
           context.pop();
@@ -235,14 +241,9 @@ class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
           (next.connectStatus == 3 || !wasConnecting) &&
           (next.error != previous?.error ||
               (wasConnecting && next.connectStatus == 3))) {
-        // The same failure can surface twice with different wording (daemon
-        // state push vs. command wrapper); toast once per distinct message.
         final message = localizedErrorMessage(l10n, next.error);
-        if (message != _lastErrorToast) {
-          _lastErrorToast = message;
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(message)));
-        }
+        appScaffoldMessengerOf(context)
+            .showSnackBar(SnackBar(content: Text(message)));
       }
     });
 
@@ -268,8 +269,7 @@ class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
           onComplete: () {
             if (mounted) setState(() {});
           },
-          onMiAccountLogin: () =>
-              SettingsPage.showMiAccountLoginDialog(context, ref),
+          onMiAccountLogin: () => showMiAccountLoginDialog(context),
           onWearableLogImport: () => showWearableLogSyncDialog(context, ref),
           onQrScan: _supportsQrScanner ? _scanQrCode : null,
         );
@@ -350,10 +350,7 @@ class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
                         ? null
                         : _DeviceImportButton(
                             onMiAccountLogin: () =>
-                                SettingsPage.showMiAccountLoginDialog(
-                                  context,
-                                  ref,
-                                ),
+                                showMiAccountLoginDialog(context),
                             onWearableLogImport: () =>
                                 showWearableLogSyncDialog(context, ref),
                             onQrScan: _supportsQrScanner ? _scanQrCode : null,
@@ -366,8 +363,7 @@ class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
                 onComplete: () {
                   if (mounted) setState(() {});
                 },
-                onMiAccountLogin: () =>
-                    SettingsPage.showMiAccountLoginDialog(context, ref),
+                onMiAccountLogin: () => showMiAccountLoginDialog(context),
                 onWearableLogImport: () =>
                     showWearableLogSyncDialog(context, ref),
                 onQrScan: _supportsQrScanner ? _scanQrCode : null,
@@ -421,8 +417,7 @@ class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
           onComplete: () {
             if (mounted) setState(() {});
           },
-          onMiAccountLogin: () =>
-              SettingsPage.showMiAccountLoginDialog(context, ref),
+          onMiAccountLogin: () => showMiAccountLoginDialog(context),
           onWearableLogImport: () => showWearableLogSyncDialog(context, ref),
           onQrScan: null,
         );
@@ -472,10 +467,7 @@ class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
                         ? null
                         : _DeviceImportButton(
                             onMiAccountLogin: () =>
-                                SettingsPage.showMiAccountLoginDialog(
-                                  context,
-                                  ref,
-                                ),
+                                showMiAccountLoginDialog(context),
                             onWearableLogImport: () =>
                                 showWearableLogSyncDialog(context, ref),
                           ),
@@ -493,10 +485,7 @@ class _DeviceSwitchPageState extends ConsumerState<DeviceSwitchPage> {
                       children: [
                         _DeviceImportActions(
                           onMiAccountLogin: () =>
-                              SettingsPage.showMiAccountLoginDialog(
-                                context,
-                                ref,
-                              ),
+                              showMiAccountLoginDialog(context),
                           onWearableLogImport: () =>
                               showWearableLogSyncDialog(context, ref),
                         ),
@@ -1020,6 +1009,7 @@ class _ScanDeviceListState extends ConsumerState<_ScanDeviceList> {
                 final device = visibleDevices[index];
                 return _DeviceCard(
                   key: ValueKey('scan-${device.addr}'),
+                  xiaomiRegistered: device.xiaomiRegistered,
                   device: MiWearState(
                     name: device.name,
                     addr: device.addr,
@@ -1201,6 +1191,7 @@ class _SliverScanDeviceListState extends ConsumerState<_SliverScanDeviceList> {
           ),
           child: _DeviceCard(
             key: ValueKey('scan-${device.addr}'),
+            xiaomiRegistered: device.xiaomiRegistered,
             device: MiWearState(
               name: device.name,
               addr: device.addr,
@@ -1263,11 +1254,13 @@ class _DeviceCard extends ConsumerStatefulWidget {
     super.key,
     required this.device,
     this.saved = false,
+    this.xiaomiRegistered,
     this.onComplete,
   });
 
   final MiWearState device;
   final bool saved;
+  final bool? xiaomiRegistered;
   final VoidCallback? onComplete;
 
   @override
@@ -1317,6 +1310,63 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
     super.dispose();
   }
 
+  Future<void> _pair() async {
+    final endpoint = _connectionEndpointFor(
+      _connectType,
+      ref.read(deviceManagerProvider),
+    );
+    if (endpoint == null) {
+      _showMissingEndpoint(_connectType);
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await OronBoxDialog.show<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.pairingTitle),
+        content: Text(l10n.pairingStartPrompt),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(l10n.pairingContinue),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final manual = await context.push<bool>(
+      '/devices/pair',
+      extra: widget.device.copyWith(
+        addr: endpoint.addr,
+        name: endpoint.name,
+        connectType: _connectType,
+      ),
+    );
+    if (mounted && manual == true) setState(() => _showInput = true);
+  }
+
+  Future<bool> _offerRebind(String address, String name, String type) async {
+    if (!mounted) return false;
+    final result = ref.read(deviceManagerProvider);
+    if (result.error != DeviceManager.errorXiaomiPairingRequired ||
+        !deviceAddressEquals(result.connectionTargetAddr, address)) {
+      return false;
+    }
+    setState(() {
+      _showInput = false;
+      _showConnectionError = false;
+    });
+    await offerXiaomiRebind(
+      context,
+      widget.device.copyWith(addr: address, name: name, connectType: type),
+    );
+    return true;
+  }
+
   Future<void> _connect() async {
     final authKey = _authController.text;
     final endpoint = _connectionEndpointFor(
@@ -1342,6 +1392,9 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
             authKey,
             connectType: _connectType,
           );
+      if (await _offerRebind(endpoint.addr, endpoint.name, _connectType)) {
+        return;
+      }
       if (!mounted) return;
       widget.onComplete?.call();
       if (mounted) {
@@ -1388,7 +1441,7 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
   void _showMissingEndpoint(String connectType) {
     if (!mounted) return;
     final target = connectType == ConnectType.spp.name ? 'SPP' : 'BLE';
-    ScaffoldMessenger.of(context).showSnackBar(
+    appScaffoldMessengerOf(context).showSnackBar(
       SnackBar(
         content: Text(
           AppLocalizations.of(context)!.deviceEndpointUnavailable(target),
@@ -1401,6 +1454,9 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final colorScheme = Theme.of(context).colorScheme;
+    final displayName = widget.device.localizedName(
+      Localizations.localeOf(context),
+    );
     final state = ref.watch(deviceManagerProvider);
     final manager = ref.read(deviceManagerProvider.notifier);
     final connected = manager.connectedAddresses.contains(widget.device.addr);
@@ -1427,6 +1483,10 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
       widget.device.addr,
     );
     final isConnectingThisDevice = state.connecting && isConnectionTarget;
+    final isUnbound = !widget.saved &&
+        profile.kind == DeviceKind.xiaomi &&
+        !isUnrecognized &&
+        widget.xiaomiRegistered == false;
 
     ref.listen<DeviceManagerState>(deviceManagerProvider, (previous, next) {
       final failedThisDevice =
@@ -1438,7 +1498,10 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
                 previous?.connectionTargetAddr,
                 widget.device.addr,
               ));
-      if (failedThisDevice && _connectInitiated && mounted) {
+      if (failedThisDevice &&
+          next.error != DeviceManager.errorXiaomiPairingRequired &&
+          _connectInitiated &&
+          mounted) {
         setState(() {
           _showInput = true;
           _showConnectionError = true;
@@ -1469,6 +1532,8 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
                   )
                 : connected || isConnectingThisDevice
                 ? null
+                : isUnbound
+                ? _pair
                 : () => setState(() => _showInput = !_showInput),
             borderRadius: BorderRadius.circular(StyleConstants.cardRadius),
             child: Padding(
@@ -1499,7 +1564,7 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          widget.device.name,
+                          displayName,
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -1522,6 +1587,16 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
                       ],
                     ),
                   ),
+                  if (isUnbound && !isConnectingThisDevice)
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(start: 8),
+                      child: Text(
+                        l10n.pairingUnbound,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
                   if (isConnectingThisDevice)
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -1578,6 +1653,13 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
                             widget.device.authkey ?? '',
                             connectType: selected,
                           );
+                          if (await _offerRebind(
+                            endpoint.addr,
+                            endpoint.name,
+                            selected,
+                          )) {
+                            return;
+                          }
                         }
                         if (mounted) widget.onComplete?.call();
                       },
@@ -1720,7 +1802,7 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
                             deviceConnectionPhaseText(
                               l10n,
                               state,
-                              fallbackDeviceName: widget.device.name,
+                              fallbackDeviceName: displayName,
                               connectType: _connectType,
                             ),
                             textAlign: TextAlign.center,
@@ -1795,7 +1877,7 @@ class _DeviceCardState extends ConsumerState<_DeviceCard> {
               TextButton(
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: link));
-                  ScaffoldMessenger.of(context)
+                  appScaffoldMessengerOf(context)
                       .showSnackBar(SnackBar(content: Text(l10n.copied)));
                 },
                 child: Text(l10n.copy),

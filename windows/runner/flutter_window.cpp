@@ -2,13 +2,30 @@
 
 #include <optional>
 #include <utility>
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
 
 #include "classic_spp_channel.h"
 #include "desktop_multi_window/desktop_multi_window_plugin.h"
 #include "file_open_channel.h"
 #include "flutter/generated_plugin_registrant.h"
-#include "mi_account_2fa_channel.h"
-#include "zeppos_app_settings_channel.h"
+
+namespace {
+void RegisterWindowHandleChannel(flutter::FlutterViewController* controller) {
+  flutter::MethodChannel<flutter::EncodableValue> channel(
+      controller->engine()->messenger(), "org.oroncanopy.oronbox/window_handle",
+      &flutter::StandardMethodCodec::GetInstance());
+  channel.SetMethodCallHandler([controller](const auto& call, auto result) {
+    if (call.method_name() != "get") {
+      result->NotImplemented();
+      return;
+    }
+    const auto window = GetAncestor(controller->view()->GetNativeWindow(), GA_ROOT);
+    result->Success(flutter::EncodableValue(
+        static_cast<int64_t>(reinterpret_cast<intptr_t>(window))));
+  });
+}
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project,
                              std::string initial_open_path,
@@ -40,15 +57,14 @@ bool FlutterWindow::OnCreate() {
         reinterpret_cast<flutter::FlutterViewController *>(controller);
     auto *registry = flutter_view_controller->engine();
     RegisterPlugins(registry);
+    RegisterWindowHandleChannel(flutter_view_controller);
   });
   RegisterRfcommChannel(flutter_controller_->engine()->messenger());
   RegisterFileOpenChannel(flutter_controller_->engine()->messenger(),
                           initial_open_path_);
-  RegisterMiAccountTwoFactorChannel(flutter_controller_->engine()->messenger(),
-                                    GetHandle());
-  RegisterZeppOsAppSettingsChannel(flutter_controller_->engine()->messenger(),
-                                   GetHandle());
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  RegisterWindowHandleChannel(flutter_controller_.get());
 
   if (show_on_first_frame_) {
     flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -67,7 +83,6 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
-  CloseZeppOsAppSettings();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

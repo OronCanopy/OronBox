@@ -1,8 +1,62 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
+import 'package:oronbox/src/app/widgets/dialog_helper.dart';
 
 void main() {
+  testWidgets('toasts from a covered page follow navigation and dismiss', (
+    tester,
+  ) async {
+    final navigator = GlobalKey<NavigatorState>();
+    late BuildContext sourceContext;
+    var actionCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        home: OronBoxScaffoldMessenger(
+          child: Scaffold(
+            body: Builder(
+              builder: (context) {
+                sourceContext = context;
+                return const Text('Source');
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    navigator.currentState!.push(
+      MaterialPageRoute<void>(
+        builder: (_) => const OronBoxScaffoldMessenger(
+          child: Scaffold(body: Text('Detail')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    OronBoxDialog.showToast(
+      context: sourceContext,
+      message: 'Detail notice',
+      showActionButton: true,
+      actionLabel: 'Done',
+      onActionPressed: () => actionCount++,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Detail notice'), findsOneWidget);
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(actionCount, 1);
+    expect(find.byType(SnackBar), findsNothing);
+
+    navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+    OronBoxDialog.showToast(context: sourceContext, message: 'Source notice');
+    await tester.pumpAndSettle();
+    expect(find.text('Source notice'), findsOneWidget);
+    appScaffoldMessengerOf(sourceContext).removeCurrentSnackBar();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets(
     'OronBoxScaffoldMessenger deduplicates rapid identical snackbars',
     (tester) async {
@@ -37,6 +91,35 @@ void main() {
       expect(find.text('Duplicate Error'), findsOneWidget);
     },
   );
+  testWidgets('removed identical notices can be shown immediately', (
+    tester,
+  ) async {
+    final key = GlobalKey<ScaffoldMessengerState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OronBoxScaffoldMessenger(key: key, child: const Scaffold()),
+      ),
+    );
+    final messenger = key.currentState!;
+    final first = messenger.showSnackBar(
+      const SnackBar(content: Text('Failure')),
+    );
+    await tester.pumpAndSettle();
+    messenger.removeCurrentSnackBar();
+    final retry = messenger.showSnackBar(
+      const SnackBar(content: Text('Failure')),
+    );
+    expect(retry, isNot(same(first)));
+    await tester.pumpAndSettle();
+    expect(find.text('Failure'), findsOneWidget);
+    messenger.hideCurrentSnackBar();
+    final again = messenger.showSnackBar(
+      const SnackBar(content: Text('Failure')),
+    );
+    expect(again, isNot(same(retry)));
+    await tester.pumpAndSettle();
+    expect(find.text('Failure'), findsOneWidget);
+  });
   testWidgets(
     'global callbacks use the page messenger and custom root fallback',
     (tester) async {

@@ -18,6 +18,7 @@ import 'package:oronbox/src/features/resources/application/oronbox_resource_attr
 import 'package:oronbox/src/features/resources/controllers/resource_filter_controller.dart';
 import 'package:oronbox/src/features/resources/domain/community_resource.dart';
 import 'package:oronbox/src/features/resources/pages/resources_page.dart';
+import 'package:oronbox/src/features/resources/services/install_queue_notifier.dart';
 import 'package:oronbox/src/features/resources/application/home_providers.dart';
 
 void main() {
@@ -29,13 +30,21 @@ void main() {
   testWidgets('resource home remains tappable after returning from detail', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(420, 860);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final first = _resource('first');
     final second = _resource('second');
     final router = GoRouter(
       initialLocation: '/resources',
       routes: [
         StatefulShellRoute.indexedStack(
-          builder: (_, _, navigationShell) => navigationShell,
+          builder: (_, _, navigationShell) => ShellBranchIndex(
+            index: navigationShell.currentIndex,
+            onBranchSelected: navigationShell.goBranch,
+            child: navigationShell,
+          ),
           branches: [
             StatefulShellBranch(
               routes: [
@@ -114,6 +123,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          installQueueProvider.overrideWith(_EmptyInstalls.new),
           appSettingsProvider.overrideWith(
             () => _FixedSettingsNotifier(settings),
           ),
@@ -125,6 +135,7 @@ void main() {
           hostAccountsProvider.overrideWith(_SignedOutHost.new),
         ],
         child: MaterialApp.router(
+          theme: AppTheme.light,
           locale: const Locale('zh'),
           localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
@@ -134,14 +145,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.byType(AppBottomNavigationBar), findsOneWidget);
+    await tester.ensureVisible(find.text('first'));
     await tester.tap(find.text('first'));
     await tester.pumpAndSettle();
     expect(find.text('detail:first'), findsOneWidget);
+    expect(find.byType(AppBottomNavigationBar), findsNothing);
 
     router.pop();
     await tester.pumpAndSettle();
     expect(find.text('first'), findsOneWidget);
 
+    expect(find.byType(AppBottomNavigationBar), findsOneWidget);
+    await tester.ensureVisible(find.text('second'));
     await tester.tap(find.text('second'));
     await tester.pumpAndSettle();
     expect(find.text('detail:second'), findsOneWidget);
@@ -174,4 +190,9 @@ class _HomeModeController extends ResourceModeController {
 class _SignedOutHost extends HostAccountsNotifier {
   @override
   HostAccountsState build() => const HostAccountsState();
+}
+
+class _EmptyInstalls extends InstallQueueNotifier {
+  @override
+  InstallQueueState build() => const InstallQueueState();
 }

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/app/app_localizations_delegates.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
+import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
 import 'package:oronbox/src/features/settings/application/app_data_backup.dart';
 import 'package:oronbox/src/features/settings/pages/app_data_backup_dialog.dart';
 
@@ -29,34 +30,40 @@ void main() {
       );
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
-      final options = tester
-          .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
-          .toList();
-      expect(options.map((e) => e.value), [true, true, true, true, false]);
+      final devices = find.widgetWithText(
+        AppCheckboxTile,
+        'Device pairing and keys',
+      );
+      final accounts = find.widgetWithText(
+        AppCheckboxTile,
+        'Xiaomi and Amazfit credentials',
+      );
+      expect(tester.widget<AppCheckboxTile>(devices).value, isTrue);
+      expect(tester.widget<AppCheckboxTile>(accounts).value, isFalse);
       expect(
         find.textContaining('unencrypted account credentials'),
         findsNothing,
       );
-      await tester.ensureVisible(find.text('Xiaomi and Amazfit credentials'));
-      await tester.tap(find.byType(CheckboxListTile).last);
+      await tester.ensureVisible(accounts);
+      await tester.tap(find.text('Xiaomi and Amazfit credentials'));
       await tester.pumpAndSettle();
       expect(
         find.textContaining('unencrypted account credentials'),
         findsOneWidget,
       );
-      await tester.tap(find.byType(CheckboxListTile).last);
+      await tester.tap(find.text('Xiaomi and Amazfit credentials'));
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('Device pairing and keys'));
       await tester.tap(find.widgetWithText(FilledButton, 'Export backup'));
       await tester.pumpAndSettle();
       expect(selected!.devices, true);
-      expect(selected!.xiaomi, false);
+      expect(selected!.accountCredentials, isFalse);
       expect((selected as BackupExportSelection).saveToDocuments, true);
     },
   );
 
   testWidgets(
-    'showPublicBackupPickerDialog displays parsed backup cards and external button',
+    'restore picker labels backups and accepts an existing or external file',
     (tester) async {
       RestoreSourceSelection? result;
       await tester.pumpWidget(
@@ -88,6 +95,13 @@ void main() {
       expect(find.text('Manual Backup'), findsNWidgets(2));
       expect(find.text('Choose another external file...'), findsOneWidget);
 
+      await tester.tap(find.text('2026-11-03 12:00:00'));
+      await tester.pumpAndSettle();
+      expect(result?.fileName, 'OronBox-AutoBackup-20261103-120000.zip');
+      expect(result?.pickExternal, isFalse);
+
+      await tester.tap(find.text('pick'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Choose another external file...'));
       await tester.pumpAndSettle();
       expect(result, isNotNull);

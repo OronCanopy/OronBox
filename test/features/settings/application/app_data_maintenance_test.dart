@@ -1,4 +1,8 @@
 import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/services.dart';
+import 'package:oronbox/src/commands/command_protocol.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oronbox/src/features/devices/health/health_store.dart';
@@ -19,7 +23,64 @@ class _Device extends Fake implements DeviceManager {
   Future<List<ZeppOsAppSideSessionInfo>> zeppOsAppSideSessions() async => [];
 }
 
+class _TransientReleaseBus extends Fake implements OronBoxCommandBus {
+  int releaseAttempts = 0;
+
+  @override
+  Future<CommandResult> execute(OronBoxCommand command) async {
+    switch (command.method) {
+      case 'appdata.maintenance.begin':
+        return const CommandResult.success('owner');
+      case 'appdata.maintenance.validate':
+        return const CommandResult.success(true);
+      case 'appdata.maintenance.end':
+        releaseAttempts++;
+        return releaseAttempts == 1
+            ? const CommandResult.failure(
+                CommandError('temporary', 'Temporary release failure'),
+              )
+            : const CommandResult.success();
+      default:
+        throw StateError(command.method);
+    }
+  }
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+    'maintenance release is retried after a transient host failure',
+    () async {
+      final root = await Directory.systemTemp.createTemp(
+        'maintenance-release-test-',
+      );
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (_) async => root.path,
+      );
+      final host = _TransientReleaseBus();
+      var executed = false;
+      try {
+        await expectLater(
+          runWithAppDataMaintenance(host, () async {
+            executed = true;
+          }),
+          throwsStateError,
+        );
+        expect(executed, isTrue);
+        expect(host.releaseAttempts, 2);
+      } finally {
+        messenger.setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          null,
+        );
+        await root.delete(recursive: true);
+      }
+    },
+  );
   tearDown(() => ZeppOsLocalDataGuard.active = false);
   test('maintenance drains existing writers and rejects new ones until its owner releases it', () async {
     var reloads = 0;

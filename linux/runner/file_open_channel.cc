@@ -9,7 +9,7 @@
 
 namespace {
 
-constexpr char kChannelName[] = "oronbox/file_open";
+constexpr char kChannelName[] = "org.oroncanopy.oronbox/file_open";
 
 FlMethodChannel* g_channel = nullptr;
 std::deque<std::string> g_pending_paths;

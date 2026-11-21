@@ -2,17 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
-import 'package:oronbox_location/oronbox_location.dart';
+import 'package:wear_location/wear_location.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/core/services/shared_prefs_service.dart';
 
 /// One OS subscription, independently leased by each connected device.
 class PhoneLocationSessions {
-  PhoneLocationSessions({OronboxLocation? platform})
-    : platform = platform ?? OronboxLocation.instance;
+  PhoneLocationSessions({WearLocation? platform})
+    : platform = platform ?? WearLocation.instance;
   static final instance = PhoneLocationSessions();
   static const enabledKey = 'xiaomi.phone_location.enabled';
-  final OronboxLocation platform;
+  final WearLocation platform;
   final _leases = <Object>{};
   final _positions = StreamController<Position>.broadcast();
   StreamSubscription<Position>? _subscription;

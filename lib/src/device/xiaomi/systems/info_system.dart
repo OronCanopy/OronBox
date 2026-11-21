@@ -92,14 +92,15 @@ class XiaomiInfoSystem extends XiaomiPbSystem {
       firmwareVersion: response.firmwareVersion,
       imei: response.imei,
       model: response.model,
+      productDevice: response.productDevice.trim().isEmpty
+          ? null
+          : response.productDevice.trim(),
     );
     _model = info.model.trim().isEmpty ? null : info.model.trim();
     _firmwareVersion = info.firmwareVersion.trim().isEmpty
         ? null
         : info.firmwareVersion.trim();
-    _productDevice = response.productDevice.trim().isEmpty
-        ? null
-        : response.productDevice.trim();
+    _productDevice = info.productDevice;
     _log.fine(
       '[${entity.id}] device info: model=${info.model}, productDevice=${_productDevice ?? '-'}, '
       'fw=${info.firmwareVersion}, serial=${info.serialNumber}, imei=${info.imei}',

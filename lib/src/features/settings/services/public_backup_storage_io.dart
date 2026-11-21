@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider_windows/path_provider_windows.dart';
 
-const _channel = MethodChannel('oronbox/public_backups');
+const _channel = MethodChannel('org.oroncanopy.oronbox/public_backups');
 const _subDirectoryName = 'Backups';
 
 @visibleForTesting

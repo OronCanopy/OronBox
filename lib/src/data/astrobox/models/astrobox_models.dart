@@ -12,6 +12,8 @@ enum AstroBoxResourceType {
   firmware,
   @JsonValue('canopus')
   canopus,
+  @JsonValue('res_pack')
+  resPack,
 }
 
 enum AstroBoxPaidType {
@@ -113,7 +115,11 @@ abstract class AstroBoxManifestDownload with _$AstroBoxManifestDownload {
   }) = _AstroBoxManifestDownload;
 
   factory AstroBoxManifestDownload.fromJson(Map<String, dynamic> json) =>
-      _$AstroBoxManifestDownloadFromJson(json);
+      _$AstroBoxManifestDownloadFromJson(
+        json['version_code'] == null && json['versionCode'] != null
+            ? {...json, 'version_code': json['versionCode']}
+            : json,
+      );
 }
 
 @freezed

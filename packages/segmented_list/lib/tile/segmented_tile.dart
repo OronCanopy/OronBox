@@ -280,19 +280,33 @@ class SegmentedTile<T> extends AbstractSegmentedTile {
     return Material(
       color: theme.cardTheme.color ?? theme.colorScheme.surfaceContainerHighest,
       child: InkWell(
+        splashFactory: tileType == SettingsTileType.checkboxTile
+            ? NoSplash.splashFactory
+            : null,
+        overlayColor: tileType == SettingsTileType.checkboxTile
+            ? const WidgetStatePropertyAll(Colors.transparent)
+            : null,
         onTap: (enabled)
             ? () {
                 if (onPressed != null) {
                   onPressed!.call(context);
                 }
                 if (onToggle != null) {
-                  onToggle!.call(null);
+                  onToggle!.call(
+                    tileType == SettingsTileType.checkboxTile
+                        ? switch (initialValue) {
+                            false => true,
+                            true => null,
+                            null => false,
+                          }
+                        : null,
+                  );
                 }
                 if (onChanged != null) {
                   onChanged!.call(radioValue);
                 }
               }
-            : () {},
+            : null,
         mouseCursor: SystemMouseCursors.click,
         child: Row(
           children: [

@@ -2,6 +2,7 @@ import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:oronbox/src/app/router/app_page_transitions.dart';
 
 @immutable
 class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
@@ -163,7 +164,7 @@ abstract final class AppTheme {
 
   static const pageTransitionsTheme = PageTransitionsTheme(
     builders: {
-      TargetPlatform.android: _ForegroundPredictiveBackTransitionsBuilder(),
+      TargetPlatform.android: AppSlidePageTransitionsBuilder(),
       TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
       TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
       TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
@@ -351,39 +352,5 @@ abstract final class AppTheme {
 
   static Color _tintedSurface(Color base, Color tint, double alpha) {
     return Color.alphaBlend(tint.withValues(alpha: alpha), base);
-  }
-}
-
-class _ForegroundPredictiveBackTransitionsBuilder
-    extends PageTransitionsBuilder {
-  const _ForegroundPredictiveBackTransitionsBuilder();
-
-  @override
-  Widget buildTransitions<T>(
-    PageRoute<T> route,
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
-    // A branch route can be current in its Navigator while a root route covers it.
-    var navigator = route.navigator;
-    var visible = TickerMode.valuesOf(context).enabled;
-    while (navigator != null) {
-      final parentRoute = ModalRoute.of(navigator.context);
-      if (parentRoute == null) break;
-      visible = visible && (ModalRoute.isCurrentOf(navigator.context) ?? true);
-      navigator = parentRoute.navigator;
-    }
-    final PageTransitionsBuilder builder = visible
-        ? const PredictiveBackPageTransitionsBuilder()
-        : const ZoomPageTransitionsBuilder();
-    return builder.buildTransitions(
-      route,
-      context,
-      animation,
-      secondaryAnimation,
-      child,
-    );
   }
 }

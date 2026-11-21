@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  FLUTTER_VERSION: 3.47.9
+  FLUTTER_VERSION: 3.50.0
   ORONBOX_RETRY_ATTEMPTS: 3
   ORONBOX_RETRY_DELAY_SECONDS: 10
 
@@ -110,8 +110,6 @@ jobs:
           keytool -list -keystore "$keystore" -storepass "$ORONBOX_KEYSTORE_PASSWORD" -alias "$ORONBOX_KEY_ALIAS" >/dev/null
           echo "ORONBOX_KEYSTORE_PATH=$keystore" >> "$GITHUB_ENV"
 
-      - uses: dtolnay/rust-toolchain@stable
-
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -134,6 +132,12 @@ jobs:
         run: |
           source tool/build_common.sh
           retry_cmd flutter pub get --enforce-lockfile
+          python tool/check_naming.py
+
+      - uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28c
+          add-to-path: true
 
       - name: Build Android packages
         run: |
@@ -193,8 +197,6 @@ jobs:
           [[ -n "$ORONBOX_AUTH_MASTER" ]] || { echo 'Missing required secret: ORONBOX_AUTH_MASTER' >&2; exit 1; }
           python tool/prepare_build_integrity.py --version "$OB_BUILD_VERSION" --commit "$OB_BUILD_COMMIT"
 
-      - uses: dtolnay/rust-toolchain@stable
-
       - name: Cache Flutter SDK (arm64)
         if: matrix.arch == 'arm64'
         uses: actions/cache@v4
@@ -251,6 +253,7 @@ jobs:
         run: |
           source tool/build_common.sh
           retry_cmd flutter pub get --enforce-lockfile
+          python tool/check_naming.py
 
       - name: Cache Linux packaging tools
         uses: actions/cache@v4
@@ -356,8 +359,6 @@ jobs:
           [[ -n "$ORONBOX_AUTH_MASTER" ]] || { echo 'Missing required secret: ORONBOX_AUTH_MASTER' >&2; exit 1; }
           python tool/prepare_build_integrity.py --version "$OB_BUILD_VERSION" --commit "$OB_BUILD_COMMIT"
 
-      - uses: dtolnay/rust-toolchain@stable
-
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -376,6 +377,7 @@ jobs:
         run: |
           source tool/build_common.sh
           retry_cmd flutter pub get --enforce-lockfile
+          python tool/check_naming.py
 
       - name: Install DMG packaging tools
         run: |
@@ -423,8 +425,6 @@ jobs:
           [[ -n "$ORONBOX_AUTH_MASTER" ]] || { echo 'Missing required secret: ORONBOX_AUTH_MASTER' >&2; exit 1; }
           python tool/prepare_build_integrity.py --version "$OB_BUILD_VERSION" --commit "$OB_BUILD_COMMIT"
 
-      - uses: dtolnay/rust-toolchain@stable
-
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -436,8 +436,7 @@ jobs:
         with:
           path: |
             ~\AppData\Local\Pub\Cache
-            ${{ github.workspace }}\windows\packages
-          key: oronbox-windows-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}-${{ hashFiles('pubspec.lock', 'windows/scripts/install_webview2_sdk.ps1') }}
+          key: oronbox-windows-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}-${{ hashFiles('pubspec.lock') }}
           restore-keys: |
             oronbox-windows-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}-
             oronbox-windows-${{ runner.arch }}-

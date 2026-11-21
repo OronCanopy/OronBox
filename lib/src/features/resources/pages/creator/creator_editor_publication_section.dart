@@ -28,41 +28,42 @@ extension _CreatorEditorPublicationSection on _CreatorEditorViewState {
             subtitle: Text(l10n.creatorOronBoxRequired),
             trailing: const Switch(value: true, onChanged: null),
           ),
-          _publicationTargetRow(
-            leading: const CreatorBrandLogo(
-              asset: 'assets/images/brands/bandbbs.svg',
-              label: 'BandBBS',
-            ),
-            title: Text(l10n.bandbbs),
-            subtitle: Text(
-              boundToBandBbs
-                  ? l10n.creatorBandBbsBoundUpdate
-                  : l10n.creatorBandBbsDirectPublish,
-            ),
-            trailing: Switch(
-              value: _publishBandBbs,
-              onChanged: bandAuthorized
-                  ? (value) async {
-                      if (value && !await _confirmTargetTerms('bandbbs')) {
-                        return;
-                      }
-                      _update(() => _publishBandBbs = value);
-                      if (value) {
-                        await _loadPublicationPlan();
-                        final unsupported =
-                            _publicationPlan?.unmappedDeviceNames ??
-                            const <String>[];
-                        if (unsupported.isNotEmpty) {
-                          _showFailure(
-                            l10n.creatorBandBbsUnsupportedDevicesNotice,
-                          );
+          if (_supportsBandBbs)
+            _publicationTargetRow(
+              leading: const CreatorBrandLogo(
+                asset: 'assets/images/brands/bandbbs.svg',
+                label: 'BandBBS',
+              ),
+              title: Text(l10n.bandbbs),
+              subtitle: Text(
+                boundToBandBbs
+                    ? l10n.creatorBandBbsBoundUpdate
+                    : l10n.creatorBandBbsDirectPublish,
+              ),
+              trailing: Switch(
+                value: _publishBandBbs,
+                onChanged: bandAuthorized
+                    ? (value) async {
+                        if (value && !await _confirmTargetTerms('bandbbs')) {
+                          return;
+                        }
+                        _update(() => _publishBandBbs = value);
+                        if (value) {
+                          await _loadPublicationPlan();
+                          final unsupported =
+                              _publicationPlan?.unmappedDeviceNames ??
+                              const <String>[];
+                          if (unsupported.isNotEmpty) {
+                            _showFailure(
+                              l10n.creatorBandBbsUnsupportedDevicesNotice,
+                            );
+                          }
                         }
                       }
-                    }
-                  : null,
+                    : null,
+              ),
             ),
-          ),
-          if (!bandAuthorized)
+          if (_supportsBandBbs && !bandAuthorized)
             _publicationNotice(
               icon: Icons.lock_outline,
               message: l10n.creatorBandBbsAuthorizationRequired,
@@ -167,7 +168,7 @@ extension _CreatorEditorPublicationSection on _CreatorEditorViewState {
                   ),
                   if (boundToBandBbs && !_externalPurchaseEnabled) ...[
                     const SizedBox(height: 4),
-                    CheckboxListTile(
+                    AppCheckboxTile(
                       value: _overwritePreviousBandBbs,
                       onChanged: widget.state.loading
                           ? null
@@ -252,7 +253,7 @@ extension _CreatorEditorPublicationSection on _CreatorEditorViewState {
                       labelText: l10n.creatorAstroBoxAuthor,
                     ),
                   ),
-                  CheckboxListTile(
+                  AppCheckboxTile(
                     value: _astroBindABAccount,
                     onChanged: (value) =>
                         _update(() => _astroBindABAccount = value == true),

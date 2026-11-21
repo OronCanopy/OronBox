@@ -3,7 +3,7 @@
 
 #include <flutter_linux/flutter_linux.h>
 
-// Registers the "oronbox/file_open" channel. Files opened with OronBox from a
+// Registers the "org.oroncanopy.oronbox/file_open" channel. Files opened with OronBox from a
 // file manager arrive through the GApplication "open" signal; paths are queued
 // until the Dart handler is ready (cold start pulls with getInitialFile).
 void file_open_channel_register(FlBinaryMessenger* messenger);

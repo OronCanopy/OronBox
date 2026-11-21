@@ -1,11 +1,13 @@
 import 'dart:async';
+
+import 'package:oronbox/src/core/wasm/wasm_compatibility.dart';
+
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/theme/app_theme.dart';
 import 'package:oronbox/src/app/utils/error_localization.dart';
@@ -35,7 +37,6 @@ class VoiceAssistantPage extends ConsumerStatefulWidget {
 
 class _VoiceAssistantPageState extends ConsumerState<VoiceAssistantPage>
     with WidgetsBindingObserver {
-  final _audio = SoLoud.instance;
   final _replyController = TextEditingController();
   final _recognitionController = TextEditingController();
   final _opusFrames = <Uint8List>[];
@@ -45,7 +46,6 @@ class _VoiceAssistantPageState extends ConsumerState<VoiceAssistantPage>
   StreamSubscription<DeviceEvent>? _frameSubscription;
   Timer? _refreshTimer;
   Timer? _recognitionTimer;
-  bool _ownsAudio = false;
   bool _captureFull = false;
   bool _foreground = true;
   bool _hasSession = false;
@@ -55,8 +55,6 @@ class _VoiceAssistantPageState extends ConsumerState<VoiceAssistantPage>
   late DeviceManager _manager;
   late VoiceSessionCoordinator _sessionCoordinator;
   WasmOpusDecoder? _decoder;
-  AudioSource? _audioSource;
-  bool _playback = true;
   bool _continuousCapture = false;
   int _assistantEndpoint = 0x0010;
   bool _ready = false;
@@ -118,33 +116,11 @@ class _VoiceAssistantPageState extends ConsumerState<VoiceAssistantPage>
     final l10n = AppLocalizations.of(context)!;
     WasmOpusDecoder? decoder;
     try {
+      await WasmCompatibility.shared.ensureAllowed(interactive: true);
+      if (!mounted) return;
       decoder = await WasmOpusDecoder.create();
       if (!mounted) {
         decoder.dispose();
-        return;
-      }
-      if (!_audio.isInitialized) {
-        await _audio.init(channels: Channels.mono);
-        _ownsAudio = true;
-      }
-      if (!mounted) {
-        decoder.dispose();
-        if (_ownsAudio) _audio.deinit();
-        return;
-      }
-      final source = _audio.setBufferStream(
-        maxBufferSizeDuration: const Duration(seconds: 5),
-        bufferingType: BufferingType.released,
-        bufferingTimeNeeds: 0.08,
-        sampleRate: 16000,
-        channels: Channels.mono,
-        format: BufferType.f32le,
-      );
-      _audioSource = source;
-      _audio.play(source);
-      if (!mounted) {
-        decoder.dispose();
-        if (_ownsAudio) _audio.deinit();
         return;
       }
       _decoder = decoder;
@@ -152,10 +128,6 @@ class _VoiceAssistantPageState extends ConsumerState<VoiceAssistantPage>
       _activateInput();
     } catch (error) {
       decoder?.dispose();
-      if (_audio.isInitialized) {
-        final source = _audioSource;
-        if (source != null) unawaited(_audio.disposeSource(source));
-      }
       if (mounted) {
         setState(() => _error = localizedErrorMessage(l10n, error));
       }
@@ -229,13 +201,6 @@ class _VoiceAssistantPageState extends ConsumerState<VoiceAssistantPage>
       _opusFrames.add(Uint8List.fromList(frame));
       _opusDurations.add(pcm.length * 3);
       _pcmBytes.add(bytes.buffer.asUint8List());
-      final audioSource = _audioSource;
-      if (_playback && pcm.isNotEmpty && audioSource != null) {
-        _audio.addAudioDataStream(
-          audioSource,
-          pcm.buffer.asUint8List(pcm.offsetInBytes, pcm.lengthInBytes),
-        );
-      }
       if (!mounted) return;
       _frames += 1;
       _opusBytes += frame.length;
@@ -468,10 +433,6 @@ class _VoiceAssistantPageState extends ConsumerState<VoiceAssistantPage>
           ref.read(deviceManagerProvider).protocolState ==
               proto.ProtocolState.ready,
     );
-    final source = _audioSource;
-    if (source != null && _audio.isInitialized) {
-      _audio.resetBufferStream(source);
-    }
     _opusFrames.clear();
     _opusDurations.clear();
     _pcmBytes.clear();
@@ -493,10 +454,6 @@ class _VoiceAssistantPageState extends ConsumerState<VoiceAssistantPage>
       _sessionGeneration++;
       unawaited(ref.read(voiceRecognitionProvider.notifier).cancel());
       setState(() => _hasSession = false);
-      final source = _audioSource;
-      if (source != null && _audio.isInitialized) {
-        _audio.resetBufferStream(source);
-      }
     }
     if (_foreground) {
       ref.read(voiceSessionCoordinatorProvider).claim(VoiceSessionOwner.lab);
@@ -521,10 +478,6 @@ class _VoiceAssistantPageState extends ConsumerState<VoiceAssistantPage>
     _replyController.dispose();
     _recognitionController.dispose();
     _decoder?.dispose();
-    if (_audio.isInitialized) {
-      final source = _audioSource;
-      if (source != null) unawaited(_audio.disposeSource(source));
-    }
     super.dispose();
   }
 
@@ -733,15 +686,6 @@ class _VoiceAssistantPageState extends ConsumerState<VoiceAssistantPage>
                       : null,
                 ),
               ),
-            IconButton.filledTonal(
-              tooltip: _playback
-                  ? l10n.voiceLabDisableMonitoring
-                  : l10n.voiceLabEnableMonitoring,
-              onPressed: _ready
-                  ? () => setState(() => _playback = !_playback)
-                  : null,
-              icon: Icon(_playback ? Icons.volume_up : Icons.volume_off),
-            ),
           ],
         ),
         const SizedBox(height: 8),

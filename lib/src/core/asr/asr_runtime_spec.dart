@@ -1,3 +1,7 @@
+import 'dart:ffi';
+
+import 'asr_runtime_version.dart';
+
 class AsrRuntimeFile {
   const AsrRuntimeFile(this.name, this.bytes, this.sha256);
   final String name;
@@ -8,23 +12,23 @@ class AsrRuntimeFile {
 class AsrRuntimeSpec {
   const AsrRuntimeSpec(
     this.package,
-    this.abi,
+    this.archiveDirectory,
     this.bytes,
     this.sha256,
     this.files,
   );
-  static const version = '1.13.8';
-  final String package, abi, sha256;
+  static const version = asrRuntimeVersion;
+  final String package, archiveDirectory, sha256;
   final int bytes;
   final List<AsrRuntimeFile> files;
 }
 
-const androidAsrRuntimes = [
-  AsrRuntimeSpec(
+const downloadedAsrRuntimes = <Abi, AsrRuntimeSpec>{
+  Abi.androidArm64: AsrRuntimeSpec(
     'sherpa_onnx_android_arm64',
-    'arm64-v8a',
-    10474637,
-    '29db5572735afb1bc29f0f95ab160f7fb38b4b3f926f48e9113457fd740264f4',
+    'android/src/main/jniLibs/arm64-v8a',
+    10819916,
+    '155c8fbe1c4d917be13327e91c929ea3aaa0b78abc811cf76dbcbcbac730439d',
     [
       AsrRuntimeFile(
         'libonnxruntime.so',
@@ -33,16 +37,16 @@ const androidAsrRuntimes = [
       ),
       AsrRuntimeFile(
         'libsherpa-onnx-c-api.so',
-        4499112,
-        '42308b0dd41ac79639330c58ac69dec9c3a6bc94c8b6ae96b0311963bc13f0b0',
+        5216240,
+        'b3dfbc28e69a5876a44a6e66da7dc41af3a28d6bd3c3e8dd78efc501f1634d7e',
       ),
     ],
   ),
-  AsrRuntimeSpec(
+  Abi.androidArm: AsrRuntimeSpec(
     'sherpa_onnx_android_armeabi',
-    'armeabi-v7a',
-    9447445,
-    'fe81837bd12f67d136a456c6d2b39876caaba09edd77761cb527cb170dac2d2a',
+    'android/src/main/jniLibs/armeabi-v7a',
+    9754879,
+    'd3999189aa222ac2d820b9704f3e3e9e80b8ff1fd2725c0ebb48fd0dcad3631e',
     [
       AsrRuntimeFile(
         'libonnxruntime.so',
@@ -51,16 +55,16 @@ const androidAsrRuntimes = [
       ),
       AsrRuntimeFile(
         'libsherpa-onnx-c-api.so',
-        3202776,
-        '66b2e4caa8abc40cd8b33d4856a5e494072b97f4dca4b69d81fdcc860feab03e',
+        3753188,
+        'd6fa1130428367624304ee9281dec796301c4829727021d711cd3935069bc821',
       ),
     ],
   ),
-  AsrRuntimeSpec(
+  Abi.androidX64: AsrRuntimeSpec(
     'sherpa_onnx_android_x86_64',
-    'x86_64',
-    11442128,
-    'd20c06c0edc92286609f256d04c295cad510bbb270068c0c79877f4a10f00581',
+    'android/src/main/jniLibs/x86_64',
+    11826058,
+    '1cd10fa17c7ca3afb9b48297111bb9fc5e2cbdb0507f87ab62f5f667b6c34cde',
     [
       AsrRuntimeFile(
         'libonnxruntime.so',
@@ -69,9 +73,81 @@ const androidAsrRuntimes = [
       ),
       AsrRuntimeFile(
         'libsherpa-onnx-c-api.so',
-        5002888,
-        'f3204723864da2d2ed43898e08baff0975472cc1d7412dcde77c5dc0b051d336',
+        5798360,
+        '796d73b5ff941fabf9415b6dad2c7ee2604c0d35b4e44a7b7b4ce4e3142bc493',
       ),
     ],
   ),
-];
+  Abi.linuxX64: AsrRuntimeSpec(
+    'sherpa_onnx_linux',
+    'linux/x64',
+    25084417,
+    '83338f0f5838c32d6fb5e86ea28991f1345aa9dbf984ba6e51776ddea9916e27',
+    [
+      AsrRuntimeFile(
+        'libonnxruntime.so',
+        27026609,
+        '4b3607aebd1784b26b6f9b20e4bd974c7ab8287043e4d095cb7d2cb40b5e566e',
+      ),
+      AsrRuntimeFile(
+        'libsherpa-onnx-c-api.so',
+        5776528,
+        'f4aef0f40389c60d79d131a9259dda806425f6a1d7b27501f28140eea0ebf27b',
+      ),
+    ],
+  ),
+  Abi.linuxArm64: AsrRuntimeSpec(
+    'sherpa_onnx_linux',
+    'linux/aarch64',
+    25084417,
+    '83338f0f5838c32d6fb5e86ea28991f1345aa9dbf984ba6e51776ddea9916e27',
+    [
+      AsrRuntimeFile(
+        'libonnxruntime.so',
+        34606912,
+        'cfc800d4438f15e8d9017521326776ca7117d8783cb847ccccc2fc61ac4d540f',
+      ),
+      AsrRuntimeFile(
+        'libsherpa-onnx-c-api.so',
+        5233368,
+        'b83483d9173fb84bb1ec82e07a56bd896ba98f147f4061b07a579350031a7025',
+      ),
+    ],
+  ),
+  Abi.windowsX64: AsrRuntimeSpec(
+    'sherpa_onnx_windows',
+    'windows/x64',
+    17211266,
+    '89c6d176c474ddedcc255c36ca77a7128d4158634e6557d0fc0882a9161f68be',
+    [
+      AsrRuntimeFile(
+        'onnxruntime.dll',
+        17799168,
+        '7f66f939a881baf4f46a2216496798edf4a1429878b646d12674aa62f27d8a25',
+      ),
+      AsrRuntimeFile(
+        'sherpa-onnx-c-api.dll',
+        4775424,
+        '14e14b118fa3bde3eb0aa9cc651d47defa1e5280f2b22dfa172a74d1428f87cb',
+      ),
+    ],
+  ),
+  Abi.windowsArm64: AsrRuntimeSpec(
+    'sherpa_onnx_windows',
+    'windows/arm64',
+    17211266,
+    '89c6d176c474ddedcc255c36ca77a7128d4158634e6557d0fc0882a9161f68be',
+    [
+      AsrRuntimeFile(
+        'onnxruntime.dll',
+        17635328,
+        '968d081836cad9af537105f59e34d4997bca2ce6d78ff39d3e47660620e8a642',
+      ),
+      AsrRuntimeFile(
+        'sherpa-onnx-c-api.dll',
+        4862464,
+        'd0157161c741f3462e63e362a7f9c8fff0f15ed402013ed3df80dc5626938c1e',
+      ),
+    ],
+  ),
+};

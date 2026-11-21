@@ -35,7 +35,7 @@ void RegisterFileOpenChannel(flutter::BinaryMessenger* messenger,
                              const std::string& initial_path) {
   g_initial_path = initial_path;
   auto channel = std::make_unique<MethodChannel<EncodableValue>>(
-      messenger, "oronbox/file_open", &StandardMethodCodec::GetInstance());
+      messenger, "org.oroncanopy.oronbox/file_open", &StandardMethodCodec::GetInstance());
   channel->SetMethodCallHandler(&HandleMethodCall);
   // Keep the channel alive for the process lifetime so Dart can query
   // getInitialFile whenever the first frame is ready.

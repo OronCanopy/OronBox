@@ -1,3 +1,5 @@
+import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
+
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -22,8 +24,7 @@ import 'package:oronbox/src/core/network/github_cdn.dart';
 import 'package:oronbox/src/core/providers/app_settings_providers.dart';
 import 'package:oronbox/src/core/utils/app_exit.dart';
 import 'package:oronbox/src/features/accounts/application/host_accounts.dart';
-import 'package:oronbox/src/features/accounts/models/mi_account_models.dart';
-import 'package:oronbox/src/features/accounts/services/mi_account_two_factor_resolver.dart';
+import 'package:oronbox/src/features/accounts/widgets/mi_account_login_dialog.dart';
 import 'package:oronbox/src/features/oobe/oobe_state.dart';
 import 'package:oronbox/src/features/settings/application/app_data_backup.dart';
 import 'package:oronbox/src/features/settings/application/app_data_maintenance.dart';
@@ -124,7 +125,7 @@ class _OobePageState extends ConsumerState<OobePage> {
       return;
     }
     final l10n = AppLocalizations.of(context)!;
-    ScaffoldMessenger.of(context)
+    appScaffoldMessengerOf(context)
         .showSnackBar(SnackBar(content: Text(l10n.oobeDeclineWebHint)));
   }
 
@@ -746,31 +747,32 @@ class _AgreementStepState extends State<_AgreementStep> {
 
     final checkboxWidget = Padding(
       padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
-      child: Row(
-        children: [
-          Checkbox(
-            value: widget.agreed,
-            onChanged: _bottomReached
-                ? (v) => widget.onAgreed(v ?? false)
-                : null,
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              l10n.oobeAgreeCheckbox,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
+      child: AppCheckboxRow(
+        value: widget.agreed,
+        onChanged: _bottomReached ? (v) => widget.onAgreed(v ?? false) : null,
+        expanded: true,
+        title: Padding(
+          padding: const EdgeInsetsDirectional.only(start: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.oobeAgreeCheckbox,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
-            ),
+              if (!_bottomReached)
+                Text(
+                  l10n.oobeAgreementHint,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+            ],
           ),
-          if (!_bottomReached)
-            Text(
-              l10n.oobeAgreementHint,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-        ],
+        ),
       ),
     );
 
@@ -986,7 +988,7 @@ SegmentedTile _xiaomiTile(
   return SegmentedTile.navigation(
     onPressed: account.isSignedIn || account.isBusy
         ? null
-        : (_) => _showMiAccountLogin(context, ref),
+        : (_) => showMiAccountLoginDialog(context),
     leading: const _MiLogo(),
     title: Text(l10n.settingsMiAccount),
     description: Text(
@@ -1098,250 +1100,14 @@ Future<void> _startBandBbsLogin(BuildContext context, WidgetRef ref) async {
   try {
     await ref.read(hostAccountsProvider.notifier).startBandBbsLogin();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    appScaffoldMessengerOf(context).showSnackBar(
       SnackBar(content: Text(l10n.settingsAccountBandBbsOpenedBrowser)),
     );
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
+    appScaffoldMessengerOf(context)
         .showSnackBar(SnackBar(content: Text(localizedErrorMessage(l10n, e))));
   }
-}
-
-Future<void> _showMiAccountLogin(BuildContext context, WidgetRef ref) async {
-  final rootContext = context;
-  final l10n = AppLocalizations.of(context)!;
-  final accounts = ref.read(hostAccountsProvider.notifier);
-  final credentials = await accounts.rememberedCredentials('xiaomi');
-  var rememberCredentials = credentials['remember'] == true;
-  var selectedRegion = MiAccountRegion.cn;
-  var username = rememberCredentials
-      ? credentials['username']?.toString() ?? ''
-      : '';
-  var password = rememberCredentials
-      ? credentials['password']?.toString() ?? ''
-      : '';
-  var running = false;
-  var obscurePassword = true;
-  String? error;
-  if (!context.mounted) return;
-
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          Future<void> submit() async {
-            final normalizedUsername = username.trim();
-            if (normalizedUsername.isEmpty || password.isEmpty) {
-              setState(() {
-                error = l10n.settingsMiAccountMissingCredentials;
-              });
-              return;
-            }
-            setState(() {
-              running = true;
-              error = null;
-            });
-            try {
-              final account = await ref
-                  .read(hostAccountsProvider.notifier)
-                  .loginXiaomi(
-                    username: normalizedUsername,
-                    password: password,
-                    region: selectedRegion.tag,
-                  );
-              await accounts.saveCredentials(
-                provider: 'xiaomi',
-                remember: rememberCredentials,
-                username: normalizedUsername,
-                password: password,
-                userId: account.userId ?? '',
-              );
-              if (dialogContext.mounted) {
-                Navigator.of(dialogContext).pop();
-              }
-              if (rootContext.mounted) {
-                ScaffoldMessenger.of(rootContext).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      l10n.settingsMiAccountSyncedDevices(
-                        account.syncedDevices,
-                      ),
-                    ),
-                  ),
-                );
-              }
-            } on HostTwoFactorRequired catch (e) {
-              try {
-                setState(() {
-                  error = l10n.settingsMiAccountTwoFactorPrompt;
-                });
-                if (!rootContext.mounted) {
-                  throw StateError(l10n.settingsMiAccountLoginWindowClosed);
-                }
-                final cookieHeader = await createMiAccountTwoFactorResolver()
-                    .resolve(rootContext, Uri.parse(e.url));
-                final account = await ref
-                    .read(hostAccountsProvider.notifier)
-                    .completeXiaomiTwoFactor(
-                      challenge: e,
-                      cookieHeader: cookieHeader,
-                      region: selectedRegion.tag,
-                    );
-                await accounts.saveCredentials(
-                  provider: 'xiaomi',
-                  remember: rememberCredentials,
-                  username: normalizedUsername,
-                  password: password,
-                  userId: account.userId ?? '',
-                );
-                if (dialogContext.mounted) {
-                  Navigator.of(dialogContext).pop();
-                }
-                if (rootContext.mounted) {
-                  ScaffoldMessenger.of(rootContext).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        l10n.settingsMiAccountSyncedDevices(
-                          account.syncedDevices,
-                        ),
-                      ),
-                    ),
-                  );
-                }
-              } catch (twoFactorError) {
-                setState(() {
-                  running = false;
-                  error = localizedErrorMessage(l10n, twoFactorError);
-                });
-              }
-            } catch (e) {
-              setState(() {
-                running = false;
-                error = localizedErrorMessage(l10n, e);
-              });
-            }
-          }
-
-          return AlertDialog(
-            title: Text(l10n.settingsMiAccountLoginTitle),
-            content: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<MiAccountRegion>(
-                    initialValue: selectedRegion,
-                    decoration: InputDecoration(
-                      labelText: l10n.settingsMiAccountRegion,
-                      prefixIcon: const Icon(Icons.public_outlined),
-                    ),
-                    items: MiAccountRegion.values.map((region) {
-                      return DropdownMenuItem(
-                        value: region,
-                        child: Text(region.localizedName(l10n)),
-                      );
-                    }).toList(),
-                    onChanged: running
-                        ? null
-                        : (value) {
-                            if (value != null) {
-                              setState(() => selectedRegion = value);
-                            }
-                          },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    initialValue: username,
-                    onChanged: (value) => username = value,
-                    enabled: !running,
-                    decoration: InputDecoration(
-                      labelText: l10n.settingsMiAccountUsername,
-                      prefixIcon: const Icon(Icons.account_circle_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    initialValue: password,
-                    onChanged: (value) => password = value,
-                    enabled: !running,
-                    obscureText: obscurePassword,
-                    decoration: InputDecoration(
-                      labelText: l10n.settingsMiAccountPassword,
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      suffixIcon: IconButton(
-                        onPressed: running
-                            ? null
-                            : () {
-                                setState(() {
-                                  obscurePassword = !obscurePassword;
-                                });
-                              },
-                        icon: Icon(
-                          obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                        ),
-                      ),
-                    ),
-                    onFieldSubmitted: (_) {
-                      if (!running) submit();
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  CheckboxListTile(
-                    value: rememberCredentials,
-                    onChanged: running
-                        ? null
-                        : (value) {
-                            setState(() {
-                              rememberCredentials = value ?? false;
-                            });
-                          },
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      l10n.settingsMiAccountRememberCredentials,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    dense: true,
-                  ),
-                  if (running) ...[
-                    const SizedBox(height: 20),
-                    const LinearProgressIndicator(),
-                  ],
-                  if (error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: running
-                    ? null
-                    : () {
-                        Navigator.of(dialogContext).pop();
-                      },
-                child: Text(l10n.settingsCancel),
-              ),
-              FilledButton(
-                onPressed: running ? null : submit,
-                child: Text(l10n.settingsMiAccountLoginAndSync),
-              ),
-            ],
-          );
-        },
-      );
-    },
-  );
 }
 
 Future<void> _showHuamiAccountLogin(BuildContext context, WidgetRef ref) async {
@@ -1396,7 +1162,7 @@ Future<void> _showHuamiAccountLogin(BuildContext context, WidgetRef ref) async {
                 Navigator.of(dialogContext).pop();
               }
               if (rootContext.mounted) {
-                ScaffoldMessenger.of(rootContext).showSnackBar(
+                appScaffoldMessengerOf(rootContext).showSnackBar(
                   SnackBar(content: Text(l10n.settingsHuamiAccountSignedIn)),
                 );
               }
@@ -1454,7 +1220,7 @@ Future<void> _showHuamiAccountLogin(BuildContext context, WidgetRef ref) async {
                     },
                   ),
                   const SizedBox(height: 8),
-                  CheckboxListTile(
+                  AppCheckboxTile(
                     value: rememberCredentials,
                     onChanged: running
                         ? null

@@ -47,9 +47,13 @@ class NativeRfcommConnection implements RfcommConnection {
 class NativeRfcommDriver implements RfcommDriver {
   NativeRfcommDriver() : _log = getLogger('RfcommDriver');
 
-  static const _method = MethodChannel('oronbox/classic_spp');
-  static const _events = EventChannel('oronbox/classic_spp/events');
-  static const _scanEvents = EventChannel('oronbox/classic_spp/scan_events');
+  static const _method = MethodChannel('org.oroncanopy.oronbox/classic_spp');
+  static const _events = EventChannel(
+    'org.oroncanopy.oronbox/classic_spp/events',
+  );
+  static const _scanEvents = EventChannel(
+    'org.oroncanopy.oronbox/classic_spp/scan_events',
+  );
 
   final Logger _log;
   Stream<BluetoothEndpoint>? _scanData;

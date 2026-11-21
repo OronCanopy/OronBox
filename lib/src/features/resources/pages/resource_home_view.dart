@@ -888,6 +888,7 @@ CommunityResourceType _homeCardKind(String kind) => switch (kind) {
   'watchface' => CommunityResourceType.watchface,
   'firmware' => CommunityResourceType.firmware,
   'canopus' => CommunityResourceType.canopus,
+  'res_pack' || 'resPack' => CommunityResourceType.resPack,
   _ => CommunityResourceType.quickApp,
 };
 

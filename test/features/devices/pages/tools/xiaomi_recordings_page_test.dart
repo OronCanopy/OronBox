@@ -154,6 +154,9 @@ void main() {
     await tester.pump();
 
     expect(find.byType(SegmentedList), findsOneWidget);
+    expect(find.text('录音同步'), findsOneWidget);
+    expect(find.text('设备录音'), findsNothing);
+    expect(find.text('导出设备中的录音'), findsNothing);
     expect(find.text('2026年8月18日_15:14'), findsOneWidget);
     expect(find.byType(EmptyStateView), findsNothing);
     expect(find.byType(ErrorStateView), findsNothing);
@@ -185,7 +188,7 @@ void main() {
       expect(find.byType(EmptyStateView), findsOneWidget);
       final emptyCenter = tester.getCenter(find.byType(EmptyStateView));
 
-      // Both centers are in the remaining space below the header card
+      // Both states use the same area below the app bar.
       expect(loadingCenter.dy, greaterThan(200));
       expect((loadingCenter.dy - emptyCenter.dy).abs(), lessThan(30));
     },

@@ -1,5 +1,9 @@
+import 'dart:ui';
+
 import 'package:oronbox/src/core/models/bt_models.dart';
 import 'package:oronbox/src/device/core/device_profile.dart';
+import 'package:oronbox/src/device/xiaomi/xiaomi_device_catalog.dart';
+import 'package:oronbox/src/device/zeppos/zeppos_device_catalog.dart';
 
 enum DevicePlatform { velaOS, zeppOS }
 
@@ -92,5 +96,41 @@ extension MiWearStateIllustration on MiWearState {
 extension BTDeviceInfoIllustration on BTDeviceInfo {
   String illustrationAsset() {
     return _matchIllustrationAsset(name);
+  }
+}
+
+extension DeviceLocalization on Device {
+  String localizedName([Locale? locale]) {
+    if (codename?.startsWith('zepp:') == true ||
+        zeppOsDeviceForBluetoothName(name) != null) {
+      return name;
+    }
+    return xiaomiDisplayNameForIdentity(
+      name: name,
+      codename: codename,
+      locale: locale,
+    );
+  }
+}
+
+extension MiWearStateLocalization on MiWearState {
+  String localizedName([Locale? locale]) {
+    if (codename?.startsWith('zepp:') == true ||
+        zeppOsDeviceForBluetoothName(name) != null) {
+      return name;
+    }
+    return xiaomiDisplayNameForIdentity(
+      name: name,
+      codename: codename,
+      locale: locale,
+    );
+  }
+}
+
+extension BTDeviceInfoLocalization on BTDeviceInfo {
+  String localizedName([Locale? locale]) {
+    final zepp = zeppOsDeviceForBluetoothName(name);
+    if (zepp != null) return name;
+    return xiaomiDisplayNameForIdentity(name: name, locale: locale);
   }
 }

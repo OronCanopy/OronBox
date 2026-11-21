@@ -1,3 +1,4 @@
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +6,7 @@ import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/widgets/page_container.dart';
 import 'package:oronbox/src/app/widgets/sys_app_bar.dart';
 import 'package:oronbox/src/core/constants/style_constants.dart';
+import 'package:oronbox/src/core/models/device.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 
 class DeviceInfoPage extends ConsumerStatefulWidget {
@@ -47,7 +49,10 @@ class _DeviceInfoPageState extends ConsumerState<DeviceInfoPage> {
         _InfoGroup(
           title: l10n.deviceInfoGroupDevice,
           children: [
-            _InfoRow(label: l10n.fieldName, value: device.name),
+            _InfoRow(
+              label: l10n.fieldName,
+              value: device.localizedName(Localizations.localeOf(context)),
+            ),
             _InfoRow(label: l10n.fieldAddress, value: device.addr),
             _InfoRow(label: l10n.fieldAuthkey, value: device.authkey ?? '-'),
             _InfoRow(
@@ -154,7 +159,7 @@ class _InfoRow extends StatelessWidget {
               child: GestureDetector(
                 onTap: () {
                   Clipboard.setData(ClipboardData(text: value));
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  appScaffoldMessengerOf(context).showSnackBar(
                     SnackBar(
                       content: Text(AppLocalizations.of(context)!.copied),
                     ),

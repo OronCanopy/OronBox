@@ -95,12 +95,6 @@ case "${ABI}" in
     ;;
 esac
 
-# flutter_soloud bundles x86_64 Xiph libraries only; ARM64 must use the
-# architecture-matched system libraries instead.
-if [[ "${ABI}" == "aarch64" ]]; then
-  export TRY_SYSTEM_LIBS_FIRST="${TRY_SYSTEM_LIBS_FIRST:-1}"
-fi
-
 CROSS="false"
 TARGET_ARGS=(--target-platform="${FLUTTER_PLATFORM}")
 STRIP_CMD="strip"
@@ -153,6 +147,20 @@ if [[ ! -d "${BUNDLE_DIR}" ]]; then
   exit 1
 fi
 
+STAGING_ROOT="${PROJECT_ROOT}/build/linux_staging"
+INSTALL_PREFIX="/opt/${APP_NAME}"
+DESKTOP_FILE="${PACKAGE_NAME}.desktop"
+rm -rf "${STAGING_ROOT}"
+mkdir -p "${STAGING_ROOT}"
+
+# Flatpak uses the original bundle because its sandbox has no network access.
+if [[ "${FORMAT}" != "flatpak" ]]; then
+  cp -a "${BUNDLE_DIR}" "${STAGING_ROOT}/bundle"
+  BUNDLE_DIR="${STAGING_ROOT}/bundle"
+  rm -f "${BUNDLE_DIR}/lib/libsherpa-onnx-c-api.so" \
+    "${BUNDLE_DIR}/lib/libonnxruntime.so"
+fi
+
 if [[ "${FORMAT}" == "tar.gz" || "${FORMAT}" == "all" ]]; then
   TAR_DST="${RELEASE_DIR}/${APP_NAME}-${VERSION}-linux-${GENERIC_ARCH}.tar.gz"
   rm -f "${TAR_DST}"
@@ -166,12 +174,6 @@ if [[ "${FORMAT}" == "tar.gz" || "${FORMAT}" == "all" ]]; then
     "${SYMBOLS_DIR}" \
     "${RELEASE_DIR}/${APP_NAME}-${VERSION}-linux-${GENERIC_ARCH}.symbols.tar.gz"
 fi
-
-STAGING_ROOT="${PROJECT_ROOT}/build/linux_staging"
-INSTALL_PREFIX="/opt/${APP_NAME}"
-DESKTOP_FILE="${PACKAGE_NAME}.desktop"
-rm -rf "${STAGING_ROOT}"
-mkdir -p "${STAGING_ROOT}"
 
 prepare_desktop_file() {
   local dst="$1"

@@ -73,7 +73,9 @@ class DefaultBluetoothPlatform implements BluetoothPlatform {
 
     if (connectTypes.contains(ConnectType.spp)) {
       try {
-        await _rfcomm.startScan(timeout: options.timeout);
+        await _rfcomm
+            .startScan(timeout: options.timeout)
+            .timeout(const Duration(seconds: 3));
       } catch (e) {
         _log.warning('RFCOMM scan failed to start', e);
         if (!connectTypes.contains(ConnectType.ble)) rethrow;
@@ -109,7 +111,7 @@ class DefaultBluetoothPlatform implements BluetoothPlatform {
 
   Future<List<BluetoothEndpoint>> _stopRfcommScanBestEffort() async {
     try {
-      return await _rfcomm.stopScan();
+      return await _rfcomm.stopScan().timeout(const Duration(seconds: 3));
     } catch (e) {
       _log.fine('RFCOMM stop scan ignored: $e');
       return const [];

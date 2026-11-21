@@ -1,3 +1,5 @@
+import 'package:oronbox/src/core/storage/managed_temporary_files.dart';
+
 import 'dart:async';
 
 import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
@@ -16,12 +18,13 @@ import 'package:oronbox/src/app/window/desktop_window.dart';
 import 'package:oronbox/src/commands/command_protocol.dart';
 import 'package:oronbox/src/features/plugins/domain/plugin_package.dart';
 import 'package:oronbox/src/features/plugins/widgets/plugin_install_confirmation.dart';
+import 'package:oronbox/src/features/plugins/widgets/plugin_icon.dart';
 import 'package:oronbox/src/features/resources/widgets/resource_install_confirmation.dart';
 import 'package:oronbox/src/host/application_host_provider.dart';
 
 /// File extensions the app claims as "open with" targets. Content is still
 /// detected from the package itself before installation.
-const _handledExtensions = <String>{
+const handledFileExtensions = <String>{
   'rpk',
   'bin',
   'face',
@@ -29,7 +32,13 @@ const _handledExtensions = <String>{
   'mwz',
   'obp',
   'abp',
+  'canopus',
+  'crpack',
+  'zip',
+  'tar',
 };
+
+const _handledExtensions = handledFileExtensions;
 
 enum _PluginFileResult { notPlugin, handled }
 
@@ -48,7 +57,7 @@ class FileOpenHandler extends ConsumerStatefulWidget {
 }
 
 class _FileOpenHandlerState extends ConsumerState<FileOpenHandler> {
-  static const _channel = MethodChannel('oronbox/file_open');
+  static const _channel = MethodChannel('org.oroncanopy.oronbox/file_open');
   final Set<String> _activeOpeningPaths = {};
   StreamSubscription<List<String>>? _launchArgumentsSubscription;
   bool _dragging = false;
@@ -106,6 +115,7 @@ class _FileOpenHandlerState extends ConsumerState<FileOpenHandler> {
       await _installFiles([file], navigatorContext);
     } finally {
       _activeOpeningPaths.remove(path);
+      await ManagedTemporaryFiles.releaseImport(path);
     }
   }
 
@@ -145,9 +155,18 @@ class _FileOpenHandlerState extends ConsumerState<FileOpenHandler> {
         !await confirmPluginInstall(
           context: context,
           name: manifest.name,
+          author: manifest.author,
+          version: manifest.version,
+          description: manifest.description,
+          runtime: manifest.runtime.manifestValue,
+          icon: PluginIcon(
+            base64: manifest.iconPath == null
+                ? null
+                : base64Encode(package.files[manifest.iconPath] ?? const []),
+            size: 56,
+          ),
           permissions: manifest.permissions,
           updating: updating,
-          legacy: manifest.runtime == PluginRuntimeType.legacy,
         )) {
       return _PluginFileResult.handled;
     }

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:oronbox/src/core/wasm/wasm_compatibility.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:oronbox/src/core/services/private_app_state.dart';
@@ -20,14 +22,23 @@ import 'package:oronbox/src/features/debug/pages/debug_window_app.dart';
 import 'package:oronbox/src/app/widgets/private_state_gate.dart';
 import 'package:oronbox/src/features/plugins/pages/plugin_window_app.dart';
 import 'package:oronbox/src/features/devices/health/health_store.dart';
+import 'package:oronbox/src/app/webview/webview_window_app.dart';
+import 'package:oronbox/src/features/accounts/services/bandbbs_browser_authorization.dart';
+import 'package:oronbox/src/features/accounts/pages/bandbbs_browser_callback_app.dart';
 
 void main(List<String> args) async {
   final startupStopwatch = Stopwatch()..start();
   WidgetsFlutterBinding.ensureInitialized();
+  if (isBandBbsBrowserCallback) {
+    await SharedPrefsService.instance.init();
+    runApp(const ProviderScope(child: BandBbsBrowserCallbackApp()));
+    return;
+  }
   final window = WindowLaunchSpec.parse(args);
   final process = switch (window.role) {
     OronBoxWindowRole.debug => DiagnosticProcess.debugWindow,
     OronBoxWindowRole.plugin => DiagnosticProcess.pluginWindow,
+    OronBoxWindowRole.webview => DiagnosticProcess.frontend,
     OronBoxWindowRole.main => DiagnosticProcess.frontend,
   };
   await initLogging(arguments: args, process: process);
@@ -44,6 +55,18 @@ void main(List<String> args) async {
     );
   }
   await SharedPrefsService.instance.init();
+  if (window.role == OronBoxWindowRole.webview) {
+    await initializeWindowCoordinator(window);
+    await initializeDesktopWindow(spec: window);
+    runApp(ProviderScope(child: WebViewWindowApp(id: window.targetId ?? '')));
+    return;
+  }
+  try {
+    await WasmCompatibility.shared.initialize();
+  } catch (error, stack) {
+    getLogger('Application')
+        .warning('Wasm compatibility state unavailable', error, stack);
+  }
   unawaited(PrivateAppState.instance.initialize().catchError((_) {}));
   if (!await initializeWindowCoordinator(window, launchArguments: args)) return;
   if (window.role == OronBoxWindowRole.main) {
@@ -61,6 +84,9 @@ void main(List<String> args) async {
           OronBoxWindowRole.debug => const DebugWindowApp(),
           OronBoxWindowRole.plugin => PluginWindowApp(
             pluginId: window.targetId ?? '',
+          ),
+          OronBoxWindowRole.webview => throw StateError(
+            'WebView has a dedicated entry point',
           ),
           OronBoxWindowRole.main => const OronBoxApp(),
         },

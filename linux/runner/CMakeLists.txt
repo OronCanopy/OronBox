@@ -9,8 +9,6 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME}
   "classic_spp_channel.cc"
   "file_open_channel.cc"
-  "mi_account_2fa_channel.cc"
-  "zeppos_app_settings_channel.cc"
   "main.cc"
   "my_application.cc"
   "window_setup.cc"
@@ -26,6 +24,6 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
-target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK PkgConfig::BLUEZ PkgConfig::GIO PkgConfig::WEBKIT)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK PkgConfig::BLUEZ PkgConfig::GIO)
 
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")

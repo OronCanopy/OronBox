@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:oronbox_location/oronbox_location.dart';
+import 'package:wear_location/wear_location.dart';
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/device/xiaomi/protocol/generated/wear_gnss.pb.dart'
     as pb_gnss;
@@ -14,13 +14,13 @@ class DeviceLocationService {
   DeviceLocationService({
     Logger? log,
     this.isSupportedOverride,
-    OronboxLocation? platform,
+    WearLocation? platform,
   }) : _log = log ?? getLogger('DeviceLocationService'),
-       _platform = platform ?? OronboxLocation.instance;
+       _platform = platform ?? WearLocation.instance;
 
-  static final _requests = <OronboxLocation, _LocationFixRequest>{};
+  static final _requests = <WearLocation, _LocationFixRequest>{};
   final Logger _log;
-  final OronboxLocation _platform;
+  final WearLocation _platform;
   final bool? isSupportedOverride;
   int _generation = 0;
   Future<pb_gnss.GpsInfo?>? _pending;
@@ -154,7 +154,7 @@ class DeviceLocationService {
 }
 
 class _LocationFixRequest {
-  _LocationFixRequest(OronboxLocation platform, void Function() onComplete) {
+  _LocationFixRequest(WearLocation platform, void Function() onComplete) {
     result =
         Future.sync(
           () =>

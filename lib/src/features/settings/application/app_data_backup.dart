@@ -177,7 +177,10 @@ class AppDataBackupService {
     };
     for (final key in keys) {
       final value = _prefs.value(key);
-      if (includeSettings || value != null) result[key] = value;
+      if ((includeSettings || value != null) &&
+          _isValidBackupSetting(key, value)) {
+        result[key] = value;
+      }
     }
     return result;
   }

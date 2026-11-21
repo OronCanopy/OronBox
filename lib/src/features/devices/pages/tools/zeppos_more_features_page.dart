@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:segmented_list/segmented_list.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
@@ -107,7 +108,7 @@ class _ZeppOsMoreFeaturesPageState
       if (mounted) setState(() => _finding = finding);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      appScaffoldMessengerOf(context).showSnackBar(
         SnackBar(
           content: Text(
             localizedErrorMessage(AppLocalizations.of(context)!, error),

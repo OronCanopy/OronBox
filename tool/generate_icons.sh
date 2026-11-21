@@ -45,6 +45,31 @@ render_flat() { # <svg> <size> <output> [background=white] — flattened, no alp
   echo "[INFO] ${3#"$ROOT"/} ($2x$2, ${4:-white} background)"
 }
 
+# Menu bar template derived from the OronBox logo.
+python3 - "$ROOT/assets/images/app_icon.svg" "$TMP/tray_macos.svg" <<'EOF'
+import sys
+import xml.etree.ElementTree as ET
+
+namespace = 'http://www.w3.org/2000/svg'
+paths = ET.parse(sys.argv[1]).iter(f'{{{namespace}}}path')
+by_color = {path.get('fill'): path.get('d') for path in paths}
+ring = by_color['#444C53']
+star = by_color['#9EBBDA']
+star_outline = by_color['#F4F5FD']
+
+svg = ET.Element('svg', xmlns=namespace, width='36', height='36', viewBox='38 38 180 180')
+mask = ET.SubElement(
+    svg, 'mask', id='ring', maskUnits='userSpaceOnUse',
+    x='0', y='0', width='256', height='256',
+)
+ET.SubElement(mask, 'rect', width='256', height='256', fill='white')
+ET.SubElement(mask, 'path', d=star_outline, fill='black')
+ET.SubElement(svg, 'path', d=ring, fill='black', mask='url(#ring)')
+ET.SubElement(svg, 'path', d=star, fill='black')
+ET.ElementTree(svg).write(sys.argv[2], encoding='utf-8')
+EOF
+render "$TMP/tray_macos.svg" 36 "$ROOT/assets/images/tray_icon_macos.png"
+
 # In-repo source PNG.
 render "$SVG" 512 "$ROOT/assets/images/app_icon.png"
 
@@ -140,6 +165,7 @@ magick "$TMP/icon256.png" -define icon:auto-resize=16,24,32,48,64,128,256 \
 echo "[INFO] windows/runner/resources/app_icon.ico (16-256)"
 
 # Web (maskable icons must be full-bleed).
+render "$SVG" 32 "$ROOT/web/favicon.png"
 render "$SVG" 192 "$ROOT/web/icons/Icon-192.png"
 render "$SVG" 512 "$ROOT/web/icons/Icon-512.png"
 render_flat "$SVG" 192 "$ROOT/web/icons/Icon-maskable-192.png"

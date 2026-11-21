@@ -46,6 +46,24 @@ void main() {
     },
   );
 
+  test('workspace controller creates module resource kind', () async {
+    final host = _CreatorHost();
+    final container = ProviderContainer(
+      overrides: [applicationHostProvider.overrideWithValue(host)],
+    );
+    addTearDown(container.dispose);
+
+    container.read(creatorWorkspaceProvider);
+    await _eventually(() => !container.read(creatorWorkspaceProvider).loading);
+
+    await container
+        .read(creatorWorkspaceProvider.notifier)
+        .create('demo-module', 'Demo module', CreatorResourceKind.canopus);
+    final state = container.read(creatorWorkspaceProvider);
+    expect(state.resources, hasLength(1));
+    expect(state.selected?.resource.kind, CreatorResourceKind.canopus);
+  });
+
   test('workspace refresh trusts the authenticated host instead of frontend credentials', () async {
     final host = _CreatorHost();
     final container = ProviderContainer(

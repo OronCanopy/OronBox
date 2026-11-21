@@ -4,9 +4,48 @@ import 'package:oronbox/src/data/community/community_source.dart';
 import 'package:oronbox/src/data/oronbox/oronbox_resource_provider.dart';
 import 'package:oronbox/src/features/resources/domain/community_resource.dart';
 import 'package:oronbox/src/features/resources/domain/resource_catalog.dart';
-import 'package:oronbox/src/features/resources/pages/resource_detail_page.dart';
+import 'package:oronbox/src/features/resources/widgets/resource_detail_actions.dart';
 
 void main() {
+  test(
+    'reads artifact version and size from the public resource contract',
+    () async {
+      final dio = Dio();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            handler.resolve(
+              Response<Object?>(
+                requestOptions: options,
+                statusCode: 200,
+                data: {
+                  'id': 'file-info',
+                  'name': 'Resource',
+                  'kind': 'watchface',
+                  'artifacts': [
+                    {
+                      'id': 'artifact',
+                      'original_name': 'resource.bin',
+                      'sha256': List.filled(64, 'a').join(),
+                      'package_version': '3.4.5',
+                      'size_bytes': 4096,
+                      'device_ids': ['n66'],
+                    },
+                  ],
+                },
+              ),
+            );
+          },
+        ),
+      );
+      final detail = await OronBoxResourceCatalog(dio: dio).getDetail(
+        const ResourceRef(source: CommunitySourceId.oronBox, id: 'file-info'),
+      );
+      expect(detail.files.single.version, '3.4.5');
+      expect(detail.files.single.size, 4096);
+    },
+  );
+
   test('reads the full body independently of the searchable summary', () async {
     final dio = Dio();
     dio.interceptors.add(
@@ -404,5 +443,34 @@ void main() {
       preferredResourceInstallChoice(detail, choices, 'n67'),
       same(choices.single),
     );
+  });
+
+  test('parses canopus kind from the public API and preserves type', () async {
+    final dio = Dio();
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.resolve(
+            Response<Object?>(
+              requestOptions: options,
+              statusCode: 200,
+              data: {
+                'id': 'canopus-test',
+                'name': 'Canopus Resource',
+                'kind': 'canopus',
+                'summary': 'Native injected module',
+                'description': 'A Canopus module package',
+                'description_format': 'plain',
+              },
+            ),
+          );
+        },
+      ),
+    );
+    final detail = await OronBoxResourceCatalog(dio: dio).getDetail(
+      const ResourceRef(source: CommunitySourceId.oronBox, id: 'canopus-test'),
+    );
+    expect(detail.type, CommunityResourceType.canopus);
+    expect(detail.name, 'Canopus Resource');
   });
 }

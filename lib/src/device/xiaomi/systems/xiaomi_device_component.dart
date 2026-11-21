@@ -3,7 +3,8 @@ import 'dart:typed_data';
 
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/device/core/transport.dart';
-import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart' as pb;
+import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart'
+    as pb;
 import 'package:oronbox/src/device/xiaomi/protocol/commands/xiaomi_request_pool.dart';
 import 'package:oronbox/src/device/xiaomi/protocol/packet/l1_packet.dart';
 import 'package:oronbox/src/device/xiaomi/protocol/packet/l1cmd_packet.dart';
@@ -51,6 +52,7 @@ class XiaomiDeviceComponent {
   void Function(Uint8List payload)? onActivityPayload;
   void Function(Uint8List frame)? onRawOutgoing;
   void Function(Object error, StackTrace stackTrace)? onTransportFailure;
+  void Function(Object error)? onSessionReset;
   XiaomiProtocolTracer? protocolTracer;
   Completer<void>? _sppHelloCompleter;
   final XiaomiSppV1Codec _sppV1Codec = XiaomiSppV1Codec();
@@ -74,6 +76,10 @@ class XiaomiDeviceComponent {
     onSend: _onSarSend,
     onData: (data) => onL2Payload?.call(data),
     onSendError: _onSarSendError,
+    onSessionReset: (error) {
+      requestPool.clear();
+      onSessionReset?.call(error);
+    },
   );
 
   late final XiaomiRequestPool requestPool = XiaomiRequestPool(
@@ -235,6 +241,34 @@ class XiaomiDeviceComponent {
       payload: l2Payload,
     );
     await sar.sendData(l2.toBytes());
+  }
+
+  Future<void> sendL2Data(L2Channel channel, Uint8List l2Payload) async {
+    if (authKeys == null) {
+      throw StateError('Xiaomi L2 authentication is required');
+    }
+    final packet = L2Packet(
+      channel: channel,
+      opcode: L2OpCode.writeEnc,
+      payload: authKeys!.cipher.encrypt(l2Payload),
+    );
+    await sar.sendData(packet.toBytes());
+  }
+
+  Future<RegisteredAck> sendL2DataRegisterAck(
+    L2Channel channel,
+    Uint8List l2Payload, {
+    Duration? timeout,
+  }) async {
+    if (authKeys == null) {
+      throw StateError('Xiaomi L2 authentication is required');
+    }
+    final packet = L2Packet(
+      channel: channel,
+      opcode: L2OpCode.writeEnc,
+      payload: authKeys!.cipher.encrypt(l2Payload),
+    );
+    return sar.sendDataRegisterAck(packet.toBytes(), timeout: timeout);
   }
 
   Future<RegisteredAck> sendL2MassDataRegisterAck(

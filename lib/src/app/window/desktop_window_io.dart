@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi' show Pointer, Void;
 import 'dart:io';
 import 'dart:ui' show AppExitResponse;
 
@@ -8,21 +9,54 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as image;
 import 'package:material_ui/material_ui.dart' hide Image;
+import 'package:window_manager/window_manager.dart' as nativeapi;
+import 'package:window_manager/window_manager.dart'
+    show SizeToNative, OffsetToNative;
 import 'package:path_provider/path_provider.dart';
 import 'package:tray_manager/tray_manager.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:window_manager/legacy.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
+import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
 import 'package:oronbox/src/app/router/app_router.dart';
 import 'package:oronbox/src/app/window/debug_window_preference.dart';
 import 'package:oronbox/src/app/window/window_launch_spec.dart';
 import 'package:oronbox/src/core/services/shared_prefs_service.dart';
 import 'package:oronbox/src/host/application_host_provider.dart';
 
+nativeapi.Window? _secondaryWindow;
+Future<void> Function()? _closeSecondary;
+
+Future<void> closeDesktopWindow() =>
+    _secondaryWindow != null ? closeSecondaryWindow() : windowManager.close();
+
+void dragDesktopWindow() {
+  if (_secondaryWindow case final window?) {
+    window.startDragging();
+  } else {
+    unawaited(windowManager.startDragging());
+  }
+}
+
 Future<void> initializeDesktopWindow({
   WindowLaunchSpec spec = const WindowLaunchSpec(),
 }) async {
   if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) return;
-  await windowManager.ensureInitialized();
+  if (spec.isSecondary) {
+    final address = await const MethodChannel(
+      'org.oroncanopy.oronbox/window_handle',
+    ).invokeMethod<int>('get');
+    if (address == null || address == 0) {
+      throw StateError('Secondary window unavailable');
+    }
+    _secondaryWindow = nativeapi.Window.createWithNativeWindow(
+      Pointer<Void>.fromAddress(address),
+    );
+    if (_secondaryWindow == null) {
+      throw StateError('Secondary window unavailable');
+    }
+  } else {
+    await windowManager.ensureInitialized();
+  }
   final secondary = spec.isSecondary;
   final role = spec.storageKey;
   final prefs = SharedPrefsService.instance;
@@ -31,6 +65,7 @@ Future<void> initializeDesktopWindow({
   final defaultSize = switch (spec.role) {
     OronBoxWindowRole.debug => const Size(1000, 650),
     OronBoxWindowRole.plugin => const Size(1100, 760),
+    OronBoxWindowRole.webview => const Size(900, 720),
     OronBoxWindowRole.main => const Size(1280, 720),
   };
   final minimumSize = switch (spec.role) {
@@ -46,18 +81,32 @@ Future<void> initializeDesktopWindow({
     title: switch (spec.role) {
       OronBoxWindowRole.debug => 'OronBox Debug',
       OronBoxWindowRole.plugin => 'OronBox Plugin',
+      OronBoxWindowRole.webview => 'OronBox',
       OronBoxWindowRole.main => 'OronBox',
     },
     titleBarStyle: secondary ? TitleBarStyle.normal : TitleBarStyle.hidden,
     windowButtonVisibility: secondary ? true : Platform.isMacOS,
   );
+  if (_secondaryWindow case final window?) {
+    window.setSize(options.size!.toNative(), false);
+    window.minimumSize = minimumSize.toNative();
+    window.titleBarStyle = nativeapi.TitleBarStyle.normal;
+    window.title = options.title!;
+    final x = prefs.getDouble('window.$role.x');
+    final y = prefs.getDouble('window.$role.y');
+    if (x != null && y != null) {
+      window.position = Offset(x, y).toNative();
+    } else {
+      window.center();
+    }
+    window.show();
+    window.focus();
+    return;
+  }
   await windowManager.waitUntilReadyToShow(options, () async {
     final x = prefs.getDouble('window.$role.x');
     final y = prefs.getDouble('window.$role.y');
     if (x != null && y != null) await windowManager.setPosition(Offset(x, y));
-    if (spec.role == OronBoxWindowRole.debug) {
-      await windowManager.setPreventClose(true);
-    }
     await windowManager.show();
     await windowManager.focus();
   });
@@ -116,13 +165,16 @@ class _DesktopWindowHostState extends ConsumerState<DesktopWindowHost>
     final l10n = AppLocalizations.of(context)!;
     windowManager.addListener(this);
     await windowManager.setPreventClose(true);
-    final icon = Platform.isWindows
-        ? 'assets/images/tray_icon.ico'
-        : 'assets/images/tray_icon.png';
+    final icon = switch (Platform.operatingSystem) {
+      'macos' => 'assets/images/tray_icon_macos.png',
+      'windows' => 'assets/images/tray_icon.ico',
+      _ => 'assets/images/tray_icon.png',
+    };
     final trayIcon = TrayIcon.create();
     if (trayIcon == null) return;
     _trayIcon = trayIcon;
     trayIcon.setContextMenuTrigger(ContextMenuTrigger.rightClicked);
+    if (Platform.isMacOS) trayIcon.isIconTemplate = true;
     final trayImage = ImageAsset.fromAsset(icon);
     if (trayImage != null) {
       _trayImage = trayImage;
@@ -260,17 +312,14 @@ class _DesktopWindowHostState extends ConsumerState<DesktopWindowHost>
             children: [
               Text(l10n.desktopCloseMessage),
               const SizedBox(height: 24),
-              Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                children: [
-                  Checkbox(
-                    value: remember,
-                    onChanged: (value) =>
-                        setState(() => remember = value ?? false),
-                  ),
-                  Text(l10n.desktopCloseRemember),
-                ],
+              AppCheckboxRow(
+                value: remember,
+                onChanged: (value) => setState(() => remember = value ?? false),
+                title: Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 8),
+                  child: Text(l10n.desktopCloseRemember),
+                ),
+                expanded: true,
               ),
             ],
           ),
@@ -314,61 +363,68 @@ class SecondaryWindowHost extends StatefulWidget {
     super.key,
     required this.role,
     required this.child,
+    this.onClose,
   });
   final String role;
   final Widget child;
+  final Future<void> Function()? onClose;
 
   @override
   State<SecondaryWindowHost> createState() => _SecondaryWindowHostState();
 }
 
-class _SecondaryWindowHostState extends State<SecondaryWindowHost>
-    with WindowListener {
+class _SecondaryWindowHostState extends State<SecondaryWindowHost> {
   Timer? _saveTimer;
-
-  bool get _desktop =>
-      Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+  nativeapi.ListenerId? _listener;
+  bool _closing = false;
 
   @override
   void initState() {
     super.initState();
-    if (_desktop) windowManager.addListener(this);
+    _closeSecondary = _close;
+    _listener = _secondaryWindow?.addListener((event) {
+      if (event is nativeapi.WindowCloseRequestedEvent) {
+        if (!_closing) {
+          event.request.cancel();
+          unawaited(_close());
+        }
+      } else if (event is nativeapi.WindowResizedEvent ||
+          event is nativeapi.WindowMovedEvent) {
+        _saveTimer?.cancel();
+        _saveTimer = Timer(const Duration(milliseconds: 250), _saveBounds);
+      }
+    });
   }
 
   @override
   void dispose() {
     _saveTimer?.cancel();
-    if (_desktop) windowManager.removeListener(this);
+    if (_listener case final listener?) {
+      _secondaryWindow?.removeListener(listener);
+    }
+    _closeSecondary = null;
     super.dispose();
   }
 
-  @override
-  void onWindowResize() => _scheduleSave();
-
-  @override
-  void onWindowMove() => _scheduleSave();
-
-  @override
-  Future<void> onWindowClose() async {
+  Future<void> _close() async {
+    if (_closing) return;
+    _closing = true;
     if (widget.role == 'debug') await setDebugWindowEnabled(false);
-    await windowManager.setPreventClose(false);
-    await windowManager.close();
-  }
-
-  void _scheduleSave() {
-    _saveTimer?.cancel();
-    _saveTimer = Timer(const Duration(milliseconds: 250), _saveBounds);
+    await widget.onClose?.call();
+    _secondaryWindow?.close();
   }
 
   Future<void> _saveBounds() async {
-    final size = await windowManager.getSize();
-    final position = await windowManager.getPosition();
+    final window = _secondaryWindow;
+    if (window == null || _closing) return;
+    final size = window.size;
+    final position = window.position;
     await reportSecondaryWindowBounds(
       role: widget.role,
       width: size.width,
       height: size.height,
-      x: position.dx,
-      y: position.dy,
+      x: position.x,
+      y: position.y,
     );
   }
 
@@ -380,7 +436,6 @@ bool get supportsSecondaryWindows =>
     Platform.isLinux || Platform.isMacOS || Platform.isWindows;
 
 final _coordinator = _WindowCoordinator();
-final _handoffsController = StreamController<void>.broadcast(sync: true);
 
 final _pendingPrimaryLaunchArguments = <List<String>>[];
 final StreamController<List<String>> _primaryLaunchArguments =
@@ -425,18 +480,10 @@ Future<void> _setupSecondaryWindowHandler() async {
     await controller.setWindowMethodHandler((call) async {
       switch (call.method) {
         case 'focus':
-          await windowManager.show();
-          if (await windowManager.isMinimized()) await windowManager.restore();
-          await windowManager.focus();
+          await focusSecondaryWindow();
           return true;
         case 'close':
-          await windowManager.setPreventClose(false);
-          await windowManager.close();
-          return true;
-        case 'handoff':
-          _handoffsController.add(null);
-          await windowManager.setPreventClose(false);
-          await windowManager.close();
+          await closeSecondaryWindow();
           return true;
         default:
           return null;
@@ -449,29 +496,54 @@ Future<void> notifySecondaryWindowReady() async {
   await _setupSecondaryWindowHandler();
 }
 
-Future<bool> openDebugWindow() => _coordinator.open(
-      key: 'debug',
-      role: 'debug',
-    );
+Future<bool> openDebugWindow() =>
+    _coordinator.open(key: 'debug', role: 'debug');
+
+Future<void> closeSecondaryWindow() async {
+  if (_closeSecondary case final close?) {
+    await close();
+  } else {
+    _secondaryWindow?.close();
+  }
+}
 
 Future<bool> closeDebugWindow() => _coordinator.close('debug');
 
 Future<bool> openPluginWindow(String pluginId) => _coordinator.open(
-      key: 'plugin:$pluginId',
-      role: 'plugin',
-      targetId: pluginId,
-    );
+  key: 'plugin:$pluginId',
+  role: 'plugin',
+  targetId: pluginId,
+);
 
 Future<bool> takePluginWindow(String pluginId) =>
-    _coordinator.handoff('plugin:$pluginId');
+    _coordinator.close('plugin:$pluginId');
+
+Future<String> createWebViewWindow(String id) async {
+  final key = 'webview:$id';
+  if (!await _coordinator.open(key: key, role: 'webview', targetId: id)) {
+    throw StateError('WebView window could not be opened');
+  }
+  return _coordinator._controllers[key]!.windowId;
+}
+
+Future<void> closeWebViewWindow(String id) async {
+  await _coordinator.close('webview:$id');
+}
+
+Future<void> focusSecondaryWindow() async {
+  final window = _secondaryWindow;
+  if (window == null) return;
+  window.show();
+  if (window.isMinimized) window.restore();
+  window.focus();
+}
 
 Future<void> setSecondaryWindowIcon(String? base64Icon) async {
   if (base64Icon == null || base64Icon.isEmpty) return;
   try {
     if (Platform.isMacOS) {
-      await const MethodChannel(
-        'oronbox/window',
-      ).invokeMethod<void>('setIcon', base64Icon);
+      await const MethodChannel('org.oroncanopy.oronbox/window')
+          .invokeMethod<void>('setIcon', base64Icon);
       return;
     }
     if (!Platform.isWindows && !Platform.isLinux) return;
@@ -491,9 +563,8 @@ Future<void> setSecondaryWindowIcon(String? base64Icon) async {
     } else {
       await file.writeAsBytes(bytes, flush: true);
     }
-    await const MethodChannel(
-      'window_manager',
-    ).invokeMethod<void>('setIcon', {'iconPath': file.path});
+    await const MethodChannel('window_manager')
+        .invokeMethod<void>('setIcon', {'iconPath': file.path});
   } on MissingPluginException {
     // Runtime window icons are only available on runners that implement them.
   } on PlatformException {
@@ -509,10 +580,8 @@ Future<void> setSecondaryWindowIcon(String? base64Icon) async {
 
 Future<void> setSecondaryWindowTitle(String title) async {
   if (title.isEmpty) return;
-  await windowManager.setTitle(title);
+  _secondaryWindow?.title = title;
 }
-
-Stream<void> get secondaryWindowHandoffs => _handoffsController.stream;
 
 Future<void> shutdownSecondaryWindows() => _coordinator.shutdown();
 
@@ -576,10 +645,7 @@ class _WindowCoordinator {
         if (targetId != null) 'targetId': targetId,
       });
       final controller = await WindowController.create(
-        WindowConfiguration(
-          arguments: payload,
-          hiddenAtLaunch: true,
-        ),
+        WindowConfiguration(arguments: payload, hiddenAtLaunch: true),
       );
       _controllers[key] = controller;
       await controller.show();
@@ -598,19 +664,17 @@ class _WindowCoordinator {
     return true;
   }
 
-  Future<bool> handoff(String key) async {
-    final controller = _controllers.remove(key);
-    if (controller == null) return true;
-    try {
-      await controller.invokeMethod('handoff');
-    } catch (_) {}
-    return true;
-  }
-
   Future<void> shutdown() async {
-    final controllers = _controllers.values.toList();
+    final controllers = {
+      for (final value in _controllers.values) value.windowId: value,
+    };
+    for (final window in await WindowController.getAll()) {
+      if (window.arguments.contains('"role":"webview"')) {
+        controllers[window.windowId] = window;
+      }
+    }
     _controllers.clear();
-    for (final controller in controllers) {
+    for (final controller in controllers.values) {
       try {
         await controller.invokeMethod('close');
       } catch (_) {}

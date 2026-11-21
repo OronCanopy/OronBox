@@ -26,7 +26,7 @@ class UpdateDownloadDialog extends ConsumerStatefulWidget {
 }
 
 class _UpdateDownloadDialogState extends ConsumerState<UpdateDownloadDialog> {
-  static const _channel = MethodChannel('oronbox/installer');
+  static const _channel = MethodChannel('org.oroncanopy.oronbox/installer');
 
   double _progress = 0;
   String? _error;

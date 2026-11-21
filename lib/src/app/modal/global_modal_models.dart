@@ -1,9 +1,6 @@
-enum GlobalModalPriority {
-  low,
-  normal,
-  high,
-  urgent,
-}
+import 'package:flutter/widgets.dart';
+
+enum GlobalModalPriority { low, normal, high, urgent }
 
 abstract class GlobalModalRequest {
   const GlobalModalRequest();
@@ -97,4 +94,48 @@ class AnnouncementModalRequest extends GlobalModalRequest {
 
   @override
   GlobalModalPriority get priority => GlobalModalPriority.normal;
+}
+
+class WasmCompatibilityModalRequest extends GlobalModalRequest {
+  WasmCompatibilityModalRequest({
+    required this.test,
+    required this.defer,
+    required this.onComplete,
+  });
+
+  final Future<void> Function() test;
+  final Future<void> Function() defer;
+  final void Function(bool passed) onComplete;
+
+  @override
+  final DateTime createdAt = DateTime.now().toUtc();
+  @override
+  String get id => 'wasm-compatibility';
+  @override
+  GlobalModalPriority get priority => GlobalModalPriority.urgent;
+}
+
+class UpdateModalRequest extends GlobalModalRequest {
+  UpdateModalRequest({
+    required this.id,
+    required this.buildDialog,
+    required this.onDismiss,
+    required this.isCurrent,
+  });
+
+  @override
+  final String id;
+  final Widget Function(BuildContext context, VoidCallback onComplete)
+  buildDialog;
+  final VoidCallback onDismiss;
+  final bool Function() isCurrent;
+
+  @override
+  final DateTime createdAt = DateTime.now();
+
+  @override
+  GlobalModalPriority get priority => GlobalModalPriority.low;
+
+  @override
+  bool get isExpired => !isCurrent();
 }

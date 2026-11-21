@@ -46,6 +46,9 @@ List<BTDeviceInfo> mergeScannedDeviceEndpoint(
     name: displayName,
     addr: formatDeviceAddress(endpoint.address),
     connectType: endpoint.connectType.name,
+    xiaomiRegistered: profile.kind == DeviceKind.xiaomi
+        ? endpoint.xiaomiRegistered
+        : null,
   );
   if (existing >= 0) {
     updated[existing] = value;

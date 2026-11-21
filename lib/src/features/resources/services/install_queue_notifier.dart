@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cross_file/cross_file.dart';
+import 'package:oronbox/src/core/errors/coded_error.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oronbox/src/core/storage/managed_temporary_files.dart';
@@ -16,6 +17,7 @@ import 'package:oronbox/src/features/resources/services/resource_payload_analyze
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 import 'package:oronbox/src/host/application_host_provider.dart';
 import 'package:oronbox/src/device/core/device_state.dart' as proto;
+import 'package:oronbox/src/device/xiaomi/systems/install_system.dart';
 
 export 'package:oronbox/src/features/resources/services/resource_install_service.dart'
     show LocalDeviceInstallType, ResourceTaskStatus;
@@ -38,6 +40,12 @@ class InstallTask {
     this.status = ResourceTaskStatus.pending,
     this.progress = 0,
     this.error,
+    this.errorCode,
+    this.iconUrl,
+    this.canRetry = true,
+    this.conflictingWatchfaceId,
+    this.deviceId,
+    this.replaceOnDowngrade = false,
   });
 
   final String id;
@@ -60,6 +68,19 @@ class InstallTask {
   final ResourceTaskStatus status;
   final double progress;
   final String? error;
+  final String? errorCode;
+  final String? iconUrl;
+  final bool canRetry;
+  final String? conflictingWatchfaceId;
+  final String? deviceId;
+  final bool replaceOnDowngrade;
+
+  bool get canReplaceWatchface =>
+      canRetry &&
+      status == ResourceTaskStatus.failed &&
+      type == LocalDeviceInstallType.watchface &&
+      conflictingWatchfaceId?.isNotEmpty == true &&
+      deviceId?.isNotEmpty == true;
 }
 
 class InstallQueueState {
@@ -89,7 +110,7 @@ class InstallQueueState {
   bool get hasRunnableTasks => tasks.any(
     (task) =>
         task.status == ResourceTaskStatus.pending ||
-        task.status == ResourceTaskStatus.failed,
+        (task.status == ResourceTaskStatus.failed && task.canRetry),
   );
   double get progress => tasks.isEmpty
       ? 1
@@ -99,6 +120,14 @@ class InstallQueueState {
 
 class InstallQueueNotifier extends Notifier<InstallQueueState> {
   DaemonTaskFeed<InstallTask>? _feed;
+  final _reviewedStorageFailures = <String>{};
+
+  bool storageManagementReviewed(String taskId) =>
+      _reviewedStorageFailures.contains(taskId);
+
+  void markStorageManagementReviewed(String taskId) {
+    _reviewedStorageFailures.add(taskId);
+  }
 
   @override
   InstallQueueState build() {
@@ -120,6 +149,11 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
   }
 
   void _setTasks(List<InstallTask> tasks) {
+    _reviewedStorageFailures.removeWhere(
+      (id) => !tasks.any(
+        (task) => task.id == id && task.status == ResourceTaskStatus.failed,
+      ),
+    );
     final running = tasks.any(
       (task) =>
           task.status == ResourceTaskStatus.installing ||
@@ -142,6 +176,10 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
     final resourceFile = resource?.files
         .where((file) => file.id == fileId)
         .firstOrNull;
+    final details = view.errorDetails;
+    final downgrade = view.errorCode == 'watchface_downgrade' && details is Map
+        ? details
+        : null;
     return InstallTask(
       id: view.id,
       name:
@@ -154,6 +192,8 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
       type: switch (typeName) {
         'watchface' => LocalDeviceInstallType.watchface,
         'firmware' => LocalDeviceInstallType.firmware,
+        'canopus' || 'module' => LocalDeviceInstallType.canopus,
+        'res_pack' || 'resPack' => LocalDeviceInstallType.resPack,
         _ => LocalDeviceInstallType.app,
       },
       installMode: ResourceInstallMode.values.firstWhere(
@@ -170,17 +210,27 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
       ),
       progress: view.progress,
       error: view.error,
+      errorCode: view.errorCode,
+      iconUrl: view.params['icon']?.toString() ?? resource?.iconUrl?.toString(),
+      canRetry: view.params['pluginId'] == null,
+      conflictingWatchfaceId: downgrade?['watchfaceId']?.toString(),
+      deviceId:
+          downgrade?['deviceId']?.toString() ??
+          view.params['device']?.toString(),
+      replaceOnDowngrade: view.params['replaceWatchfaceId'] != null,
     );
   }
 
-  void enqueueLocalFile(XFile file) {
-    unawaited(_enqueueLocalFile(file));
-  }
+  Future<void> enqueueLocalFile(XFile file, {LocalDeviceInstallType? type}) =>
+      _enqueueLocalFile(file, type: type);
 
-  Future<void> _enqueueLocalFile(XFile file) async {
+  Future<void> _enqueueLocalFile(
+    XFile file, {
+    LocalDeviceInstallType? type,
+  }) async {
     final bytes = await file.readAsBytes();
     if (kIsWeb) {
-      final type = ResourceInstallService().detectLocalInstallType(
+      type ??= ResourceInstallService().detectLocalInstallType(
         file.name,
         bytes,
       );
@@ -204,7 +254,7 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
       OronBoxCommand(
         method: 'install.local',
         params: {
-          'type': 'auto',
+          'type': type?.name ?? 'auto',
           'path': path,
           'title': file.name,
           'deleteAfter': true,
@@ -212,6 +262,7 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
         },
       ),
     );
+    await ManagedTemporaryFiles.releaseImport(file.path);
   }
 
   Future<void> enqueueConfirmedLocalFile(
@@ -219,6 +270,7 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
     required LocalDeviceInstallType type,
     required ResourceInstallMode installMode,
     String? identifier,
+    String? deviceId,
   }) async {
     if (kIsWeb) {
       final bytes = await file.readAsBytes();
@@ -232,6 +284,7 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
           filePath: file.path,
           bytes: bytes,
           identifier: identifier,
+          deviceId: deviceId,
         ),
       );
       start();
@@ -248,11 +301,13 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
             'identifier': identifier,
           'path': path,
           'title': file.name,
+          if (deviceId != null) 'device': deviceId,
           'deleteAfter': true,
           'autoClean': true,
         },
       ),
     );
+    await ManagedTemporaryFiles.releaseImport(file.path);
     await ref
         .read(applicationHostProvider)
         .execute(const OronBoxCommand(method: 'queue.start'));
@@ -294,6 +349,10 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
             params: {'held': held, 'command': command.toJson()},
           ),
         );
+    final path = command.params['path'] as String?;
+    if (path != null) {
+      await ManagedTemporaryFiles.release(path, delete: !result.ok);
+    }
     if (!result.ok) {
       throw result.error!;
     }
@@ -306,9 +365,17 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
     String taskId, {
     required String identifier,
     bool startImmediately = true,
+    bool removeExisting = false,
   }) async {
     final task = state.tasks.where((item) => item.id == taskId).firstOrNull;
     if (task == null) return;
+    if (!task.canRetry) throw StateError('This install task cannot be retried');
+    if (removeExisting &&
+        (!task.canReplaceWatchface ||
+            identifier != task.conflictingWatchfaceId)) {
+      throw StateError('The failed watchface install has changed');
+    }
+    final override = removeExisting ? task.identifier : identifier;
     if (kIsWeb) {
       state = InstallQueueState(
         tasks: [
@@ -323,7 +390,12 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
                 filePath: item.filePath,
                 bytes: item.bytes,
                 analysis: item.analysis,
-                identifier: identifier,
+                identifier: override,
+                deviceId: task.deviceId,
+                replaceOnDowngrade: removeExisting,
+                conflictingWatchfaceId: removeExisting
+                    ? task.conflictingWatchfaceId
+                    : null,
                 resource: item.resource,
                 file: item.file,
                 status: startImmediately
@@ -344,7 +416,9 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
         method: 'install.local',
         params: {
           'type': 'watchface',
-          'identifier': identifier,
+          if (override != null) 'identifier': override,
+          if (task.deviceId != null) 'device': task.deviceId,
+          if (removeExisting) 'replaceWatchfaceId': identifier,
           'path': task.filePath,
           'title': task.name,
           'description': task.description,
@@ -365,6 +439,7 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
   }
 
   void enqueueResource({
+    String? deviceId,
     required CommunityResourceDetail resource,
     required CommunityResourceFile file,
     required String codename,
@@ -378,11 +453,13 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
       CommunityResourceType.miniprogram => LocalDeviceInstallType.app,
       CommunityResourceType.watchface => LocalDeviceInstallType.watchface,
       CommunityResourceType.firmware => LocalDeviceInstallType.firmware,
-      CommunityResourceType.canopus => LocalDeviceInstallType.watchface,
+      CommunityResourceType.canopus => LocalDeviceInstallType.canopus,
+      CommunityResourceType.resPack => LocalDeviceInstallType.resPack,
     };
     _addWebTask(
       InstallTask(
-        id: '${resource.ref.key}:${file.id}:$codename',
+        id: '${resource.ref.key}:${file.id}:$codename${deviceId == null ? '' : ':$deviceId'}',
+        deviceId: deviceId,
         name: resource.name,
         description: codename,
         type: analysis?.type ?? catalogType,
@@ -422,6 +499,7 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
 
   void remove(String taskId) => unawaited(_remove(taskId));
   Future<void> _remove(String taskId) async {
+    _reviewedStorageFailures.remove(taskId);
     if (kIsWeb) {
       state = InstallQueueState(
         tasks: state.tasks.where((task) => task.id != taskId).toList(),
@@ -441,6 +519,7 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
   }
 
   void clearTerminal() {
+    _reviewedStorageFailures.clear();
     if (kIsWeb) {
       state = InstallQueueState(
         tasks: state.tasks
@@ -465,6 +544,14 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
   }
 
   void retry(String taskId) {
+    _reviewedStorageFailures.remove(taskId);
+    final previous = state.tasks.where((task) => task.id == taskId).firstOrNull;
+    if (previous?.replaceOnDowngrade == true) {
+      unawaited(
+        reinstallWatchface(taskId, identifier: previous!.identifier ?? ''),
+      );
+      return;
+    }
     if (kIsWeb) {
       state = InstallQueueState(
         tasks: [
@@ -548,8 +635,17 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
   }
 
   Future<void> _runWebTask(InstallTask task) async {
+    _reviewedStorageFailures.remove(task.id);
     final manager = ref.read(deviceManagerProvider.notifier);
-    void update(ResourceTaskStatus status, double progress, String? error) {
+    final replacementId = task.replaceOnDowngrade
+        ? task.conflictingWatchfaceId
+        : null;
+    void update(
+      ResourceTaskStatus status,
+      double progress,
+      Object? error, {
+      WatchfaceDowngradeException? downgrade,
+    }) {
       state = InstallQueueState(
         tasks: [
           for (final item in state.tasks)
@@ -566,9 +662,14 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
                 identifier: item.identifier,
                 resource: item.resource,
                 file: item.file,
+                iconUrl: item.iconUrl,
+                canRetry: item.canRetry,
+                deviceId: downgrade?.deviceId ?? item.deviceId,
+                conflictingWatchfaceId: downgrade?.watchfaceId,
                 status: status,
                 progress: progress,
-                error: error,
+                error: error?.toString(),
+                errorCode: error is CodedError ? error.code : null,
               )
             else
               item,
@@ -578,85 +679,68 @@ class InstallQueueNotifier extends Notifier<InstallQueueState> {
       );
     }
 
-    if (task.resource != null && task.file != null) {
-      try {
-        final analysis = task.analysis;
-        if (analysis != null) {
-          await ResourceInstallService().installAnalyzedPayload(
+    final bytes = task.bytes ?? task.analysis?.payload;
+    if (bytes == null) {
+      update(ResourceTaskStatus.failed, 0, 'Missing resource bytes');
+      return;
+    }
+    if (task.deviceId != null &&
+        ref.read(deviceManagerProvider).currentDevice?.addr.toLowerCase() !=
+            task.deviceId?.toLowerCase()) {
+      update(
+        ResourceTaskStatus.failed,
+        0,
+        'Target device is no longer connected',
+      );
+      return;
+    }
+    final service = ResourceInstallService();
+    final fileName = task.file?.fileName ?? task.name;
+    void onProgress(double progress) =>
+        update(ResourceTaskStatus.installing, progress, null);
+    update(ResourceTaskStatus.installing, 0, null);
+    try {
+      switch (task.installMode) {
+        case ResourceInstallMode.automatic:
+        case ResourceInstallMode.forcePlatform:
+          final analysis =
+              task.analysis ??
+              service.analyzePayload(
+                fileName: fileName,
+                bytes: bytes,
+                hint: task.type,
+                source: 'web-queue',
+              );
+          if (analysis == null) {
+            throw FormatException('Unrecognized resource: $fileName');
+          }
+          await service.installAnalyzedPayload(
             analysis: analysis,
-            fileName: task.file!.fileName,
+            resource: task.resource?.ref,
+            fileName: fileName,
             deviceManager: manager,
             identifierOverride: task.identifier,
-            onProgress: (progress) =>
-                update(ResourceTaskStatus.installing, progress, null),
+            replaceWatchfaceId: replacementId,
+            forcePlatform:
+                task.installMode == ResourceInstallMode.forcePlatform,
+            onProgress: onProgress,
           );
-          update(ResourceTaskStatus.completed, 1, null);
-        } else {
-          await ResourceInstallService().installDownloadedResource(
-            resource: task.resource!,
-            file: task.file!,
-            filePath: task.filePath,
-            bytes: task.bytes,
+        case ResourceInstallMode.forceType:
+          await service.installForcedPayload(
+            type: task.type,
+            fileName: fileName,
+            bytes: bytes,
             deviceManager: manager,
-            onUpdate: update,
+            identifierOverride: task.identifier,
+            replaceWatchfaceId: replacementId,
+            onProgress: onProgress,
           );
-        }
-      } catch (error) {
-        update(ResourceTaskStatus.failed, 0, error.toString());
       }
-      return;
-    } else {
-      final service = ResourceInstallService();
-      final bytes = task.bytes;
-      if (bytes == null) {
-        update(ResourceTaskStatus.failed, 0, 'Missing resource bytes');
-        return;
-      }
-      try {
-        switch (task.installMode) {
-          case ResourceInstallMode.automatic:
-            await service.installLocalPayload(
-              type: task.type,
-              fileName: task.name,
-              bytes: bytes,
-              deviceManager: manager,
-              identifierOverride: task.identifier,
-              onProgress: (progress) =>
-                  update(ResourceTaskStatus.installing, progress, null),
-            );
-          case ResourceInstallMode.forceType:
-            await service.installForcedPayload(
-              type: task.type,
-              fileName: task.name,
-              bytes: bytes,
-              deviceManager: manager,
-              identifierOverride: task.identifier,
-              onProgress: (progress) =>
-                  update(ResourceTaskStatus.installing, progress, null),
-            );
-          case ResourceInstallMode.forcePlatform:
-            final analysis = service.analyzePayload(
-              fileName: task.name,
-              bytes: bytes,
-              hint: task.type,
-              source: 'web-queue-force-platform',
-            );
-            if (analysis == null) {
-              throw FormatException('Unrecognized resource: ${task.name}');
-            }
-            await service.installAnalyzedPayload(
-              analysis: analysis,
-              fileName: task.name,
-              deviceManager: manager,
-              forcePlatform: true,
-              onProgress: (progress) =>
-                  update(ResourceTaskStatus.installing, progress, null),
-            );
-        }
-        update(ResourceTaskStatus.completed, 1, null);
-      } catch (error) {
-        update(ResourceTaskStatus.failed, 0, error.toString());
-      }
+      update(ResourceTaskStatus.completed, 1, null);
+    } on WatchfaceDowngradeException catch (error) {
+      update(ResourceTaskStatus.failed, 0, error, downgrade: error);
+    } catch (error) {
+      update(ResourceTaskStatus.failed, 0, error);
     }
   }
 }

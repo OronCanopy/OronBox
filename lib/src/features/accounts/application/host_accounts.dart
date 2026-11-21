@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oronbox/src/commands/command_protocol.dart';
 import 'package:oronbox/src/core/errors/coded_error.dart';
+import 'package:oronbox/src/features/accounts/services/bandbbs_browser_authorization.dart';
+import 'package:oronbox/src/features/accounts/services/bandbbs_oauth_callback.dart';
+import 'package:flutter/foundation.dart';
 import 'package:oronbox/src/host/application_host_provider.dart';
 
 final currentUserRoleProvider = FutureProvider<String>((ref) async {
@@ -211,30 +214,36 @@ class HostAccountsNotifier extends Notifier<HostAccountsState> {
   );
 
   Future<void> startBandBbsLogin() async {
-    await _mutate(
-      'bandbbs',
-      const OronBoxCommand(
-        method: 'account.login',
-        params: {'provider': 'bandbbs'},
-      ),
-    );
+    reserveBandBbsAuthorization();
+    try {
+      await _mutate(
+        'bandbbs',
+        const OronBoxCommand(
+          method: 'account.login',
+          params: {'provider': 'bandbbs'},
+        ),
+      );
+    } catch (_) {
+      cancelBandBbsAuthorization();
+      rethrow;
+    }
   }
 
   Future<void> startBandBbsPublishingAuthorization() async {
+    reserveBandBbsAuthorization();
     state = state.copyWith(busyProvider: 'bandbbs', clearError: true);
     try {
       await _execute(const OronBoxCommand(method: 'account.bandbbs.publish'));
       state = state.copyWith(clearBusy: true);
     } catch (error) {
+      cancelBandBbsAuthorization();
       state = state.copyWith(clearBusy: true, error: error.toString());
       rethrow;
     }
   }
 
   Future<bool> handleBandBbsCallback(Uri uri) async {
-    if (uri.scheme != 'oronbox' ||
-        uri.host != 'oauth' ||
-        uri.path != '/bandbbs') {
+    if (!isBandBbsOAuthCallback(uri, webLocation: kIsWeb ? Uri.base : null)) {
       return false;
     }
     await _mutate(

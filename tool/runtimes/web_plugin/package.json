@@ -2,7 +2,7 @@
   "name": "oronbox-web-plugin-runtime",
   "private": true,
   "scripts": {
-    "build": "esbuild entry.js --bundle --format=iife --platform=browser --target=es2022 --minify --outfile=../../web/oronbox_plugin_runtime.js"
+    "build": "esbuild entry.js --bundle --format=iife --platform=browser --target=es2022 --minify --outfile=../../../web/oronbox_plugin_runtime.js"
   },
   "dependencies": {
     "@jitl/quickjs-singlefile-browser-release-sync": "0.32.0",

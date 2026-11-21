@@ -38,13 +38,19 @@ class ResourceDetailHeader extends ConsumerWidget {
               const <OronBoxResourceAttribute>[])
         attribute.id: attribute.labelFor(Localizations.localeOf(context)),
     };
+    final iconUrl = mediaResource.iconUrl ?? resource.iconUrl;
+    final backdropUrl =
+        mediaResource.coverUrl ??
+        mediaResource.iconUrl ??
+        resource.coverUrl ??
+        iconUrl;
     final icon = NetworkImgLayer(
-      src: mediaResource.iconUrl?.toString() ?? '',
+      src: iconUrl?.toString() ?? '',
       width: 76,
       height: 76,
     );
     return _Hero(
-      image: mediaResource.coverUrl ?? mediaResource.iconUrl,
+      image: backdropUrl,
       resourceRef: resource.ref,
       animateCover: animateCover,
       child: PageContainer(
@@ -60,7 +66,7 @@ class ResourceDetailHeader extends ConsumerWidget {
             if (animateIcon)
               ResourceMediaHero(
                 tag: resourceMediaHeroTag(resource.ref, 'icon'),
-                url: mediaResource.iconUrl?.toString() ?? '',
+                url: iconUrl?.toString() ?? '',
                 width: 76,
                 height: 76,
                 style: const ResourceMediaHeroStyle(
@@ -297,6 +303,7 @@ String _typeLabel(
   CommunityResourceType.watchface => l10n.watchface,
   CommunityResourceType.firmware => l10n.firmwareTool,
   CommunityResourceType.canopus => l10n.module,
+  CommunityResourceType.resPack => l10n.resourceTypeResPack,
 };
 
 String _paidLabel(AppLocalizations l10n, CommunityPaidType type) =>

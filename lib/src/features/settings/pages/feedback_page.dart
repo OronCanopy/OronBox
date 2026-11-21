@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -341,7 +342,7 @@ class _TicketDetailState extends ConsumerState<_TicketDetail> {
       widget.onUpdated(ticket);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        appScaffoldMessengerOf(context).showSnackBar(
           SnackBar(
             content: Text(
               localizedErrorMessage(AppLocalizations.of(context)!, error),
@@ -590,7 +591,7 @@ class _FeedbackComposerState extends ConsumerState<_FeedbackComposer> {
       if (mounted) Navigator.pop(context, ticket);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        appScaffoldMessengerOf(context).showSnackBar(
           SnackBar(
             content: Text(
               localizedErrorMessage(AppLocalizations.of(context)!, error),

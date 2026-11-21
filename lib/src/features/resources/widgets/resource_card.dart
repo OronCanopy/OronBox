@@ -21,6 +21,7 @@ String resourceTypeLabel(
   CommunityResourceType.watchface => l10n.watchfaces,
   CommunityResourceType.firmware => l10n.firmwareTools,
   CommunityResourceType.canopus => l10n.module,
+  CommunityResourceType.resPack => l10n.resourceTypeResPack,
 };
 
 String resourcePaidLabel(AppLocalizations l10n, CommunityPaidType type) =>

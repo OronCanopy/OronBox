@@ -4,15 +4,12 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 
-enum PluginRuntimeType { legacy, js, wasm, hybrid }
+import 'plugin_permission.dart';
+
+enum PluginRuntimeType { wasm, js, hybrid }
 
 extension PluginRuntimeTypeJson on PluginRuntimeType {
-  String? get manifestValue => switch (this) {
-    PluginRuntimeType.legacy => null,
-    PluginRuntimeType.js => 'js',
-    PluginRuntimeType.wasm => 'wasm',
-    PluginRuntimeType.hybrid => 'hybrid',
-  };
+  String get manifestValue => name;
 }
 
 class PluginManifest {
@@ -49,8 +46,7 @@ class PluginManifest {
     'author': author,
     'description': description,
     'apiLevel': apiLevel,
-    if (runtime.manifestValue != null) 'runtime': runtime.manifestValue,
-    'legacy': runtime == PluginRuntimeType.legacy,
+    'runtime': runtime.manifestValue,
     'entry': entry,
     'permissions': permissions,
     if (website != null) 'website': website,
@@ -68,7 +64,6 @@ class InstalledPlugin {
 
   final PluginManifest manifest;
   final Uint8List entryBytes;
-  String get source => utf8.decode(entryBytes);
   final Map<String, Object?> config;
   final String? iconBase64;
 
@@ -111,32 +106,16 @@ class PluginPackage {
 class PluginPackageReader {
   const PluginPackageReader();
 
-  static const _maxPackageBytes = 32 * 1024 * 1024;
-  static const _maxEntryBytes = 8 * 1024 * 1024;
-  static const _maxExpandedBytes = 64 * 1024 * 1024;
-  static const _maxEntries = 4096;
-
   PluginPackage read(Uint8List bytes) {
-    if (bytes.isEmpty || bytes.length > _maxPackageBytes) {
-      throw const FormatException('Invalid ABP package size');
+    if (bytes.isEmpty) {
+      throw const FormatException('Empty ABP package');
     }
 
     final archive = ZipDecoder().decodeBytes(bytes, verify: true);
     final entries = <String, Uint8List>{};
-    var expandedBytes = 0;
     for (final file in archive) {
       if (!file.isFile) continue;
-      if (entries.length >= _maxEntries) {
-        throw const FormatException('ABP contains too many files');
-      }
       final name = _normalizePath(file.name);
-      if (file.size > _maxEntryBytes) {
-        throw FormatException('ABP entry is too large: $name');
-      }
-      expandedBytes += file.size;
-      if (expandedBytes > _maxExpandedBytes) {
-        throw const FormatException('ABP expanded size is too large');
-      }
       if (entries.containsKey(name)) {
         throw FormatException('Duplicate ABP entry: $name');
       }
@@ -151,18 +130,18 @@ class PluginPackageReader {
     if (!entries.containsKey(manifest.entry)) {
       throw FormatException('ABP entry is missing: ${manifest.entry}');
     }
-    if (manifest.runtime == PluginRuntimeType.wasm) {
-      final wasm = entries[manifest.entry]!;
-      if (wasm.length < 4 ||
-          wasm[0] != 0x00 ||
-          wasm[1] != 0x61 ||
-          wasm[2] != 0x73 ||
-          wasm[3] != 0x6d) {
-        throw const FormatException(
-          'WASM plugin entry has an invalid WebAssembly header',
-        );
-      }
+    final wasm = entries[manifest.entry]!;
+    if (manifest.runtime == PluginRuntimeType.wasm &&
+        (wasm.length < 4 ||
+            wasm[0] != 0x00 ||
+            wasm[1] != 0x61 ||
+            wasm[2] != 0x73 ||
+            wasm[3] != 0x6d)) {
+      throw const FormatException(
+        'Plugin entry has an invalid WebAssembly header',
+      );
     }
+    if (manifest.runtime != PluginRuntimeType.wasm) utf8.decode(wasm);
     if (manifest.iconPath != null && !entries.containsKey(manifest.iconPath)) {
       throw FormatException('ABP icon is missing: ${manifest.iconPath}');
     }
@@ -173,64 +152,49 @@ class PluginPackageReader {
     final raw = jsonDecode(utf8.decode(manifestBytes));
     if (raw is! Map) throw const FormatException('Invalid ABP manifest');
     final json = raw.cast<String, Object?>();
-    final apiLevel = (json['api_level'] as num?)?.toInt() ?? 0;
-    if (apiLevel != 1) {
-      throw FormatException('Unsupported plugin API level: $apiLevel');
-    }
-    final runtime = _runtime(json['runtime']);
+    final apiLevel = (json['api_level'] as num?)?.toInt() ?? 1;
     final name = _requiredString(json, 'name');
+    final rawRuntime = json['runtime']?.toString().trim();
+    final runtime = switch (rawRuntime) {
+      null || '' || 'wasm' => PluginRuntimeType.wasm,
+      'js' => PluginRuntimeType.js,
+      'hybrid' => PluginRuntimeType.hybrid,
+      _ => throw FormatException('Unsupported plugin runtime: $rawRuntime'),
+    };
     final entry = _normalizePath(
       json['entry']?.toString().trim().isNotEmpty == true
           ? json['entry']!.toString()
+          : runtime == PluginRuntimeType.wasm
+          ? 'plugin.wasm'
           : 'main.js',
     );
     final iconPath = json['icon']?.toString().trim();
     final normalizedIcon = iconPath == null || iconPath.isEmpty
         ? null
         : _normalizePath(iconPath);
-    final id = runtime == PluginRuntimeType.legacy
-        ? PluginPackageReader.legacyPluginId(name)
-        : _requiredPluginId(json);
+    final id = _extractPluginId(json, name);
     final suffix = entry.split('.').last.toLowerCase();
-    if (runtime == PluginRuntimeType.wasm && suffix != 'wasm') {
-      throw const FormatException('WASM plugin entry must be a .wasm file');
-    }
-    if ((runtime == PluginRuntimeType.js ||
-            runtime == PluginRuntimeType.hybrid) &&
-        !const {'js', 'mjs', 'cjs'}.contains(suffix)) {
-      throw const FormatException(
-        'JS and hybrid plugin entries must be JavaScript',
+    if (runtime == PluginRuntimeType.wasm
+        ? suffix != 'wasm'
+        : !{'js', 'mjs', 'cjs'}.contains(suffix)) {
+      throw FormatException(
+        'Invalid entry extension for ${runtime.name}: $entry',
       );
     }
     final permissions =
         (json['permissions'] as List?)
             ?.map((value) => value.toString())
+            .where((value) => !isRetiredPluginPermission(value))
             .toSet()
             .toList(growable: false) ??
         const <String>[];
-    if (runtime != PluginRuntimeType.legacy) {
-      const supported = {
-        'ui',
-        'file',
-        'network',
-        'interconnect',
-        'provider',
-        'device',
-        'protocol',
-        'appside',
-      };
-      final unknown = permissions.where((value) => !supported.contains(value));
-      if (unknown.isNotEmpty) {
-        throw FormatException(
-          'Unsupported plugin permissions: ${unknown.join(', ')}',
-        );
-      }
-    }
 
     return PluginManifest(
       id: id,
       name: name,
-      version: _requiredString(json, 'version'),
+      version: json['version']?.toString().trim().isNotEmpty == true
+          ? json['version']!.toString().trim()
+          : '1.0.0',
       author: json['author']?.toString() ?? '',
       description: json['description']?.toString() ?? '',
       apiLevel: apiLevel,
@@ -242,26 +206,18 @@ class PluginPackageReader {
     );
   }
 
-  PluginRuntimeType _runtime(Object? value) => switch (value) {
-    null => PluginRuntimeType.legacy,
-    'js' => PluginRuntimeType.js,
-    'wasm' => PluginRuntimeType.wasm,
-    'hybrid' => PluginRuntimeType.hybrid,
-    _ => throw FormatException('Unsupported plugin runtime: $value'),
-  };
-
-  String _requiredPluginId(Map<String, Object?> json) {
-    final id = _requiredString(json, 'id');
-    if (!RegExp(r'^[a-z][a-z0-9]*(?:[.-][a-z0-9][a-z0-9-]*)+$').hasMatch(id)) {
-      throw FormatException('Invalid plugin ID: $id');
+  String _extractPluginId(Map<String, Object?> json, String name) {
+    final rawId = json['id']?.toString().trim();
+    if (rawId != null &&
+        rawId.isNotEmpty &&
+        RegExp(r'^[a-z0-9_.-]+$', caseSensitive: false).hasMatch(rawId)) {
+      return rawId.toLowerCase();
     }
-    return id;
+    return pluginIdFromName(name);
   }
 
-  /// Computes the install-time plugin ID for a legacy (AstroBox v1) plugin
-  /// from its manifest name, matching what [read] produces.
-  static String legacyPluginId(String name) {
-    final hash = sha256.convert(utf8.encode(name)).toString().substring(0, 12);
+  static String pluginIdFromName(String name) {
+    final hash = sha256.convert(utf8.encode(name)).toString().substring(0, 8);
     final slug = name
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
@@ -286,26 +242,5 @@ class PluginPackageReader {
     final value = json[key]?.toString().trim() ?? '';
     if (value.isEmpty) throw FormatException('ABP $key is missing');
     return value;
-  }
-}
-
-/// Reader retained for the AstroBox plugin store and legacy callers.
-class AbPluginPackageReader {
-  const AbPluginPackageReader();
-
-  PluginPackage read(Uint8List bytes) {
-    final package = const PluginPackageReader().read(bytes);
-    if (package.manifest.runtime != PluginRuntimeType.legacy) {
-      throw const FormatException('Not an AstroBox legacy plugin');
-    }
-    return package;
-  }
-
-  PluginManifest readManifest(Uint8List bytes) {
-    final manifest = const PluginPackageReader().readManifest(bytes);
-    if (manifest.runtime != PluginRuntimeType.legacy) {
-      throw const FormatException('Not an AstroBox legacy manifest');
-    }
-    return manifest;
   }
 }

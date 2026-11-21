@@ -7,22 +7,6 @@
 
 #include <iostream>
 
-namespace {
-
-bool EnsureDirectory(const std::wstring& path) {
-  if (::CreateDirectoryW(path.c_str(), nullptr)) {
-    return true;
-  }
-  if (::GetLastError() != ERROR_ALREADY_EXISTS) {
-    return false;
-  }
-  const DWORD attributes = ::GetFileAttributesW(path.c_str());
-  return attributes != INVALID_FILE_ATTRIBUTES &&
-         (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-}
-
-}  // namespace
-
 void CreateAndAttachConsole() {
   if (::AllocConsole()) {
     FILE *unused;
@@ -82,31 +66,4 @@ std::string Utf8FromUtf16(const wchar_t* utf16_string) {
     return std::string();
   }
   return utf8_string;
-}
-
-std::wstring GetWebView2UserDataFolder() {
-  std::vector<wchar_t> buffer(32768);
-  const DWORD length = ::GetEnvironmentVariableW(
-      L"LOCALAPPDATA", buffer.data(), static_cast<DWORD>(buffer.size()));
-  if (length == 0 || length >= buffer.size()) {
-    return {};
-  }
-
-  std::wstring root(buffer.data(), length);
-  while (!root.empty() && (root.back() == L'\\' || root.back() == L'/')) {
-    root.pop_back();
-  }
-  if (root.empty()) {
-    return {};
-  }
-
-  const std::wstring app_folder = root + L"\\OronBox";
-  if (!EnsureDirectory(app_folder)) {
-    return {};
-  }
-  const std::wstring webview_folder = app_folder + L"\\WebView2";
-  if (!EnsureDirectory(webview_folder)) {
-    return {};
-  }
-  return webview_folder;
 }

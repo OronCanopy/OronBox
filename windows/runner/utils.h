@@ -12,10 +12,6 @@ void CreateAndAttachConsole();
 // encoded in UTF-8. Returns an empty std::string on failure.
 std::string Utf8FromUtf16(const wchar_t* utf16_string);
 
-// Returns a writable, per-user WebView2 user data folder and creates it when
-// necessary. Returns an empty string when the folder cannot be prepared.
-std::wstring GetWebView2UserDataFolder();
-
 // Gets the command line arguments passed in as a std::vector<std::string>,
 // encoded in UTF-8. Returns an empty std::vector<std::string> on failure.
 std::vector<std::string> GetCommandLineArguments();

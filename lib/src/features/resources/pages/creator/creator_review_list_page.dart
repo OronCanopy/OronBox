@@ -354,9 +354,11 @@ class _CreatorReviewListPageState extends ConsumerState<CreatorReviewListPage> {
     }
     return CreatorResourceThumbnail(
       resourceId: item.resourceId,
-      kind: item.resourceKind == 'watchface'
-          ? CreatorResourceKind.watchface
-          : CreatorResourceKind.quickApp,
+      kind: switch (item.resourceKind) {
+        'watchface' => CreatorResourceKind.watchface,
+        'canopus' => CreatorResourceKind.canopus,
+        _ => CreatorResourceKind.quickApp,
+      },
       size: 48,
       borderRadius: 12,
     );

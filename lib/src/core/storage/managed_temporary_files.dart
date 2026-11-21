@@ -2,7 +2,7 @@ import 'managed_temporary_files_stub.dart'
     if (dart.library.io) 'managed_temporary_files_io.dart'
     as platform;
 
-enum TemporaryFilePurpose { downloads, installs }
+enum TemporaryFilePurpose { downloads, installs, deviceLogs }
 
 /// The owner keeps a lease until the consumer releases the file.
 class ManagedTemporaryFiles {
@@ -13,6 +13,12 @@ class ManagedTemporaryFiles {
   ) => platform.create(purpose, name, write);
   static Future<void> release(String path, {bool delete = true}) =>
       platform.release(path, delete: delete);
+  static Future<void> releaseImport(String path) =>
+      platform.releaseImport(path);
+  static Future<int> cleanupImports({
+    Duration minimumAge = const Duration(days: 1),
+    Set<String> protectedPaths = const {},
+  }) => platform.cleanupImports(minimumAge, protectedPaths);
   static Future<int> cleanup({
     Duration minimumAge = const Duration(days: 1),
     Set<String> protectedPaths = const {},

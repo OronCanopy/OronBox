@@ -3,23 +3,24 @@ import 'dart:typed_data';
 
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/device/xiaomi/systems/xiaomi_system.dart';
-import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart' as pb;
+import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart'
+    as pb;
 import 'package:oronbox/src/device/xiaomi/protocol/generated/wear_system.pb.dart'
     as pb_system;
 import 'package:oronbox/src/device/xiaomi/protocol/packet/l2_packet.dart';
-import 'package:oronbox_network/oronbox_network.dart';
+import 'package:wear_net/wear_net.dart';
 
 class XiaomiNetworkSystem extends XiaomiSystem {
   static final _log = getLogger('XiaomiNetworkSystem');
 
-  OronboxNetworkSession? _session;
+  WearNetSession? _session;
   StreamSubscription<Uint8List>? _outboundSubscription;
-  StreamSubscription<OronboxNetworkEvent>? _eventSubscription;
-  OronboxNetworkStatistics? _statistics;
+  StreamSubscription<WearNetEvent>? _eventSubscription;
+  WearNetStatistics? _statistics;
   Future<void> _outboundTail = Future<void>.value();
   bool _disposed = false;
 
-  OronboxNetworkStatistics? get statistics => _statistics;
+  WearNetStatistics? get statistics => _statistics;
 
   Future<void> start() async {
     if (_disposed) {
@@ -27,9 +28,9 @@ class XiaomiNetworkSystem extends XiaomiSystem {
     }
     if (_session != null) return;
 
-    final OronboxNetworkSession session;
+    final WearNetSession session;
     try {
-      session = await OronboxNetworkSession.open();
+      session = await WearNetSession.open();
     } on UnsupportedError catch (error) {
       _log.info('[${entity.id}] network proxy unavailable: $error');
       return;
@@ -40,10 +41,7 @@ class XiaomiNetworkSystem extends XiaomiSystem {
     _eventSubscription = session.events.listen(
       _onNetworkEvent,
       onError: (Object error) {
-        _log.warning(
-          '[${entity.id}] network runtime event failed',
-          error,
-        );
+        _log.warning('[${entity.id}] network runtime event failed', error);
       },
     );
 
@@ -58,6 +56,23 @@ class XiaomiNetworkSystem extends XiaomiSystem {
 
   @override
   void onLayer2Packet(L2Channel channel, L2OpCode opcode, Uint8List payload) {
+    if (channel == L2Channel.pb && _session != null) {
+      final packet = pb.WearPacket.fromBuffer(payload);
+      if (packet.type == pb.WearPacket_Type.SYSTEM &&
+          packet.id == pb_system.System_SystemID.REQUEST_NETWORK_PROXY.value) {
+        unawaited(
+          component.sendPbPacket(_buildNetworkStatusPacket()).catchError((
+            Object error,
+          ) {
+            _log.warning(
+              '[${entity.id}] failed to answer network proxy request',
+              error,
+            );
+          }),
+        );
+      }
+      return;
+    }
     if (channel != L2Channel.network) return;
     final session = _session;
     if (session == null) return;
@@ -72,23 +87,20 @@ class XiaomiNetworkSystem extends XiaomiSystem {
     _outboundTail = _outboundTail
         .then((_) => component.sendL2NetworkData(packet))
         .catchError((Object error) {
-          _log.warning(
-            '[${entity.id}] network packet send failed',
-            error,
-          );
+          _log.warning('[${entity.id}] network packet send failed', error);
         });
   }
 
-  void _onNetworkEvent(OronboxNetworkEvent event) {
+  void _onNetworkEvent(WearNetEvent event) {
     switch (event) {
-      case OronboxNetworkStatus(:final message):
+      case WearNetStatus(:final message):
         _log.info('[${entity.id}] $message');
-      case OronboxNetworkWarning(:final message):
+      case WearNetWarning(:final message):
         _log.warning('[${entity.id}] $message');
-      case OronboxNetworkStatistics():
+      case WearNetStatistics():
         _statistics = event;
-      case OronboxNetworkPacket():
-      case OronboxNetworkClosed():
+      case WearNetPacket():
+      case WearNetClosed():
         break;
     }
   }

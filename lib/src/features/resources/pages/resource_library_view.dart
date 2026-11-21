@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
@@ -16,7 +18,7 @@ import 'package:oronbox/src/data/community/community_source.dart';
 import 'package:oronbox/src/data/bandbbs/bandbbs_resource_provider.dart';
 import 'package:oronbox/src/device/core/device_kind.dart';
 import 'package:oronbox/src/device/core/device_profile.dart';
-import 'package:oronbox/src/device/core/xiaomi_wearable_catalog.dart';
+import 'package:oronbox/src/device/xiaomi/xiaomi_device_catalog.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_device_catalog.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 import 'package:oronbox/src/features/accounts/application/host_accounts.dart';
@@ -29,7 +31,6 @@ import 'package:oronbox/src/features/resources/domain/resource_catalog.dart';
 import 'package:oronbox/src/features/resources/widgets/bandbbs_category_sidebar.dart';
 import 'package:oronbox/src/features/resources/widgets/bandbbs_resource_card.dart';
 import 'package:oronbox/src/features/resources/widgets/resource_card.dart';
-import 'package:oronbox/src/features/resources/widgets/resource_media_hero.dart';
 
 typedef _ResourceCard = ResourceCard;
 
@@ -58,8 +59,7 @@ class _ResourceLibraryViewState extends ConsumerState<ResourceLibraryView>
       SharedPrefsService.instance.getBool('resource_grid_view') ?? true;
   late final AnimationController _layoutAnimation;
   final _resourceLayoutKeys = <String, GlobalKey>{};
-  var _resourceLayoutMotions = const <String, _ResourceLayoutMotion>{};
-  var _preparingLayoutMotion = false;
+  var _resourceLayoutSources = const <String, Rect>{};
   final _items = <CommunityResource>[];
   var _page = 0;
   var _feedSeed = math.Random.secure().nextInt(0x7fffffff) + 1;
@@ -101,8 +101,9 @@ class _ResourceLibraryViewState extends ConsumerState<ResourceLibraryView>
     final result = <String, Rect>{};
     for (final entry in _resourceLayoutKeys.entries) {
       final renderObject = entry.value.currentContext?.findRenderObject();
-      if (renderObject case final RenderBox box when box.hasSize) {
-        result[entry.key] = box.localToGlobal(Offset.zero) & box.size;
+      if (renderObject case final _RenderResourceLayoutTransition box
+          when box.hasSize) {
+        result[entry.key] = box.visualRect;
       }
     }
     return result;
@@ -118,39 +119,19 @@ class _ResourceLibraryViewState extends ConsumerState<ResourceLibraryView>
     );
     setState(() {
       _gridView = !_gridView;
-      _resourceLayoutMotions = const {};
-      _preparingLayoutMotion = true;
+      _resourceLayoutSources = sourceRects;
+      _layoutAnimation.forward(from: 0);
     });
     unawaited(
       SharedPrefsService.instance.setBool('resource_grid_view', _gridView),
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final targetRects = _captureResourceRects();
-      final motions = <String, _ResourceLayoutMotion>{};
-      for (final entry in sourceRects.entries) {
-        final target = targetRects[entry.key];
-        if (target != null && target.width > 0 && target.height > 0) {
-          motions[entry.key] = _ResourceLayoutMotion(
-            source: entry.value,
-            target: target,
-          );
-        }
-      }
-      setState(() {
-        _resourceLayoutMotions = motions;
-        _preparingLayoutMotion = false;
-      });
-      _layoutAnimation.forward(from: 0);
-    });
   }
 
   Widget _animateResourceLayout(CommunityResource item, Widget child) {
     return _ResourceLayoutTransition(
       key: _resourceLayoutKey(item),
       animation: _layoutAnimation,
-      motion: _resourceLayoutMotions[item.ref.key],
-      hidden: _preparingLayoutMotion,
+      source: _resourceLayoutSources[item.ref.key],
       child: child,
     );
   }
@@ -635,7 +616,7 @@ Future<void> _switchCommunitySource(
     await host.refresh();
     if (!context.mounted) return;
     if (!ref.read(hostAccountsProvider).bandbbs.isSignedIn) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      appScaffoldMessengerOf(context).showSnackBar(
         SnackBar(content: Text(l10n.settingsBandBbsAccountRequired)),
       );
       return;
@@ -643,7 +624,7 @@ Future<void> _switchCommunitySource(
   }
   if (candidate == CommunitySourceId.huamiAppStore &&
       !ref.read(hostAccountsProvider).amazfit.isSignedIn) {
-    ScaffoldMessenger.of(
+    appScaffoldMessengerOf(
       context,
     ).showSnackBar(SnackBar(content: Text(l10n.settingsHuamiAccountRequired)));
     return;
@@ -918,6 +899,7 @@ class _FilterSheet extends ConsumerWidget {
     final deviceOptions = _buildDeviceFilterOptions(
       devices,
       currentDeviceKind: currentDeviceKind,
+      locale: Localizations.localeOf(context),
       visibleDeviceIds: categoryTree == null
           ? null
           : bandBbsVisibleCategoryFilterIds(categoryTree),
@@ -1005,7 +987,8 @@ class _FilterSheet extends ConsumerWidget {
                               : CommunityResourceType.firmware,
                         ),
                   ),
-                if (source == CommunitySourceId.astroboxRepo)
+                if (source == CommunitySourceId.astroboxRepo ||
+                    source == CommunitySourceId.oronBox)
                   FilterChip(
                     showCheckmark: false,
                     label: Text(l10n.module),
@@ -1016,6 +999,19 @@ class _FilterSheet extends ConsumerWidget {
                           filters.type == CommunityResourceType.canopus
                               ? null
                               : CommunityResourceType.canopus,
+                        ),
+                  ),
+                if (source == CommunitySourceId.astroboxRepo)
+                  FilterChip(
+                    showCheckmark: false,
+                    label: Text(l10n.resourceTypeResPack),
+                    selected: filters.type == CommunityResourceType.resPack,
+                    onSelected: (_) => ref
+                        .read(resourceFiltersProvider.notifier)
+                        .setType(
+                          filters.type == CommunityResourceType.resPack
+                              ? null
+                              : CommunityResourceType.resPack,
                         ),
                   ),
               ],
@@ -1218,6 +1214,7 @@ class _DeviceFilterOption {
 List<_DeviceFilterOption> _buildDeviceFilterOptions(
   Iterable<CommunityResourceDevice> devices, {
   DeviceKind? currentDeviceKind,
+  Locale? locale,
   Set<String>? visibleDeviceIds,
 }) {
   final grouped = <String, Set<String>>{};
@@ -1234,7 +1231,7 @@ List<_DeviceFilterOption> _buildDeviceFilterOptions(
     if (id.isEmpty) continue;
 
     final label =
-        identity?.displayName ??
+        identity?.localizedName(locale) ??
         (device.name.trim().isNotEmpty ? device.name.trim() : id);
     grouped.putIfAbsent(label, () => <String>{}).add(id);
   }
@@ -1321,6 +1318,7 @@ String _typeLabel(
   CommunityResourceType.watchface => l10n.watchfaces,
   CommunityResourceType.firmware => l10n.firmwareTools,
   CommunityResourceType.canopus => l10n.module,
+  CommunityResourceType.resPack => l10n.resourceTypeResPack,
 };
 
 String _communitySourceLabel(AppLocalizations l10n, CommunitySourceId source) =>
@@ -1381,59 +1379,103 @@ class _ResourceGrid extends StatelessWidget {
   }
 }
 
-class _ResourceLayoutMotion {
-  const _ResourceLayoutMotion({required this.source, required this.target});
-
-  final Rect source;
-  final Rect target;
-}
-
-class _ResourceLayoutTransition extends StatelessWidget {
+class _ResourceLayoutTransition extends SingleChildRenderObjectWidget {
   const _ResourceLayoutTransition({
     super.key,
     required this.animation,
-    required this.motion,
-    required this.hidden,
-    required this.child,
+    required this.source,
+    required super.child,
   });
 
   final Animation<double> animation;
-  final _ResourceLayoutMotion? motion;
-  final bool hidden;
-  final Widget child;
+  final Rect? source;
 
   @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: animation,
-      child: child,
-      builder: (context, child) {
-        if (hidden) return Opacity(opacity: 0, child: child);
-        final currentMotion = motion;
-        if (currentMotion == null) return child!;
-        final progress = Curves.easeInOutCubic.transform(animation.value);
-        final remaining = 1 - progress;
-        final target = currentMotion.target;
-        final source = currentMotion.source;
-        final scaleX = 1 + (source.width / target.width - 1) * remaining;
-        final scaleY = 1 + (source.height / target.height - 1) * remaining;
-        final opacityDistance = progress * 2 - 1;
-        final mediaOpacity = opacityDistance * opacityDistance;
-        final transform = Matrix4.diagonal3Values(scaleX, scaleY, 1)
-          ..setTranslationRaw(
-            (source.left - target.left) * remaining,
-            (source.top - target.top) * remaining,
-            0,
-          );
-        return ResourceLayoutMediaOpacity(
-          opacity: mediaOpacity,
-          child: Transform(
-            alignment: Alignment.topLeft,
-            transform: transform,
-            child: child,
-          ),
-        );
-      },
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderResourceLayoutTransition(animation, source);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderResourceLayoutTransition renderObject,
+  ) => renderObject.source = source;
+}
+
+class _RenderResourceLayoutTransition extends RenderProxyBox {
+  _RenderResourceLayoutTransition(this.animation, this._source);
+
+  final Animation<double> animation;
+  Rect? _source;
+
+  set source(Rect? value) {
+    if (_source == value) return;
+    _source = value;
+    markNeedsPaint();
+    markNeedsSemanticsUpdate();
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    animation.addListener(markNeedsPaint);
+  }
+
+  @override
+  void detach() {
+    animation.removeListener(markNeedsPaint);
+    super.detach();
+  }
+
+  // Resolve the destination after layout, before the first switched frame paints.
+  Matrix4 get _transform {
+    final source = _source;
+    if (source == null || size.isEmpty || animation.isCompleted) {
+      return Matrix4.identity();
+    }
+    final remaining = 1 - Curves.easeInOutCubic.transform(animation.value);
+    final origin = localToGlobal(Offset.zero);
+    return Matrix4.diagonal3Values(
+      1 + (source.width / size.width - 1) * remaining,
+      1 + (source.height / size.height - 1) * remaining,
+      1,
+    )..setTranslationRaw(
+      (source.left - origin.dx) * remaining,
+      (source.top - origin.dy) * remaining,
+      0,
     );
   }
+
+  Rect get visualRect => MatrixUtils.transformRect(
+    getTransformTo(null)..multiply(_transform),
+    Offset.zero & size,
+  );
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    layer = context.pushTransform(
+      needsCompositing,
+      offset,
+      _transform,
+      super.paint,
+      oldLayer: layer is TransformLayer ? layer as TransformLayer : null,
+    );
+  }
+
+  @override
+  void applyPaintTransform(RenderBox child, Matrix4 transform) {
+    transform.multiply(_transform);
+  }
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) =>
+      hitTestChildren(result, position: position);
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      result.addWithPaintTransform(
+        transform: _transform,
+        position: position,
+        hitTest: (result, position) =>
+            super.hitTestChildren(result, position: position),
+      );
 }

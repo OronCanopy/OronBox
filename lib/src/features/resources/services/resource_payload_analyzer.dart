@@ -5,9 +5,10 @@ import 'package:archive/archive.dart';
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/core/storage/data_archive.dart';
 import 'package:oronbox/src/device/core/watchface_install_policy.dart';
+import 'package:oronbox/src/device/xiaomi/protocol/canopus/corona_package.dart';
 import 'package:oronbox/src/device/zeppos/install/zeppos_package_parser.dart';
 
-enum LocalDeviceInstallType { app, watchface, firmware }
+enum LocalDeviceInstallType { app, watchface, firmware, canopus, resPack }
 
 enum ResourceInstallMode { automatic, forceType, forcePlatform }
 
@@ -19,6 +20,8 @@ enum ResourcePackageKind {
   velaOta,
   zeppOsPackage,
   zeppOsBundle,
+  canopus,
+  resPack,
 }
 
 class ResourcePayloadAnalysis {
@@ -65,7 +68,9 @@ class ResourcePayloadAnalyzer {
     ResourcePayloadAnalysis? result;
     Object? failure;
     try {
-      result = _looksLikeZip(bytes)
+      result = _looksLikeCanopus(bytes)
+          ? _canopusPackage(bytes)
+          : _looksLikeZip(bytes)
           ? _analyzeZip(fileName, bytes)
           : _analyzeRaw(bytes);
     } catch (error) {
@@ -94,9 +99,84 @@ class ResourcePayloadAnalyzer {
     return result;
   }
 
+  ResourcePayloadAnalysis _canopusPackage(Uint8List bytes) {
+    final archive = TarDecoder().decodeBytes(bytes, verify: true);
+    final manifestFile = archive
+        .where((entry) => entry.isFile)
+        .firstWhere(
+          (entry) => entry.name == 'manifest.json',
+          orElse: () =>
+              throw const FormatException('Canopus manifest is missing'),
+        );
+    final root = jsonDecode(utf8.decode(manifestFile.content));
+    if (root is! Map ||
+        root['schema'] != 1 ||
+        root['canopus_abi']?.toString() != '2') {
+      throw const FormatException('Invalid Canopus manifest');
+    }
+    final moduleId = root['module_id']?.toString() ?? '';
+    if (!RegExp(r'^[a-z][a-z0-9_]{0,15}$').hasMatch(moduleId)) {
+      throw const FormatException('Invalid Canopus module_id');
+    }
+    return ResourcePayloadAnalysis(
+      type: LocalDeviceInstallType.canopus,
+      platform: ResourcePlatform.vela,
+      packageKind: ResourcePackageKind.canopus,
+      payload: bytes,
+      identifier: moduleId,
+      version: root['version']?.toString(),
+      versionCode: (root['version_code'] as num?)?.toInt(),
+      evidence: const [
+        'Canopus tar package',
+        'manifest.json schema=1',
+        'canopus_abi=2',
+      ],
+    );
+  }
+
+  bool _looksLikeCanopus(Uint8List bytes) {
+    if (bytes.length < 262 ||
+        utf8.decode(bytes.sublist(257, 262), allowMalformed: true) != 'ustar') {
+      return false;
+    }
+    try {
+      final archive = TarDecoder().decodeBytes(bytes, verify: true);
+      return archive.any(
+        (entry) => entry.isFile && entry.name == 'manifest.json',
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
   ResourcePayloadAnalysis? _analyzeZip(String fileName, Uint8List bytes) {
-    validateDataArchive(bytes, maxBytes: 128 * 1024 * 1024, maxFiles: 4096);
+    if (bytes.length > 128 * 1024 * 1024) {
+      throw const FormatException('Archive is too large');
+    }
     final archive = ZipDecoder().decodeBytes(bytes);
+    final coronaManifests = archive.where(CoronaPackageManifest.isManifest);
+    if (coronaManifests.isNotEmpty) {
+      validateDataArchive(
+        bytes,
+        maxBytes: coronaPackageMaxBytes,
+        maxFiles: coronaPackageMaxEntries,
+      );
+      if (coronaManifests.length != 1 ||
+          archive.findFile('mappings.tsv') != null) {
+        throw const FormatException('Invalid Corona resource pack archive');
+      }
+      final manifest = CoronaPackageManifest.read(coronaManifests.single);
+      return ResourcePayloadAnalysis(
+        type: LocalDeviceInstallType.resPack,
+        platform: ResourcePlatform.vela,
+        packageKind: ResourcePackageKind.resPack,
+        payload: bytes,
+        name: manifest.name,
+        identifier: manifest.themeId,
+        evidence: const ['Corona resource pack v1'],
+      );
+    }
+    validateDataArchive(bytes, maxBytes: 128 * 1024 * 1024, maxFiles: 4096);
     final names = <String>{
       for (final entry in archive)
         if (entry.isFile) entry.name.replaceAll('\\', '/'),
@@ -138,8 +218,8 @@ class ResourcePayloadAnalyzer {
       // Continue with Vela and generic quick-app containers.
     }
 
-    if (_isVelaOta(names)) {
-      final otaJson = _jsonFile(archive, 'ota.json');
+    final otaJson = _jsonFile(archive, 'ota.json');
+    if (_isVelaOta(names, otaJson)) {
       return ResourcePayloadAnalysis(
         type: LocalDeviceInstallType.firmware,
         platform: ResourcePlatform.vela,
@@ -216,7 +296,7 @@ class ResourcePayloadAnalyzer {
       name: name,
       version: version,
       versionCode: _watchfaceVersionCode(resource),
-      identifier: _validWatchfaceId(identifier) ? identifier : null,
+      identifier: isValidVelaWatchfaceId(identifier) ? identifier : null,
       target: target,
       evidence: [
         'MWZ authoring project',
@@ -234,11 +314,12 @@ class ResourcePayloadAnalyzer {
         platform: ResourcePlatform.vela,
         packageKind: ResourcePackageKind.rawPayload,
         payload: bytes,
-        identifier: _validWatchfaceId(identifier) ? identifier : null,
+        identifier: isValidVelaWatchfaceId(identifier) ? identifier : null,
         versionCode: _watchfaceVersionCode(bytes),
         evidence: [
           'Vela watchface magic=5aa53412',
-          if (!_validWatchfaceId(identifier)) 'missing or zero watchface id',
+          if (!isValidVelaWatchfaceId(identifier))
+            'missing or zero watchface id',
         ],
       );
     }
@@ -274,7 +355,7 @@ class ResourcePayloadAnalyzer {
   static int? _watchfaceVersionCode(Uint8List bytes) =>
       bytes.length < 7 ? null : bytes[4] | bytes[5] << 8 | bytes[6] << 16;
 
-  static bool _isVelaOta(Set<String> names) {
+  static bool _isVelaOta(Set<String> names, Map<String, Object?>? otaJson) {
     if (names.contains('ota.json') && names.contains('vela_ota.bin')) {
       return true;
     }
@@ -285,7 +366,20 @@ class ResourcePayloadAnalyzer {
             ))) {
       return true;
     }
-    return false;
+    if (otaJson == null ||
+        otaJson['firmware_type'] != 'diff' ||
+        _firstString(otaJson, const ['magic_string']) == null ||
+        _firstString(otaJson, const ['sw_version']) == null) {
+      return false;
+    }
+    final sections = otaJson['sections'];
+    return sections is List &&
+        sections.isNotEmpty &&
+        sections.every((section) {
+          if (section is! Map) return false;
+          final path = section['location_path'];
+          return path is String && names.contains(path);
+        });
   }
 
   static bool _looksLikeZip(List<int> bytes) =>
@@ -301,12 +395,6 @@ class ResourcePayloadAnalyzer {
       bytes[1] == 0xa5 &&
       bytes[2] == 0x34 &&
       bytes[3] == 0x12;
-
-  static bool _validWatchfaceId(String? id) =>
-      id != null &&
-      id.isNotEmpty &&
-      !RegExp(r'^[0]+$').hasMatch(id) &&
-      RegExp(r'^[a-zA-Z0-9_-]{1,12}$').hasMatch(id);
 
   static Uint8List? _fileBytes(Archive archive, String path) {
     for (final entry in archive) {

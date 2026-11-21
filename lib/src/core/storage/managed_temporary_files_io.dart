@@ -52,15 +52,11 @@ Future<void> release(String path, {bool delete = true}) async {
   if (lease == null) return;
   final directory = File(path).parent;
   try {
-    if (delete) {
-      await lease.close();
-      await directory.delete(recursive: true);
-    } else {
-      await File('${directory.path}/.owner').writeAsString('0', flush: true);
-    }
+    await File('${directory.path}/.owner').writeAsString('0', flush: true);
   } finally {
-    if (!delete) await lease.close();
+    await lease.close();
   }
+  if (delete) await directory.delete(recursive: true);
 }
 
 Future<int> cleanup(Duration minimumAge, Set<String> protectedPaths) async {
@@ -99,6 +95,79 @@ Future<int> cleanup(Duration minimumAge, Set<String> protectedPaths) async {
         // A live owner or a concurrent cleaner retains ownership.
       } finally {
         await lock?.close();
+      }
+    }
+  }
+  return removed;
+}
+
+Future<List<Directory>> _importRoots() async {
+  final temporary = await getTemporaryDirectory();
+  return [
+    for (final name in ['file_picker', 'flutter_file_picker', 'file_open'])
+      Directory('${temporary.path}/$name'),
+    if (Platform.isIOS || Platform.isMacOS)
+      for (final name in ['flutter_file_picker', 'file_open'])
+        Directory('${Directory.systemTemp.path}/$name'),
+  ];
+}
+
+Future<void> releaseImport(String path) async {
+  if (path.isEmpty) return;
+  try {
+    final file = File(path);
+    if (!await file.exists()) return;
+    final resolved = await file.resolveSymbolicLinks();
+    for (final root in await _importRoots()) {
+      if (!await root.exists()) continue;
+      final rootPath = await root.resolveSymbolicLinks();
+      final prefix = '$rootPath${Platform.pathSeparator}';
+      if (!resolved.startsWith(prefix)) continue;
+      await file.delete();
+      var directory = File(resolved).parent;
+      while (directory.path.startsWith(prefix) && await directory.exists()) {
+        if (!await directory.list().isEmpty) break;
+        await directory.delete();
+        directory = directory.parent;
+      }
+      return;
+    }
+  } on FileSystemException {
+    // A later cleanup can reclaim a file still held by the picker.
+  }
+}
+
+Future<int> cleanupImports(
+  Duration minimumAge,
+  Set<String> protectedPaths,
+) async {
+  final cutoff = DateTime.now().subtract(minimumAge);
+  final protected = <String>{};
+  for (final path in protectedPaths) {
+    try {
+      protected.add(await File(path).resolveSymbolicLinks());
+    } on FileSystemException {
+      protected.add(path);
+    }
+  }
+  var removed = 0;
+  for (final root in await _importRoots()) {
+    if (!await root.exists()) continue;
+    final files = await root
+        .list(recursive: true, followLinks: false)
+        .where((entry) => entry is File)
+        .cast<File>()
+        .toList();
+    for (final file in files) {
+      try {
+        if (protected.contains(await file.resolveSymbolicLinks()) ||
+            (await file.stat()).modified.isAfter(cutoff)) {
+          continue;
+        }
+        await releaseImport(file.path);
+        if (!await file.exists()) removed++;
+      } on FileSystemException {
+        // A concurrent consumer may have released this file already.
       }
     }
   }

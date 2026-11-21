@@ -1,3 +1,5 @@
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
+import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
 import 'package:segmented_list/segmented_list.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
@@ -15,14 +17,14 @@ import 'package:oronbox/src/core/constants/style_constants.dart';
 import 'package:oronbox/src/core/providers/app_settings_providers.dart';
 import 'package:oronbox/src/core/providers/theme_locale_providers.dart';
 import 'package:oronbox/src/core/services/shared_prefs_service.dart';
+import 'package:oronbox/src/core/services/system_notification_bridge.dart';
 import 'package:oronbox/src/core/utils/layout.dart';
 import 'package:oronbox/src/core/network/github_cdn.dart';
 import 'package:oronbox/src/features/resources/application/resource_catalog_providers.dart';
 import 'package:oronbox/src/features/resources/application/creator/creator_workspace_controller.dart';
 import 'package:oronbox/src/features/resources/pages/creator/creator_shared.dart';
 import 'package:oronbox/src/features/accounts/application/host_accounts.dart';
-import 'package:oronbox/src/features/accounts/models/mi_account_models.dart';
-import 'package:oronbox/src/features/accounts/services/mi_account_two_factor_resolver.dart';
+import 'package:oronbox/src/features/accounts/widgets/mi_account_login_dialog.dart';
 
 final _desktopExitBehaviorProvider = Provider<int?>((ref) {
   return SharedPrefsService.instance.getInt('desktop.exit_behavior');
@@ -93,8 +95,7 @@ class SettingsPage extends ConsumerWidget {
               title: l10n.settingsAccount,
               tiles: [
                 SegmentedTile.navigation(
-                  onPressed: (_) =>
-                      SettingsPage.showMiAccountLoginDialog(context, ref),
+                  onPressed: (_) => showMiAccountLoginDialog(context),
                   leading: const MiLogo(),
                   title: Text(l10n.settingsMiAccount),
                   description: Consumer(
@@ -491,9 +492,7 @@ class SettingsPage extends ConsumerWidget {
                   title: Text(l10n.feedbackTitle),
                   description: Text(l10n.feedbackDesc),
                 ),
-                if (!kIsWeb &&
-                    (defaultTargetPlatform == TargetPlatform.android ||
-                        defaultTargetPlatform == TargetPlatform.iOS))
+                if (SystemNotificationBridge.isSupported)
                   SegmentedTile.navigation(
                     onPressed: (_) => context.push('/settings/permissions'),
                     leading: const Icon(Icons.security_outlined),
@@ -596,7 +595,7 @@ class SettingsPage extends ConsumerWidget {
           : await closeDebugWindow();
       if (!succeeded) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          appScaffoldMessengerOf(context).showSnackBar(
             SnackBar(
               content: Text(
                 AppLocalizations.of(context)!.devToolsOperationFailed,
@@ -703,273 +702,6 @@ class SettingsPage extends ConsumerWidget {
     }
   }
 
-  static Future<void> showMiAccountLoginDialog(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    final rootContext = context;
-    final l10n = AppLocalizations.of(context)!;
-    final accounts = ref.read(hostAccountsProvider.notifier);
-    final credentials = await accounts.rememberedCredentials('xiaomi');
-    final existing = ref.read(hostAccountsProvider).xiaomi;
-    var rememberCredentials = credentials['remember'] == true;
-    var selectedRegion = MiAccountRegion.cn;
-    var username = rememberCredentials
-        ? credentials['username']?.toString() ?? ''
-        : '';
-    var password = rememberCredentials
-        ? credentials['password']?.toString() ?? ''
-        : '';
-    var running = false;
-    var obscurePassword = true;
-    String? error;
-    if (!context.mounted) return;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            Future<void> submit() async {
-              final normalizedUsername = username.trim();
-              if (normalizedUsername.isEmpty || password.isEmpty) {
-                setState(() {
-                  error = l10n.settingsMiAccountMissingCredentials;
-                });
-                return;
-              }
-              setState(() {
-                running = true;
-                error = null;
-              });
-              try {
-                final account = await ref
-                    .read(hostAccountsProvider.notifier)
-                    .loginXiaomi(
-                      username: normalizedUsername,
-                      password: password,
-                      region: selectedRegion.tag,
-                    );
-                await accounts.saveCredentials(
-                  provider: 'xiaomi',
-                  remember: rememberCredentials,
-                  username: normalizedUsername,
-                  password: password,
-                  userId: account.userId ?? '',
-                );
-                if (dialogContext.mounted) {
-                  Navigator.of(dialogContext).pop();
-                }
-                if (rootContext.mounted) {
-                  ScaffoldMessenger.of(rootContext).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        l10n.settingsMiAccountSyncedDevices(
-                          account.syncedDevices,
-                        ),
-                      ),
-                    ),
-                  );
-                }
-              } on HostTwoFactorRequired catch (e) {
-                try {
-                  setState(() {
-                    error = l10n.settingsMiAccountTwoFactorPrompt;
-                  });
-                  if (!rootContext.mounted) {
-                    throw StateError(l10n.settingsMiAccountLoginWindowClosed);
-                  }
-                  final cookieHeader = await createMiAccountTwoFactorResolver()
-                      .resolve(rootContext, Uri.parse(e.url));
-                  final account = await ref
-                      .read(hostAccountsProvider.notifier)
-                      .completeXiaomiTwoFactor(
-                        challenge: e,
-                        cookieHeader: cookieHeader,
-                        region: selectedRegion.tag,
-                      );
-                  await accounts.saveCredentials(
-                    provider: 'xiaomi',
-                    remember: rememberCredentials,
-                    username: normalizedUsername,
-                    password: password,
-                    userId: account.userId ?? '',
-                  );
-                  if (dialogContext.mounted) {
-                    Navigator.of(dialogContext).pop();
-                  }
-                  if (rootContext.mounted) {
-                    ScaffoldMessenger.of(rootContext).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          l10n.settingsMiAccountSyncedDevices(
-                            account.syncedDevices,
-                          ),
-                        ),
-                      ),
-                    );
-                  }
-                } catch (twoFactorError) {
-                  setState(() {
-                    running = false;
-                    error = localizedErrorMessage(l10n, twoFactorError);
-                  });
-                }
-              } catch (e) {
-                setState(() {
-                  running = false;
-                  error = localizedErrorMessage(l10n, e);
-                });
-              }
-            }
-
-            Future<void> signOut() async {
-              setState(() {
-                running = true;
-                error = null;
-              });
-              try {
-                await accounts.logout('xiaomi');
-                await accounts.saveCredentials(
-                  provider: 'xiaomi',
-                  remember: false,
-                  username: '',
-                  password: '',
-                );
-                if (dialogContext.mounted) {
-                  Navigator.of(dialogContext).pop();
-                }
-              } catch (e) {
-                setState(() {
-                  running = false;
-                  error = localizedErrorMessage(l10n, e);
-                });
-              }
-            }
-
-            return AlertDialog(
-              title: Text(l10n.settingsMiAccountLoginTitle),
-              content: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<MiAccountRegion>(
-                      initialValue: selectedRegion,
-                      decoration: InputDecoration(
-                        labelText: l10n.settingsMiAccountRegion,
-                        prefixIcon: const Icon(Icons.public_outlined),
-                      ),
-                      items: MiAccountRegion.values.map((region) {
-                        return DropdownMenuItem(
-                          value: region,
-                          child: Text(region.localizedName(l10n)),
-                        );
-                      }).toList(),
-                      onChanged: running
-                          ? null
-                          : (value) {
-                              if (value != null) {
-                                setState(() => selectedRegion = value);
-                              }
-                            },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      initialValue: username,
-                      onChanged: (value) => username = value,
-                      enabled: !running,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: InputDecoration(
-                        labelText: l10n.settingsMiAccountUsername,
-                        prefixIcon: const Icon(Icons.account_circle_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      initialValue: password,
-                      onChanged: (value) => password = value,
-                      enabled: !running,
-                      obscureText: obscurePassword,
-                      decoration: InputDecoration(
-                        labelText: l10n.settingsMiAccountPassword,
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          onPressed: running
-                              ? null
-                              : () {
-                                  setState(() {
-                                    obscurePassword = !obscurePassword;
-                                  });
-                                },
-                          icon: Icon(
-                            obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                          ),
-                        ),
-                      ),
-                      onFieldSubmitted: (_) {
-                        if (!running) submit();
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    CheckboxListTile(
-                      value: rememberCredentials,
-                      onChanged: running
-                          ? null
-                          : (value) {
-                              setState(() {
-                                rememberCredentials = value ?? false;
-                              });
-                            },
-                      contentPadding: EdgeInsets.zero,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      title: Text(l10n.settingsMiAccountRememberCredentials),
-                      dense: true,
-                    ),
-                    if (running) ...[
-                      const SizedBox(height: 20),
-                      const LinearProgressIndicator(),
-                    ],
-                    if (error != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              actions: [
-                if (existing.isSignedIn)
-                  TextButton(
-                    onPressed: running ? null : signOut,
-                    child: Text(l10n.bandBbsLogout),
-                  ),
-                TextButton(
-                  onPressed: running
-                      ? null
-                      : () {
-                          Navigator.of(dialogContext).pop();
-                        },
-                  child: Text(l10n.settingsCancel),
-                ),
-                FilledButton(
-                  onPressed: running ? null : submit,
-                  child: Text(l10n.settingsMiAccountLoginAndSync),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   Future<void> _showHuamiAccountLogin(
     BuildContext context,
     WidgetRef ref,
@@ -1025,7 +757,7 @@ class SettingsPage extends ConsumerWidget {
                   Navigator.of(dialogContext).pop();
                 }
                 if (rootContext.mounted) {
-                  ScaffoldMessenger.of(rootContext).showSnackBar(
+                  appScaffoldMessengerOf(rootContext).showSnackBar(
                     SnackBar(content: Text(l10n.settingsHuamiAccountSignedIn)),
                   );
                 }
@@ -1100,7 +832,7 @@ class SettingsPage extends ConsumerWidget {
                       },
                     ),
                     const SizedBox(height: 8),
-                    CheckboxListTile(
+                    AppCheckboxTile(
                       value: rememberCredentials,
                       onChanged: running
                           ? null
@@ -1112,7 +844,6 @@ class SettingsPage extends ConsumerWidget {
                       contentPadding: EdgeInsets.zero,
                       controlAffinity: ListTileControlAffinity.leading,
                       title: Text(l10n.settingsHuamiAccountRememberCredentials),
-                      dense: true,
                     ),
                     if (running) ...[
                       const SizedBox(height: 20),
@@ -1419,12 +1150,12 @@ class SettingsPage extends ConsumerWidget {
     try {
       await ref.read(hostAccountsProvider.notifier).startBandBbsLogin();
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      appScaffoldMessengerOf(context).showSnackBar(
         SnackBar(content: Text(l10n.settingsAccountBandBbsOpenedBrowser)),
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
+      appScaffoldMessengerOf(
         context,
       ).showSnackBar(SnackBar(content: Text(localizedErrorMessage(l10n, e))));
     }

@@ -1,6 +1,13 @@
 import 'dart:async';
+
+import 'package:oronbox/src/features/devices/pages/switch/xiaomi_pairing_page.dart'
+    show offerXiaomiRebind;
+import 'package:oronbox/src/features/devices/utils/device_address.dart';
+
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:segmented_list/segmented_list.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
@@ -17,9 +24,11 @@ import 'package:oronbox/src/core/constants/style_constants.dart';
 import 'package:oronbox/src/core/models/bt_models.dart';
 import 'package:oronbox/src/core/models/device.dart';
 import 'package:oronbox/src/core/utils/layout.dart';
+import 'package:oronbox/src/device/core/device_kind.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_device_catalog.dart';
 import 'package:oronbox/src/device/core/event_bus.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
+import 'package:oronbox/src/features/devices/services/device_notification_preferences.dart';
 import 'package:oronbox/src/features/devices/services/xiaomi_automatic_sync_service.dart';
 import 'package:oronbox/src/features/devices/widgets/device_connection_text.dart';
 import 'package:oronbox/src/features/devices/widgets/xiaomi_fitness_logo.dart';
@@ -36,7 +45,6 @@ class DevicesPage extends ConsumerStatefulWidget {
 
 class _DevicesPageState extends ConsumerState<DevicesPage> {
   bool _syncingTime = false;
-  String? _lastErrorToast;
   StreamSubscription<DeviceEvent>? _deviceEventSubscription;
 
   @override
@@ -58,10 +66,6 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
     if (!mounted || event is! PassiveReconnectStatus) return;
     if (ModalRoute.of(context)?.isCurrent != true) return;
     final l10n = AppLocalizations.of(context)!;
-    if (event.phase == PassiveReconnectPhase.failed) {
-      _showFrequentDisconnectDialog(event.deviceId);
-      return;
-    }
     final message = switch (event.phase) {
       PassiveReconnectPhase.attempt => l10n.deviceReconnectAttempting,
       PassiveReconnectPhase.success => l10n.deviceReconnectSucceeded,
@@ -71,47 +75,11 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
     _showDeviceStatusSnackBar(message, replaceCurrent: true);
   }
 
-  Future<void> _showFrequentDisconnectDialog(String deviceId) async {
-    if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
-    final l10n = AppLocalizations.of(context)!;
-    final rePair = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.deviceConnectionAbnormalTitle),
-        content: Text(l10n.deviceConnectionAbnormalMessage),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(l10n.cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(l10n.deviceRePair),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || rePair != true) return;
-    final devices = ref.read(deviceManagerProvider).pairedDevices;
-    final device = devices.where((item) => item.addr == deviceId).isEmpty
-        ? null
-        : devices.firstWhere((item) => item.addr == deviceId);
-    if (device == null || device.authkey == null) return;
-    await ref
-        .read(deviceManagerProvider.notifier)
-        .connect(
-          device.addr,
-          device.name,
-          device.authkey!,
-          connectType: device.connectType,
-        );
-  }
-
   void _showDeviceStatusSnackBar(
     String message, {
     bool replaceCurrent = false,
   }) {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = appScaffoldMessengerOf(context);
     if (replaceCurrent) messenger.hideCurrentSnackBar();
     messenger.showSnackBar(SnackBar(content: Text(message)));
   }
@@ -123,8 +91,10 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
     final device = state.currentDevice;
 
     ref.listen<DeviceManagerState>(deviceManagerProvider, (previous, next) {
-      if (next.error == null) _lastErrorToast = null;
-      if (next.error == null) return;
+      if (next.error == null ||
+          next.error == DeviceManager.errorXiaomiPairingRequired) {
+        return;
+      }
       if (ModalRoute.of(context)?.isCurrent != true) return;
       final wasConnecting = previous?.connecting == true;
       if (next.connecting ||
@@ -134,16 +104,14 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
         return;
       }
       final message = localizedErrorMessage(l10n, next.error);
-      if (message == _lastErrorToast) return;
-      _lastErrorToast = message;
       _showDeviceStatusSnackBar(message);
     });
 
     final isReady = state.protocolState == proto.ProtocolState.ready;
-    void reconnectCurrent() {
+    Future<void> reconnectCurrent() async {
       final current = state.currentDevice;
       if (current == null || current.authkey == null) return;
-      ref
+      await ref
           .read(deviceManagerProvider.notifier)
           .connect(
             current.addr,
@@ -151,6 +119,12 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
             current.authkey!,
             connectType: current.connectType,
           );
+      if (!context.mounted) return;
+      final result = ref.read(deviceManagerProvider);
+      if (result.error == DeviceManager.errorXiaomiPairingRequired &&
+          deviceAddressEquals(result.connectionTargetAddr, current.addr)) {
+        await offerXiaomiRebind(context, current);
+      }
     }
 
     Future<void> refreshOrReconnect() async {
@@ -158,7 +132,7 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
       if (current == null) return;
       final manager = ref.read(deviceManagerProvider.notifier);
       if (current.disconnected) {
-        reconnectCurrent();
+        await reconnectCurrent();
         return;
       }
       await manager.refreshDeviceData();
@@ -254,9 +228,12 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
                           )
                           .length,
                       watchfaceCount: state.watchfaces.length,
+                      hasCanopus: state.hasCanopus,
+                      moduleCount: state.moduleCount,
                       onManageApps: () => context.push('/devices/apps'),
                       onManageWatchfaces: () =>
                           context.push('/devices/watchfaces'),
+                      onManageModules: () => context.push('/devices/modules'),
                       onInstallApp: () => _pickAndEnqueueResource(
                         context,
                         ref,
@@ -266,6 +243,11 @@ class _DevicesPageState extends ConsumerState<DevicesPage> {
                         context,
                         ref,
                         LocalDeviceInstallType.watchface,
+                      ),
+                      onInstallModule: () => _pickAndEnqueueResource(
+                        context,
+                        ref,
+                        LocalDeviceInstallType.canopus,
                       ),
                     ),
                     const SizedBox(height: StyleConstants.sectionSpacing),
@@ -333,11 +315,14 @@ class _DeviceInfoPanel extends StatelessWidget {
 
     Widget infoContent;
     if (device != null) {
+      final displayName = device!.localizedName(
+        Localizations.localeOf(context),
+      );
       final nameStyle = textTheme.titleLarge?.copyWith(
         fontWeight: FontWeight.w600,
       );
       final namePainter = TextPainter(
-        text: TextSpan(text: device!.name, style: nameStyle),
+        text: TextSpan(text: displayName, style: nameStyle),
         textDirection: Directionality.of(context),
         textScaler: MediaQuery.textScalerOf(context),
         maxLines: 1,
@@ -352,7 +337,7 @@ class _DeviceInfoPanel extends StatelessWidget {
             : CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(device!.name, style: nameStyle),
+          Text(displayName, style: nameStyle),
           const SizedBox(height: 8),
           SizedBox(
             width: statusRowWidth,
@@ -375,7 +360,7 @@ class _DeviceInfoPanel extends StatelessWidget {
                               ? deviceConnectionPhaseText(
                                   l10n,
                                   connectionState,
-                                  fallbackDeviceName: device!.name,
+                                  fallbackDeviceName: displayName,
                                   connectType: device!.connectType,
                                 )
                               : l10n.deviceDisconnected,
@@ -827,7 +812,7 @@ class _DeviceFeaturesPanelState extends ConsumerState<_DeviceFeaturesPanel> {
           .setFindingXiaomiWearable(finding);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        appScaffoldMessengerOf(context).showSnackBar(
           SnackBar(
             content: Text(
               localizedErrorMessage(AppLocalizations.of(context)!, error),
@@ -844,6 +829,10 @@ class _DeviceFeaturesPanelState extends ConsumerState<_DeviceFeaturesPanel> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final state = ref.watch(deviceManagerProvider);
+    final hasSettings =
+        PhoneNotifications.isSupported ||
+        ref.read(deviceManagerProvider.notifier).currentDeviceKind ==
+            DeviceKind.xiaomi;
     final appCount = state.apps
         .where((app) => !app.packageName.startsWith('com.xiaomi.miwear.'))
         .length;
@@ -857,12 +846,17 @@ class _DeviceFeaturesPanelState extends ConsumerState<_DeviceFeaturesPanel> {
             enabled: widget.enabled,
             appCount: appCount,
             watchfaceCount: state.watchfaces.length,
+            hasCanopus: state.hasCanopus,
+            moduleCount: state.moduleCount,
             onManageApps: () => context.push('/devices/apps'),
             onManageWatchfaces: () => context.push('/devices/watchfaces'),
+            onManageModules: () => context.push('/devices/modules'),
             onInstallApp: () =>
                 _pickAndEnqueue(context, ref, LocalDeviceInstallType.app),
             onInstallWatchface: () =>
                 _pickAndEnqueue(context, ref, LocalDeviceInstallType.watchface),
+            onInstallModule: () =>
+                _pickAndEnqueue(context, ref, LocalDeviceInstallType.canopus),
           ),
         SegmentedSection(
           margin: const EdgeInsetsDirectional.only(
@@ -874,7 +868,7 @@ class _DeviceFeaturesPanelState extends ConsumerState<_DeviceFeaturesPanel> {
             if (widget.isZeppOs) ...[
               SegmentedTile.navigation(
                 onPressed: (_) => context.push('/devices/zeppos-more'),
-                enabled: widget.enabled,
+                enabled: kIsWeb ? widget.enabled : widget.hasDevice,
                 leading: const Icon(Icons.functions),
                 title: Text(l10n.zeppOsMoreFeatures),
                 description: Text(l10n.zeppOsMoreFeaturesDescription),
@@ -897,14 +891,14 @@ class _DeviceFeaturesPanelState extends ConsumerState<_DeviceFeaturesPanel> {
             ] else ...[
               SegmentedTile.navigation(
                 onPressed: (_) => context.push('/devices/velaos-health'),
-                enabled: widget.enabled,
+                enabled: widget.hasDevice,
                 leading: const XiaomiFitnessLogo(),
                 title: Text(l10n.deviceHealthTitle),
                 description: Text(l10n.deviceHealthFeatureDescription),
               ),
               SegmentedTile.navigation(
                 onPressed: (_) => context.push('/devices/velaos-weather'),
-                enabled: widget.enabled,
+                enabled: widget.hasDevice,
                 leading: const Icon(Icons.cloud_outlined),
                 title: Text(l10n.weatherSyncTitle),
                 description: Text(l10n.weatherSyncDescription),
@@ -965,14 +959,6 @@ class _DeviceFeaturesPanelState extends ConsumerState<_DeviceFeaturesPanel> {
                 onToggle: (value) => _setFinding(value ?? false),
               ),
               SegmentedTile.navigation(
-                onPressed: (_) =>
-                    context.push('/devices/velaos-app-arrangement'),
-                enabled: widget.enabled,
-                leading: const Icon(Icons.dashboard_customize_outlined),
-                title: Text(l10n.appArrangementTitle),
-                description: Text(l10n.appArrangementDescription),
-              ),
-              SegmentedTile.navigation(
                 onPressed: (_) => context.push('/devices/firmware'),
                 enabled: widget.enabled,
                 leading: const Icon(Icons.memory_outlined),
@@ -987,6 +973,14 @@ class _DeviceFeaturesPanelState extends ConsumerState<_DeviceFeaturesPanel> {
                 description: Text(l10n.deviceAboutDescription),
               ),
             ],
+            if (hasSettings)
+              SegmentedTile.navigation(
+                onPressed: (_) => context.push('/devices/settings'),
+                enabled: widget.hasDevice,
+                leading: const Icon(Icons.settings_outlined),
+                title: Text(l10n.deviceSettingsTitle),
+                description: Text(l10n.deviceSettingsDescription),
+              ),
           ],
         ),
       ],
@@ -1024,10 +1018,14 @@ class _DeviceStatusGrid extends StatelessWidget {
     required this.storage,
     required this.appCount,
     required this.watchfaceCount,
+    this.hasCanopus = false,
+    this.moduleCount = 0,
     required this.onManageApps,
     required this.onManageWatchfaces,
+    this.onManageModules,
     required this.onInstallApp,
     required this.onInstallWatchface,
+    this.onInstallModule,
   });
 
   final bool compact;
@@ -1037,17 +1035,23 @@ class _DeviceStatusGrid extends StatelessWidget {
   final StorageInfo? storage;
   final int appCount;
   final int watchfaceCount;
+  final bool hasCanopus;
+  final int moduleCount;
   final VoidCallback onManageApps;
   final VoidCallback onManageWatchfaces;
+  final VoidCallback? onManageModules;
   final VoidCallback onInstallApp;
   final VoidCallback onInstallWatchface;
+  final VoidCallback? onInstallModule;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final cards = <Widget>[
+    final statusCards = <Widget>[
       _BatteryCard(battery: battery),
       if (showStorage) _StorageCard(storage: storage),
+    ];
+    final installCards = <Widget>[
       _InstallSummaryCard(
         enabled: enabled,
         icon: Icons.apps_outlined,
@@ -1070,11 +1074,23 @@ class _DeviceStatusGrid extends StatelessWidget {
         onInstall: onInstallWatchface,
         borderRadius: BorderRadius.circular(cardRadiusFor(context)),
       ),
+      if (hasCanopus)
+        _InstallSummaryCard(
+          enabled: enabled,
+          icon: Icons.extension_outlined,
+          label: l10n.modules,
+          countLabel: l10n.deviceModuleCount,
+          count: moduleCount,
+          installTooltip: l10n.deviceFeaturesInstallModule,
+          onOpen: onManageModules ?? () {},
+          onInstall: onInstallModule ?? () {},
+          borderRadius: BorderRadius.circular(cardRadiusFor(context)),
+        ),
     ];
 
-    Widget row(Iterable<Widget> children) => Row(
+    Widget row(Iterable<Widget> children, {double spacing = 12}) => Row(
       children: children.expand((card) sync* {
-        if (card != children.first) yield const SizedBox(width: 12);
+        if (card != children.first) yield SizedBox(width: spacing);
         yield Expanded(child: card);
       }).toList(),
     );
@@ -1082,22 +1098,14 @@ class _DeviceStatusGrid extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: compact
-          ? showStorage
-                ? Column(
-                    children: [
-                      row(cards.take(2)),
-                      const SizedBox(height: 12),
-                      row(cards.skip(2)),
-                    ],
-                  )
-                : Column(
-                    children: [
-                      row(cards.take(1)),
-                      const SizedBox(height: 12),
-                      row(cards.skip(1)),
-                    ],
-                  )
-          : row(cards),
+          ? Column(
+              children: [
+                row(statusCards),
+                const SizedBox(height: 12),
+                row(installCards),
+              ],
+            )
+          : row([...statusCards, ...installCards]),
     );
   }
 }
@@ -1128,27 +1136,36 @@ class _InstallSection extends StatelessWidget {
     required this.enabled,
     required this.appCount,
     required this.watchfaceCount,
+    this.hasCanopus = false,
+    this.moduleCount = 0,
     required this.onManageApps,
     required this.onManageWatchfaces,
+    this.onManageModules,
     required this.onInstallApp,
     required this.onInstallWatchface,
+    this.onInstallModule,
   });
 
   final bool compact;
   final bool enabled;
   final int appCount;
   final int watchfaceCount;
+  final bool hasCanopus;
+  final int moduleCount;
   final VoidCallback onManageApps;
   final VoidCallback onManageWatchfaces;
+  final VoidCallback? onManageModules;
   final VoidCallback onInstallApp;
   final VoidCallback onInstallWatchface;
+  final VoidCallback? onInstallModule;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final isNarrow = compact;
+    final spacing = isNarrow ? 12.0 : 2.0;
     return Padding(
-      padding: EdgeInsetsDirectional.only(start: 16, end: 16, bottom: 16),
+      padding: const EdgeInsetsDirectional.only(start: 16, end: 16, bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1169,12 +1186,12 @@ class _InstallSection extends StatelessWidget {
                       : BorderRadiusDirectional.only(
                           topStart: Radius.circular(cardRadiusFor(context)),
                           bottomStart: Radius.circular(cardRadiusFor(context)),
-                          topEnd: Radius.circular(3),
-                          bottomEnd: Radius.circular(3),
+                          topEnd: const Radius.circular(3),
+                          bottomEnd: const Radius.circular(3),
                         ),
                 ),
               ),
-              SizedBox(width: isNarrow ? 12 : 2),
+              SizedBox(width: spacing),
               Expanded(
                 child: _InstallSummaryCard(
                   enabled: enabled,
@@ -1188,13 +1205,40 @@ class _InstallSection extends StatelessWidget {
                   borderRadius: isNarrow
                       ? BorderRadius.circular(cardRadiusFor(context))
                       : BorderRadiusDirectional.only(
-                          topStart: Radius.circular(3),
-                          bottomStart: Radius.circular(3),
-                          topEnd: Radius.circular(cardRadiusFor(context)),
-                          bottomEnd: Radius.circular(cardRadiusFor(context)),
+                          topStart: const Radius.circular(3),
+                          bottomStart: const Radius.circular(3),
+                          topEnd: Radius.circular(
+                            hasCanopus ? 3 : cardRadiusFor(context),
+                          ),
+                          bottomEnd: Radius.circular(
+                            hasCanopus ? 3 : cardRadiusFor(context),
+                          ),
                         ),
                 ),
               ),
+              if (hasCanopus) ...[
+                SizedBox(width: spacing),
+                Expanded(
+                  child: _InstallSummaryCard(
+                    enabled: enabled,
+                    icon: Icons.extension_outlined,
+                    label: l10n.modules,
+                    countLabel: l10n.deviceModuleCount,
+                    count: moduleCount,
+                    installTooltip: l10n.deviceFeaturesInstallModule,
+                    onOpen: onManageModules ?? () {},
+                    onInstall: onInstallModule ?? () {},
+                    borderRadius: isNarrow
+                        ? BorderRadius.circular(cardRadiusFor(context))
+                        : BorderRadiusDirectional.only(
+                            topStart: const Radius.circular(3),
+                            bottomStart: const Radius.circular(3),
+                            topEnd: Radius.circular(cardRadiusFor(context)),
+                            bottomEnd: Radius.circular(cardRadiusFor(context)),
+                          ),
+                  ),
+                ),
+              ],
             ],
           ),
         ],
@@ -1280,6 +1324,8 @@ class _InstallSummaryCard extends StatelessWidget {
                           ),
                           Text(
                             countLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: enabled
                                   ? colors.onSurfaceVariant

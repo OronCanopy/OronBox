@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:path_provider_windows/path_provider_windows.dart';
 
-const _channel = MethodChannel('oronbox/xiaomi_screenshot');
+const _channel = MethodChannel('org.oroncanopy.oronbox/xiaomi_screenshot');
 const _directoryName = 'WatchScreenshots';
 
 /// Exports a Xiaomi wearable screenshot to the user's public Pictures folder.

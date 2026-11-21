@@ -1,5 +1,14 @@
+import 'package:oronbox/src/device/core/phone_notification.dart';
+import 'package:oronbox/src/device/xiaomi/protocol/xiaomi_plugin_notification.dart';
+import 'package:oronbox/src/device/zeppos/systems/zeppos_notification_system.dart';
+import 'package:oronbox/src/device/xiaomi/systems/bind_system.dart';
+import 'package:oronbox/src/features/devices/services/xiaomi_device_binding.dart';
+import 'package:oronbox/src/features/accounts/services/mi_account_service.dart';
+import 'package:oronbox/src/device/xiaomi/systems/factory_system.dart';
+
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
@@ -24,16 +33,20 @@ import 'package:oronbox/src/device/core/bluetooth_platform.dart';
 import 'package:oronbox/src/device/core/connect_type.dart';
 import 'package:oronbox/src/device/core/device_kind.dart';
 import 'package:oronbox/src/device/core/device_profile.dart';
+import 'package:oronbox/src/device/xiaomi/xiaomi_device_catalog.dart';
+import 'package:oronbox/src/device/xiaomi/protocol/packet/l2_packet.dart';
 import 'package:oronbox/src/device/core/entity.dart';
 import 'package:oronbox/src/device/core/event_bus.dart';
+import 'package:oronbox/src/device/core/protocol_request_system.dart';
 import 'package:oronbox/src/device/core/runtime.dart';
 import 'package:oronbox/src/device/core/spp_transport.dart';
 import 'package:oronbox/src/device/core/transport.dart';
-import 'package:oronbox/src/device/core/xiaomi_wearable_catalog.dart';
 import 'package:oronbox/src/device/xiaomi/systems/auth_system.dart';
+import 'package:oronbox/src/device/xiaomi/systems/canopus_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/info_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/health_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/install_system.dart';
+import 'package:oronbox/src/device/xiaomi/systems/watchface_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/lpa_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/network_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/wifi_config_handler.dart';
@@ -48,6 +61,7 @@ import 'package:oronbox/src/device/xiaomi/systems/sync_system.dart';
 import 'package:oronbox/src/device/xiaomi/systems/xiaomi_device_component.dart';
 import 'package:oronbox/src/device/xiaomi/xiaomi_device_factory.dart';
 import 'package:oronbox/src/device/xiaomi/xiaomi_time.dart';
+import 'package:oronbox/src/device/zeppos/zeppos_device_component.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_auth_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_apps_system.dart';
 import 'package:oronbox/src/device/zeppos/systems/zeppos_app_install_system.dart';
@@ -88,13 +102,16 @@ import 'package:oronbox/src/device/xiaomi/protocol/generated/wear_media.pbenum.d
     as pb_media_enum;
 import 'package:oronbox/src/device/xiaomi/protocol/generated/wear_system.pb.dart'
     as pb_system;
-import 'package:oronbox/src/device/xiaomi/protocol/packet/l2_packet.dart';
+import 'package:oronbox/src/device/xiaomi/protocol/generated/wear_thirdparty_app.pb.dart'
+    as pb_thirdparty;
 
 import '../models/device_manager_state.dart';
 import '../models/device_transfer_models.dart';
 
 export '../models/device_manager_state.dart';
 export '../models/device_transfer_models.dart';
+
+part 'device_plugin_operations.dart';
 
 class _DeviceLogTransferTimeout implements Exception {
   const _DeviceLogTransferTimeout({
@@ -119,6 +136,7 @@ class _DeviceConnectCancelled implements Exception {
 
 abstract class DeviceManager extends Notifier<DeviceManagerState> {
   static const errorBluetoothUnavailable = 'bluetooth_unavailable';
+  static const errorXiaomiPairingRequired = 'xiaomi_pairing_required';
   static final _log = getLogger('DeviceManager');
   final _xiaoAiOpusFrames = StreamController<Uint8List>.broadcast();
   final _interconnectMessages =
@@ -142,6 +160,17 @@ abstract class DeviceManager extends Notifier<DeviceManagerState> {
       codename: device.codename,
     ).kind;
   }
+
+  int? get currentZeppOsDeviceSource => null;
+  String? get currentDeviceId => state.currentDevice?.addr;
+
+  Future<bool> forwardPhoneNotification(
+    String deviceId,
+    PhoneNotification item, {
+    required bool removed,
+  }) async => false;
+  bool get isDeviceOperationRunning =>
+      _syncCycleFuture != null || _syncDeviceFuture != null;
 
   SystemInfo? get systemInfo => state.systemInfo;
 
@@ -246,6 +275,17 @@ abstract class DeviceManager extends Notifier<DeviceManagerState> {
     DeviceKind kind = DeviceKind.xiaomi,
     String connectType = 'ble',
   });
+  Future<void> pairXiaomi(
+    String address,
+    String name,
+    String authKey,
+    XiaomiBindingInteraction interaction, {
+    required String connectType,
+    XiaomiBindingCredential? recoveryCredential,
+    bool? removeBondBeforeConnect,
+    bool allowBinding = true,
+  }) => throw UnsupportedError('Xiaomi pairing');
+  Future<void> cancelXiaomiPairing(String address) => cancelConnect();
   Future<void> disconnect([String? address]);
   Future<void> cancelConnect();
   Future<void> removeDevice(String addr);
@@ -382,7 +422,24 @@ abstract class DeviceManager extends Notifier<DeviceManagerState> {
   Future<void> setXiaomiAlarmEnabled(int id, bool enabled);
   Future<void> syncXiaomiWeather(XiaomiWeatherData weather);
   Future<void> fetchWatchfaces();
+  Future<void> fetchModules();
+  Future<void> setModuleEnabled(String moduleId, bool enabled);
+  Future<void> removeModule(String moduleId);
   Future<void> openApp(AppInfo app, {String page = ''});
+  Future<void> sendProtocolPacket(
+    Uint8List payload, {
+    String? deviceId,
+    int? channel,
+  });
+  Future<Uint8List> requestProtocolPacket(
+    Uint8List payload, {
+    String? deviceId,
+    int? channel,
+    Duration timeout = const Duration(seconds: 5),
+    Stream<void>? cancellation,
+  });
+  Future<int> getMiWearMode() => throw UnsupportedError('MiWear mode');
+  Future<void> setMiWearMode(int mode) => throw UnsupportedError('MiWear mode');
   Future<void> sendRaw(Uint8List payload);
   Future<Uint8List> requestRaw(
     Uint8List payload, {
@@ -398,13 +455,22 @@ abstract class DeviceManager extends Notifier<DeviceManagerState> {
     void Function(double progress)? onProgress,
     void Function()? onAppSideMissing,
   });
-  Future<void> installWatchface(
+  Future<String?> installWatchface(
     Uint8List watchfaceBytes, {
     required String watchfaceId,
+    String? replaceWatchfaceId,
     void Function(double progress)? onProgress,
   });
   Future<void> installFirmware(
     Uint8List firmwareBytes, {
+    void Function(double progress)? onProgress,
+  });
+  Future<void> installCanopus(
+    Uint8List packageBytes, {
+    void Function(double progress)? onProgress,
+  });
+  Future<void> installResourcePack(
+    Uint8List packageBytes, {
     void Function(double progress)? onProgress,
   });
   Future<void> importSharedDevice(MiWearState device);
@@ -417,6 +483,38 @@ abstract class DeviceManager extends Notifier<DeviceManagerState> {
 }
 
 class LocalDeviceManager extends DeviceManager {
+  @override
+  int? get currentZeppOsDeviceSource =>
+      _currentEntity?.system<ZeppOsDeviceInfoSystem>()?.deviceSource;
+
+  @override
+  bool get isDeviceOperationRunning =>
+      super.isDeviceOperationRunning || _activeTransfers > 0;
+
+  @override
+  Future<bool> forwardPhoneNotification(
+    String deviceId,
+    PhoneNotification item, {
+    required bool removed,
+  }) async {
+    final entity = _currentEntity;
+    if (entity == null ||
+        entity.id != deviceId ||
+        entity.isDisposed ||
+        state.protocolState != ProtocolState.ready)
+      return false;
+    final zepp = entity.system<ZeppOsNotificationSystem>();
+    if (zepp != null) {
+      return zepp.send(item, removed: removed);
+    }
+    final xiaomi = entity.get<XiaomiDeviceComponent>();
+    if (xiaomi == null) return false;
+    await xiaomi.sendProtobufBytes(
+      XiaomiPluginNotification.phone(item, removed: removed),
+    );
+    return true;
+  }
+
   static const errorBluetoothUnavailable =
       DeviceManager.errorBluetoothUnavailable;
   bool _voiceLabEnabled = false;
@@ -613,6 +711,7 @@ class LocalDeviceManager extends DeviceManager {
 
     _bluetooth = bluetooth;
     _runtime = DeviceRuntime();
+    unawaited(XiaomiDeviceCatalog.instance.ensureInitialized());
     _scanSubscription = _bluetooth.scanStream.listen(_onBluetoothEndpoint);
     _eventSubscription = _runtime.eventStream.listen(_onDeviceEvent);
 
@@ -739,8 +838,16 @@ class LocalDeviceManager extends DeviceManager {
 
   static final _log = getLogger('DeviceManager');
   static const _defaultConnectMaxAttempts = 2;
-  static const _passiveReconnectMaxAttempts = 2;
   static const _macOsSppConnectMaxAttempts = 2;
+
+  /// Truncated exponential backoff reconnect budget for passive disconnects.
+  static const _passiveReconnectBudget = Duration(minutes: 10);
+  static const _bleReconnectInitialStep = Duration(seconds: 2);
+  static const _bleReconnectMaxStep = Duration(seconds: 256);
+  static const _sppFastRetryLimit = 3;
+  static const _sppPeriodicStep = Duration(seconds: 60);
+  static const _sppPeriodicLimit = 12;
+  static const _sppDormantStep = Duration(seconds: 300);
   static const _defaultConnectRetryDelay = Duration(milliseconds: 300);
   static const _macOsSppConnectRetryDelay = Duration(seconds: 4);
   static const _sppFailedConnectSettleDelay = Duration(milliseconds: 500);
@@ -822,8 +929,8 @@ class LocalDeviceManager extends DeviceManager {
     }
   }
 
-  Future<void> _savePairedDevices() async {
-    final jsonList = state.pairedDevices
+  Future<void> _savePairedDevices([List<MiWearState>? devices]) async {
+    final jsonList = (devices ?? state.pairedDevices)
         // Connection state belongs to the current process. Persist paired
         // device identity and credentials, never a stale online marker.
         .map((d) => jsonEncode(d.copyWith(disconnected: true).toJson()))
@@ -1019,8 +1126,9 @@ class LocalDeviceManager extends DeviceManager {
     String name,
     DeviceProfile profile,
     ConnectType connectType,
-    int generation,
-  ) async {
+    int generation, {
+    required bool removeBond,
+  }) async {
     Exception? lastError;
     final isMacOsSpp =
         defaultTargetPlatform == TargetPlatform.macOS &&
@@ -1058,7 +1166,7 @@ class LocalDeviceManager extends DeviceManager {
             bleAttemptPair: profile.bleAttemptPair,
             sppServiceUuid: profile.classicServiceUuid,
             sppFallbackChannels: profile.classicFallbackChannels,
-            sppRemoveBond: _removeBondBeforeSpp(),
+            sppRemoveBond: removeBond,
           ),
         );
         // The native SPP chain caps every bond/socket stage itself, but a
@@ -1209,17 +1317,70 @@ class LocalDeviceManager extends DeviceManager {
     _activeConnectType = null;
   }
 
+  @override
+  Future<void> pairXiaomi(
+    String address,
+    String name,
+    String authKey,
+    XiaomiBindingInteraction interaction, {
+    required String connectType,
+    XiaomiBindingCredential? recoveryCredential,
+    bool? removeBondBeforeConnect,
+    bool allowBinding = true,
+  }) => _connect(
+    address,
+    name,
+    authKey,
+    kind: DeviceKind.xiaomi,
+    connectType: connectType,
+    binding: interaction,
+    recoveryCredential: recoveryCredential,
+    removeBondBeforeConnect: removeBondBeforeConnect,
+    allowBinding: allowBinding,
+  );
+
+  @override
+  Future<void> cancelXiaomiPairing(String address) async {
+    if (!state.connecting ||
+        !deviceAddressEquals(state.connectionTargetAddr, address)) {
+      return;
+    }
+    final entity = _currentEntity;
+    entity?.system<XiaomiBindSystem>()?.abort(const _DeviceConnectCancelled());
+    await cancelConnect();
+    if (entity != null &&
+        identical(_currentEntity, entity) &&
+        deviceAddressEquals(entity.id, address)) {
+      await _cleanupConnection();
+    }
+  }
+
   Future<void> _connect(
     String addr,
     String name,
     String authKey, {
     required DeviceKind kind,
     required String connectType,
+    XiaomiBindingCredential? recoveryCredential,
+    bool? removeBondBeforeConnect,
+    XiaomiBindingInteraction? binding,
+    bool allowBinding = true,
   }) async {
     final generation = ++_connectGeneration;
     final existingDevice = state.pairedDevices
-        .where((d) => d.addr == addr)
+        .where((d) => deviceAddressEquals(d.addr, addr))
         .firstOrNull;
+    var credential =
+        recoveryCredential ??
+        (
+          authKey: authKey,
+          appDeviceId: existingDevice?.authkey == authKey
+              ? existingDevice?.appDeviceId
+              : null,
+          oob: existingDevice?.authkey == authKey
+              ? existingDevice?.bindingOob
+              : null,
+        );
     final identity =
         xiaomiWearableIdentityForCodename(existingDevice?.codename) ??
         normalizeXiaomiWearableIdentity(name);
@@ -1267,6 +1428,9 @@ class LocalDeviceManager extends DeviceManager {
     final transportType = effectiveConnectType == ConnectType.spp.name
         ? ConnectType.spp
         : ConnectType.ble;
+    final removeBond =
+        transportType == ConnectType.spp &&
+        (removeBondBeforeConnect ?? _removeBondBeforeSpp());
     _pendingConnectType = transportType;
     state = state.copyWith(
       connecting: true,
@@ -1280,6 +1444,9 @@ class LocalDeviceManager extends DeviceManager {
       clearSystemInfo: true,
       apps: const [],
       watchfaces: const [],
+      hasCanopus: false,
+      moduleCount: 0,
+      modules: const [],
       xiaoAiActive: false,
       xiaoAiFrameCount: 0,
       xiaoAiCapabilities: const {},
@@ -1296,7 +1463,7 @@ class LocalDeviceManager extends DeviceManager {
         // When the pairing-reset option is enabled, never restore a pooled
         // classic-Bluetooth session. Close it first so the native transport
         // can remove the old bond and establish a fresh RFCOMM connection.
-        if (_removeBondBeforeSpp() &&
+        if (removeBond &&
             (_pooledConnections.containsKey(addr) ||
                 _pooledEntities.containsKey(addr))) {
           await _disconnectPooledDevice(addr);
@@ -1347,7 +1514,9 @@ class LocalDeviceManager extends DeviceManager {
             name: displayName,
             addr: addr,
             connectType: effectiveConnectType,
-            authkey: authKey,
+            authkey: credential.authKey,
+            appDeviceId: credential.appDeviceId,
+            bindingOob: credential.oob,
             codename: effectiveCodename,
             disconnected: false,
           );
@@ -1368,6 +1537,9 @@ class LocalDeviceManager extends DeviceManager {
             clearSystemInfo: true,
             apps: const [],
             watchfaces: const [],
+            hasCanopus: false,
+            moduleCount: 0,
+            modules: const [],
             xiaoAiActive: false,
             xiaoAiFrameCount: 0,
             xiaoAiCapabilities: const {},
@@ -1392,6 +1564,7 @@ class LocalDeviceManager extends DeviceManager {
           profile,
           transportType,
           generation,
+          removeBond: removeBond,
         );
         try {
           _throwIfConnectCancelled(generation);
@@ -1490,9 +1663,55 @@ class LocalDeviceManager extends DeviceManager {
         );
         final authSystem = entity.system<XiaomiAuthSystem>()!;
         _log.info('starting authentication');
-        await authSystem
-            .authenticate(authKey)
+        Future<void> authenticate() => authSystem
+            .authenticate(
+              credential.authKey,
+              appDeviceId: credential.appDeviceId,
+              oob: credential.oob,
+            )
             .timeout(const Duration(seconds: 10));
+
+        var needsBinding =
+            allowBinding &&
+            binding != null &&
+            credential.authKey.trim().isEmpty;
+        if (!needsBinding) {
+          try {
+            binding?.authenticating();
+            await authenticate();
+          } catch (error) {
+            final rejected =
+                (error is ArgumentError &&
+                    error.message.toString().contains('Auth HMAC mismatch')) ||
+                error is XiaomiAuthRejected;
+            if (binding == null || !allowBinding || !rejected) rethrow;
+            needsBinding = true;
+          }
+        }
+        if (needsBinding) {
+          final interaction = binding!;
+          final system = entity.system<XiaomiBindSystem>()!;
+          final accountService = ref.read(miAccountServiceProvider);
+          final token = await accountService.loadStoredToken();
+          _throwIfConnectCancelled(generation);
+          final info = await system.query(
+            userId: token?.userId,
+            checkDynamicCode: interaction.oob?.isNotEmpty == true,
+          );
+          interaction.binding(info.verifyMode);
+          _throwIfConnectCancelled(generation);
+          credential = await bindXiaomiDevice(
+            system: system,
+            info: info,
+            interaction: interaction,
+            accounts: accountService,
+            address: addr,
+            checkActive: () => _throwIfConnectCancelled(generation),
+          );
+          _throwIfConnectCancelled(generation);
+          interaction.authenticating();
+          await authenticate();
+        }
         _throwIfConnectCancelled(generation);
         _log.info('authentication succeeded');
         await entity.system<XiaomiNetworkSystem>()!.start();
@@ -1503,7 +1722,9 @@ class LocalDeviceManager extends DeviceManager {
         name: displayName,
         addr: addr,
         connectType: effectiveConnectType,
-        authkey: authKey,
+        authkey: credential.authKey,
+        appDeviceId: credential.appDeviceId,
+        bindingOob: credential.oob,
         codename: effectiveCodename,
         disconnected: false,
       );
@@ -1515,6 +1736,10 @@ class LocalDeviceManager extends DeviceManager {
         updatedPaired.removeAt(existingIndex);
       }
       updatedPaired.insert(0, connected);
+      if (binding != null) {
+        await _savePairedDevices(updatedPaired);
+        _throwIfConnectCancelled(generation);
+      }
 
       state = state.copyWith(
         currentDevice: connected,
@@ -1527,6 +1752,9 @@ class LocalDeviceManager extends DeviceManager {
         clearSystemInfo: true,
         apps: const [],
         watchfaces: const [],
+        hasCanopus: false,
+        moduleCount: 0,
+        modules: const [],
         xiaoAiActive: false,
         xiaoAiFrameCount: 0,
         xiaoAiCapabilities: const {},
@@ -1534,7 +1762,7 @@ class LocalDeviceManager extends DeviceManager {
         downloadBytesPerSecond: 0,
         clearConnectionPhase: true,
       );
-      await _savePairedDevices();
+      if (binding == null) await _savePairedDevices();
       _startBatteryRefreshLoop();
       unawaited(_loadInitialDeviceData(entity));
       _pendingConnectType = null;
@@ -1548,16 +1776,23 @@ class LocalDeviceManager extends DeviceManager {
         return;
       }
       _log.severe('connect to $addr failed', e, st);
+      final pairingRequired =
+          existingDevice != null && e is XiaomiAuthRejected && e.notBound;
       state = state.copyWith(
         connecting: false,
         connectStatus: 3,
         protocolState: ProtocolState.error,
-        error: _passiveReconnectInProgress ? null : e.toString(),
+        error: _passiveReconnectInProgress
+            ? null
+            : pairingRequired
+            ? DeviceManager.errorXiaomiPairingRequired
+            : e.toString(),
         clearError: _passiveReconnectInProgress,
         clearConnectionPhase: true,
       );
       await _cleanupConnection();
       _pendingConnectType = null;
+      if (binding != null) rethrow;
     }
   }
 
@@ -1676,21 +1911,22 @@ class LocalDeviceManager extends DeviceManager {
   bool _shouldFetchEuiccImei(MiWearState? device, SystemInfo info) {
     if (info.imei.trim().isNotEmpty) return false;
 
-    final identity =
-        xiaomiWearableIdentityForCodename(device?.codename) ??
-        normalizeXiaomiWearableIdentity(info.model) ??
-        normalizeXiaomiWearableIdentity(device?.name ?? '');
-    final tokens = [
+    final registered = XiaomiDeviceCatalog.instance.find(
+      model: info.model,
+      product: info.productDevice,
+    );
+    if (registered != null) {
+      return registered.hasFeature('esim');
+    }
+
+    final fallback = [
+      info.productDevice,
       device?.name,
       device?.codename,
       info.model,
-      identity?.codename,
-      identity?.displayName,
-    ].whereType<String>().map((value) => value.toLowerCase()).join(' ');
+    ].whereType<String>().map((v) => v.toLowerCase()).join(' ');
 
-    return tokens.contains('esim') ||
-        tokens.contains('lte') ||
-        tokens.contains('o65m');
+    return fallback.contains('esim') || fallback.contains('lte');
   }
 
   void _onDeviceEvent(DeviceEvent event) {
@@ -1801,7 +2037,12 @@ class LocalDeviceManager extends DeviceManager {
           ),
         );
         final current = state.currentDevice;
-        final identity = normalizeXiaomiWearableIdentity(info.model);
+        final identity =
+            XiaomiDeviceCatalog.instance.find(
+              product: info.productDevice,
+              model: info.model,
+            ) ??
+            normalizeXiaomiWearableIdentity(info.model);
         if (current != null && identity != null) {
           final normalized = current.copyWith(
             name: identity.displayName,
@@ -1815,7 +2056,7 @@ class LocalDeviceManager extends DeviceManager {
             pairedDevices: updatedPaired,
           );
           _log.info(
-            'normalized ${current.addr}: ${info.model} -> '
+            'normalized ${current.addr}: ${info.productDevice}/${info.model} -> '
             '${identity.codename} (${identity.displayName})',
           );
           unawaited(_savePairedDevices());
@@ -1862,7 +2103,6 @@ class LocalDeviceManager extends DeviceManager {
         _log.info('event: install completed');
       case InstallFailed(:final error):
         _log.warning('event: install failed: $error');
-        state = state.copyWith(error: error);
       case DeviceError(:final error):
         _log.warning('event: device error: $error');
         state = state.copyWith(error: error);
@@ -1925,26 +2165,68 @@ class LocalDeviceManager extends DeviceManager {
     }
   }
 
+  Duration _calculatePassiveReconnectBackoff({
+    required bool isSpp,
+    required int attempt,
+  }) {
+    if (isSpp) {
+      if (attempt <= _sppFastRetryLimit) {
+        return Duration(seconds: 2 * (1 << (attempt - 1)));
+      }
+      if (attempt <= _sppPeriodicLimit) {
+        return _sppPeriodicStep;
+      }
+      return _sppDormantStep;
+    }
+    final seconds = math.min(
+      _bleReconnectInitialStep.inSeconds * (1 << (attempt - 1)),
+      _bleReconnectMaxStep.inSeconds,
+    );
+    return Duration(seconds: seconds);
+  }
+
+  bool _isPassiveReconnectOverBudget({
+    required bool isSpp,
+    required int attempt,
+    required DateTime startTime,
+  }) {
+    if (isSpp && attempt > _sppPeriodicLimit + 1) return true;
+    return DateTime.now().difference(startTime) >= _passiveReconnectBudget;
+  }
+
   Future<void> _attemptPassiveReconnect(MiWearState device) async {
     if (_passiveReconnectInProgress) return;
     final authKey = device.authkey;
     if (authKey == null || authKey.isEmpty) return;
 
+    final generation = _connectGeneration;
     _passiveReconnectInProgress = true;
+    final isSpp = device.connectType.toLowerCase() == 'spp';
+    final startTime = DateTime.now();
+    var attempt = 1;
+
     try {
-      for (
-        var attempt = 1;
-        attempt <= _passiveReconnectMaxAttempts;
-        attempt++
-      ) {
+      while (!_isPassiveReconnectOverBudget(
+        isSpp: isSpp,
+        attempt: attempt,
+        startTime: startTime,
+      )) {
+        final delay = _calculatePassiveReconnectBackoff(
+          isSpp: isSpp,
+          attempt: attempt,
+        );
+
+        await Future.delayed(delay);
+        if (_connectGeneration != generation) return;
         if (state.protocolState == ProtocolState.ready &&
             state.currentDevice?.addr == device.addr &&
             state.currentDevice?.disconnected == false) {
           return;
         }
-        _log.warning(
-          'passive reconnect attempt $attempt/$_passiveReconnectMaxAttempts '
-          'to ${device.addr}',
+
+        _log.info(
+          'passive reconnect attempt $attempt to ${device.addr} '
+          '(backoff: ${delay.inSeconds}s, isSpp: $isSpp)',
         );
         _runtime.emit(
           PassiveReconnectStatus(
@@ -1953,6 +2235,7 @@ class LocalDeviceManager extends DeviceManager {
             attempt: attempt,
           ),
         );
+
         try {
           await connect(
             device.addr,
@@ -1967,6 +2250,8 @@ class LocalDeviceManager extends DeviceManager {
             stackTrace,
           );
         }
+
+        if (_connectGeneration != generation) return;
         if (state.protocolState == ProtocolState.ready &&
             state.currentDevice?.addr == device.addr &&
             state.currentDevice?.disconnected == false) {
@@ -1980,16 +2265,17 @@ class LocalDeviceManager extends DeviceManager {
           );
           return;
         }
+        attempt++;
       }
-      _log.warning(
-        'passive reconnect failed after $_passiveReconnectMaxAttempts attempts '
-        'for ${device.addr}',
+
+      _log.info(
+        'passive reconnect reached budget limit for ${device.addr} after ${attempt - 1} attempts',
       );
       _runtime.emit(
         PassiveReconnectStatus(
           deviceId: device.addr,
           phase: PassiveReconnectPhase.failed,
-          attempt: _passiveReconnectMaxAttempts,
+          attempt: attempt - 1,
         ),
       );
     } finally {
@@ -2427,6 +2713,8 @@ class LocalDeviceManager extends DeviceManager {
       ('device data', refreshDeviceData),
       ('watchfaces', fetchWatchfaces),
       ('apps', fetchApps),
+      if (entity.system<XiaomiCanopusSystem>() != null)
+        ('modules', fetchModules),
     ];
     for (final operation in operations) {
       if (_currentEntity != entity) return;
@@ -3257,56 +3545,34 @@ class LocalDeviceManager extends DeviceManager {
       final startEvent = await Future.any<Object>([
         reportFuture,
         activity.future.then<Object>((_) => true),
+        receive,
       ]);
-      if (startEvent is! pb_system.ReportData_Result) {
-        // Some firmware starts the MASS stream before sending the report
-        // response.  Once bytes are observed, the stream is the authoritative
-        // acknowledgement and waiting for a second response only creates a
-        // false timeout.
-        report.cancelDeviceLogExport();
-        onStage?.call('waiting_transfer');
-        if (!activitySeen) {
-          await activity.future.timeout(
-            const Duration(seconds: 60),
-            onTimeout: () {
-              throw const ProtocolException(
-                'Device acknowledged log export but did not start streaming within 60s',
-              );
-            },
-          );
-        }
-        onStage?.call('transferring');
-        final result = await _awaitDeviceLogTransfer(
-          receive,
-          lastActivity: () => lastActivity,
-          progress: () => currentProgress,
-        );
-        return DeviceLogPullResult(
-          fileName: result.fileName,
-          data: result.data,
-        );
-      }
-      final start = startEvent;
-      if (start.status != pb_system.ReportData_Status.SUCCESS) {
-        if (start.status == pb_system.ReportData_Status.URL_DIRECT) {
+      if (startEvent is pb_system.ReportData_Result) {
+        if (startEvent.status == pb_system.ReportData_Status.URL_DIRECT) {
           throw UnsupportedError(
             'This device requested direct log download, which is not supported',
           );
         }
-        throw ProtocolException(
-          'Device log export failed: ${start.status.name}',
-        );
+        if (startEvent.status != pb_system.ReportData_Status.SUCCESS) {
+          throw ProtocolException(
+            'Device log export failed: ${startEvent.status.name}',
+          );
+        }
+      } else {
+        // Some firmware starts the MASS stream before acknowledging the report.
+        report.cancelDeviceLogExport();
       }
       onStage?.call('waiting_transfer');
       if (!activitySeen) {
-        await activity.future.timeout(
-          const Duration(seconds: 60),
-          onTimeout: () {
-            throw const ProtocolException(
-              'Device acknowledged log export but did not start streaming within 60s',
+        await Future.any<void>([activity.future, receive.then<void>((_) {})])
+            .timeout(
+              const Duration(seconds: 60),
+              onTimeout: () {
+                throw const ProtocolException(
+                  'Device acknowledged log export but did not start streaming within 60s',
+                );
+              },
             );
-          },
-        );
       }
       onStage?.call('transferring');
       final result = await _awaitDeviceLogTransfer(
@@ -3458,8 +3724,9 @@ class LocalDeviceManager extends DeviceManager {
           ),
         )
         .toList();
+    if (_currentEntity != entity) return;
     _log.info('event: quick app list ${apps.length}');
-    state = state.copyWith(apps: apps);
+    state = state.copyWith(apps: apps, appsLoaded: true);
   }
 
   @override
@@ -3561,7 +3828,83 @@ class LocalDeviceManager extends DeviceManager {
       throw UnsupportedError('This device does not support watchface listing');
     }
     final watchfaces = await infoSystem.fetchInstalledWatchfaces();
-    state = state.copyWith(watchfaces: watchfaces);
+    if (_currentEntity != entity) return;
+    state = state.copyWith(watchfaces: watchfaces, watchfacesLoaded: true);
+  }
+
+  @override
+  Future<void> fetchModules() async {
+    final entity = _currentEntity;
+    if (entity == null || state.protocolState != ProtocolState.ready) {
+      throw ProtocolException('Device not ready');
+    }
+    final canopusSystem = entity.system<XiaomiCanopusSystem>();
+    if (canopusSystem == null) {
+      throw const CanopusException(
+        'canopus_transport_unavailable',
+        'This connection cannot communicate with Canopus Supervisor',
+      );
+    }
+    final info = await canopusSystem.queryDeviceInfo();
+    final modules = await canopusSystem.listModules(deviceInfo: info);
+    if (!identical(entity, _currentEntity) ||
+        state.protocolState != ProtocolState.ready) {
+      throw const CanopusException(
+        'no_device',
+        'Device is no longer connected',
+      );
+    }
+    state = state.copyWith(
+      hasCanopus: true,
+      moduleCount: modules.length,
+      modules: modules,
+    );
+  }
+
+  Future<void> _refreshModulesAfterChange() async {
+    try {
+      await fetchModules();
+    } catch (error, stackTrace) {
+      _log.fine(
+        'Canopus list refresh failed after module change',
+        error,
+        stackTrace,
+      );
+    }
+  }
+
+  @override
+  Future<void> setModuleEnabled(String moduleId, bool enabled) async {
+    final entity = _currentEntity;
+    if (entity == null || state.protocolState != ProtocolState.ready) {
+      throw const CanopusException('no_device', 'Device is not connected');
+    }
+    final canopusSystem = entity.system<XiaomiCanopusSystem>();
+    if (canopusSystem == null) {
+      throw const CanopusException(
+        'canopus_transport_unavailable',
+        'This connection cannot communicate with Canopus Supervisor',
+      );
+    }
+    await canopusSystem.setModuleEnabled(moduleId, enabled);
+    await _refreshModulesAfterChange();
+  }
+
+  @override
+  Future<void> removeModule(String moduleId) async {
+    final entity = _currentEntity;
+    if (entity == null || state.protocolState != ProtocolState.ready) {
+      throw const CanopusException('no_device', 'Device is not connected');
+    }
+    final canopusSystem = entity.system<XiaomiCanopusSystem>();
+    if (canopusSystem == null) {
+      throw const CanopusException(
+        'canopus_transport_unavailable',
+        'This connection cannot communicate with Canopus Supervisor',
+      );
+    }
+    await canopusSystem.removeModule(moduleId);
+    await _refreshModulesAfterChange();
   }
 
   @override
@@ -3626,6 +3969,51 @@ class LocalDeviceManager extends DeviceManager {
       app: _thirdpartyAppInfo(app),
     );
     _log.info('interconnect message queued for $packageName');
+  }
+
+  @override
+  Future<void> sendProtocolPacket(
+    Uint8List payload, {
+    String? deviceId,
+    int? channel,
+  }) => sendPluginProtocol(
+    deviceId ?? state.currentDevice?.addr ?? '',
+    payload,
+    channel: channel,
+  );
+
+  @override
+  Future<Uint8List> requestProtocolPacket(
+    Uint8List payload, {
+    String? deviceId,
+    int? channel,
+    Duration timeout = const Duration(seconds: 5),
+    Stream<void>? cancellation,
+  }) => requestPluginProtocol(
+    deviceId ?? state.currentDevice?.addr ?? '',
+    payload,
+    channel: channel,
+    timeout: timeout,
+    cancellation: cancellation,
+  );
+
+  @override
+  Future<int> getMiWearMode() async {
+    final system = _currentEntity?.system<XiaomiFactorySystem>();
+    if (system == null || state.protocolState != ProtocolState.ready) {
+      throw const ProtocolException('Device not ready');
+    }
+    return system.getMode();
+  }
+
+  @override
+  Future<void> setMiWearMode(int mode) async {
+    final system = _currentEntity?.system<XiaomiFactorySystem>();
+    if (system == null || state.protocolState != ProtocolState.ready) {
+      throw const ProtocolException('Device not ready');
+    }
+    await system.setMode(mode);
+    await disconnect();
   }
 
   @override
@@ -3741,6 +4129,7 @@ class LocalDeviceManager extends DeviceManager {
   ) async {
     await _configureZeppOsAppsSystem(entity, appsSystem);
     final allApps = await appsSystem.fetchApps();
+    if (_currentEntity != entity) return;
     final watchfaceIds = state.watchfaces.map((item) => item.id).toSet();
     final versions = {
       for (final app in allApps) app.packageName: app.versionCode,
@@ -3759,7 +4148,11 @@ class LocalDeviceManager extends DeviceManager {
       'ZeppOS package catalog: ${apps.length} apps, '
       '${watchfaces.length} watchfaces',
     );
-    state = state.copyWith(apps: apps, watchfaces: watchfaces);
+    state = state.copyWith(
+      apps: apps,
+      watchfaces: watchfaces,
+      appsLoaded: true,
+    );
   }
 
   Future<void> _refreshZeppOsWatchfaces(
@@ -3768,10 +4161,12 @@ class LocalDeviceManager extends DeviceManager {
   ) async {
     await _configureZeppOsWatchfaceSystem(entity, watchfaceSystem);
     final watchfaces = await watchfaceSystem.fetchWatchfaces();
+    if (_currentEntity != entity) return;
     final versions = {
       for (final app in state.apps) app.packageName: app.versionCode,
     };
     state = state.copyWith(
+      watchfacesLoaded: true,
       watchfaces: watchfaces
           .map(
             (watchface) => watchface.copyWith(
@@ -3819,12 +4214,9 @@ class LocalDeviceManager extends DeviceManager {
       return;
     }
     _log.info('uninstalling watchface ${watchface.id}');
-    final packet = pb.WearPacket(
-      type: pb.WearPacket_Type.WATCH_FACE,
-      id: pb_watchface.WatchFace_WatchFaceID.REMOVE_WATCH_FACE.value,
-      watchFace: pb_watchface.WatchFace(id: watchface.id),
+    await entity.system<XiaomiWatchfaceSystem>()!.uninstallWatchface(
+      watchface.id,
     );
-    await entity.get<XiaomiDeviceComponent>()!.sendPbPacket(packet);
     state = state.copyWith(
       watchfaces: state.watchfaces.where((w) => w.id != watchface.id).toList(),
     );
@@ -3965,21 +4357,24 @@ class LocalDeviceManager extends DeviceManager {
   }
 
   @override
-  Future<void> installWatchface(
+  Future<String?> installWatchface(
     Uint8List watchfaceBytes, {
     required String watchfaceId,
+    String? replaceWatchfaceId,
     void Function(double progress)? onProgress,
   }) => _withTransfer(
     () => _installWatchface(
       watchfaceBytes,
       watchfaceId: watchfaceId,
+      replaceWatchfaceId: replaceWatchfaceId,
       onProgress: onProgress,
     ),
   );
 
-  Future<void> _installWatchface(
+  Future<String?> _installWatchface(
     Uint8List watchfaceBytes, {
     required String watchfaceId,
+    String? replaceWatchfaceId,
     void Function(double progress)? onProgress,
   }) async {
     final entity = _currentEntity;
@@ -4006,15 +4401,16 @@ class LocalDeviceManager extends DeviceManager {
         '(${package.bytes.length} bytes)',
       );
       await installer.install(package, onProgress: onProgress);
-      return;
+      return package.appId?.toString();
     }
     _log.info(
       'installing watchface $watchfaceId (${watchfaceBytes.length} bytes)',
     );
     final installSystem = entity.system<XiaomiInstallSystem>()!;
-    await installSystem.installWatchface(
+    return installSystem.installWatchface(
       watchfaceBytes,
       watchfaceId: watchfaceId,
+      replaceWatchfaceId: replaceWatchfaceId,
       onProgress: onProgress,
     );
   }
@@ -4060,6 +4456,40 @@ class LocalDeviceManager extends DeviceManager {
   }
 
   @override
+  Future<void> installCanopus(
+    Uint8List packageBytes, {
+    void Function(double progress)? onProgress,
+  }) => _withTransfer(
+    () => _canopusInstaller().install(packageBytes, onProgress: onProgress),
+  );
+
+  @override
+  Future<void> installResourcePack(
+    Uint8List packageBytes, {
+    void Function(double progress)? onProgress,
+  }) => _withTransfer(
+    () => _canopusInstaller().installResourcePack(
+      packageBytes,
+      onProgress: onProgress,
+    ),
+  );
+
+  XiaomiCanopusSystem _canopusInstaller() {
+    final entity = _currentEntity;
+    if (entity == null || state.protocolState != ProtocolState.ready) {
+      throw ProtocolException('Device not ready');
+    }
+    if (entity.kind != 'xiaomi') {
+      throw UnsupportedError('Canopus requires a Xiaomi wearable');
+    }
+    final system = entity.system<XiaomiCanopusSystem>();
+    if (system == null) {
+      throw StateError('Canopus system was not loaded for this session');
+    }
+    return system;
+  }
+
+  @override
   Future<void> importSharedDevice(MiWearState device) async {
     final normalized = _normalizeDeviceIdentity(device).copyWith(
       connectType: device.connectType.toLowerCase().isEmpty
@@ -4077,13 +4507,23 @@ class LocalDeviceManager extends DeviceManager {
     final existing = isCurrent
         ? current
         : (existingIndex >= 0 ? updatedPaired[existingIndex] : null);
+    final importedKey = normalized.authkey?.trim().isNotEmpty == true
+        ? normalized.authkey!.trim()
+        : existing?.authkey;
+    final retainsCredential =
+        importedKey != null &&
+        importedKey.toLowerCase() == existing?.authkey?.trim().toLowerCase();
     final imported = normalized.copyWith(
       addr: existing?.addr ?? normalized.addr,
       connectType: existing?.connectType ?? normalized.connectType,
       codename: normalized.codename ?? existing?.codename,
-      authkey: normalized.authkey?.trim().isNotEmpty == true
-          ? normalized.authkey!.trim()
-          : existing?.authkey,
+      authkey: importedKey,
+      appDeviceId:
+          normalized.appDeviceId ??
+          (retainsCredential ? existing?.appDeviceId : null),
+      bindingOob:
+          normalized.bindingOob ??
+          (retainsCredential ? existing?.bindingOob : null),
       disconnected: isCurrent && state.protocolState == ProtocolState.ready
           ? false
           : (existing?.disconnected ?? true),
@@ -4176,10 +4616,15 @@ class LocalDeviceManager extends DeviceManager {
           : (existingIndex >= 0 ? updatedPaired[existingIndex] : null);
       final isCurrentReady =
           isCurrent && state.protocolState == ProtocolState.ready;
+      final retainsCredential =
+          importedRaw.authkey?.toLowerCase() ==
+          existing?.authkey?.trim().toLowerCase();
       final imported = importedRaw.copyWith(
         addr: existing?.addr ?? importedRaw.addr,
         connectType: existing?.connectType ?? importedRaw.connectType,
         codename: importedRaw.codename ?? existing?.codename,
+        appDeviceId: retainsCredential ? existing?.appDeviceId : null,
+        bindingOob: retainsCredential ? existing?.bindingOob : null,
         disconnected: isCurrentReady ? false : (existing?.disconnected ?? true),
       );
       if (existingIndex >= 0) {

@@ -21,6 +21,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPrefsService.instance.init();
+    await SharedPrefsService.instance.reload();
 
     tempDir = await Directory.systemTemp.createTemp(
       'auto_backup_service_test_',
@@ -47,6 +48,73 @@ void main() {
       await healthDir.delete(recursive: true);
     }
   });
+
+  test('backs up string AI preferences without blocking maintenance', () async {
+    await SharedPrefsService.instance.setString(
+      'global_ai_asr_backend',
+      'local',
+    );
+    await SharedPrefsService.instance.setString(
+      'global_ai_system_prompt_template',
+      'Assistant prompt',
+    );
+    final service = AppDataBackupService();
+    final bytes = await service.export(
+      selection: const BackupSelection(health: false, extensions: false),
+    );
+    final backup = await service.inspect(bytes);
+    expect(backup.settings['global_ai_asr_backend'], 'local');
+    expect(
+      backup.settings['global_ai_system_prompt_template'],
+      'Assistant prompt',
+    );
+  });
+
+  test(
+    'skips malformed saved settings while retaining valid settings',
+    () async {
+      await SharedPrefsService.instance.setBool('global_ai_asr_backend', true);
+      await SharedPrefsService.instance.setString(
+        'global_ai_system_prompt_template',
+        'Keep',
+      );
+      final service = AppDataBackupService();
+      final bytes = await service.export(
+        selection: const BackupSelection(health: false, extensions: false),
+      );
+      final backup = await service.inspect(bytes);
+      expect(backup.settings.containsKey('global_ai_asr_backend'), isFalse);
+      expect(backup.settings['global_ai_system_prompt_template'], 'Keep');
+    },
+  );
+
+  test(
+    'failed automatic backup cools down and allows an explicit retry',
+    () async {
+      AutoBackupPreferences.enabled = true;
+      AutoBackupPreferences.scopeSettings = false;
+      AutoBackupPreferences.scopeHealth = false;
+      AutoBackupPreferences.scopeExtensions = false;
+      AutoBackupPreferences.scopeDevices = false;
+      final service = AutoBackupService();
+      final now = DateTime(2026, 11, 12);
+      expect(await service.runAutoBackupIfDue(nowOverride: now), isFalse);
+      expect(service.isExecuting, isFalse);
+      AutoBackupPreferences.scopeSettings = true;
+      expect(
+        await service.runAutoBackupIfDue(
+          nowOverride: now.add(const Duration(minutes: 1)),
+        ),
+        isFalse,
+      );
+      expect(
+        await service.executeAutoBackup(
+          nowOverride: now.add(const Duration(minutes: 2)),
+        ),
+        isTrue,
+      );
+    },
+  );
 
   group('AutoBackupPreferences and Units', () {
     test('default preference values', () {

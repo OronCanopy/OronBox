@@ -14,9 +14,9 @@ enum AppDataCategory {
   recovery,
   downloads,
   cache,
+  compilation,
   images,
   models,
-  tasks,
   documents,
 }
 
@@ -33,7 +33,6 @@ Future<List<AppDataUsage>> collectAppDataInventory() async {
   sizes[AppDataCategory.health] = activityBytes;
   for (final entry in {
     AppDataCategory.models: ('ai/models', AppStorageLocation.data),
-    AppDataCategory.tasks: ('tasks', AppStorageLocation.data),
     AppDataCategory.documents: ('documents', AppStorageLocation.cache),
     AppDataCategory.recovery: ('storage/restore', AppStorageLocation.data),
   }.entries) {

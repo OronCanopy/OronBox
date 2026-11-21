@@ -1,4 +1,6 @@
+import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/core/ai/ai_models.dart';
 import 'package:oronbox/src/core/ai/ai_secret_store.dart';
@@ -447,17 +449,11 @@ class _ProviderManagementDialogState extends State<ProviderManagementDialog>
 
   Widget _buildModelSettingsSection(AppLocalizations l10n, ThemeData theme) {
     if (_providers.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        child: Center(
-          child: Text(
-            l10n.globalAiNoProvidersPrompt,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
+      return EmptyStateView(
+        compact: true,
+        icon: Icons.dns_outlined,
+        title: l10n.globalAiNoProvidersTitle,
+        message: l10n.globalAiNoProvidersMessage,
       );
     }
 
@@ -560,16 +556,11 @@ class _ProviderManagementDialogState extends State<ProviderManagementDialog>
 
         // 模型列表卡片
         if (currentProvider.models.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            child: Center(
-              child: Text(
-                l10n.globalAiNoModelsPrompt,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
+          EmptyStateView(
+            compact: true,
+            icon: Icons.smart_toy_outlined,
+            title: l10n.globalAiNoModelsTitle,
+            message: l10n.globalAiNoModelsMessage,
           )
         else
           ...List.generate(currentProvider.models.length, (mIdx) {
@@ -780,7 +771,6 @@ class _ModelBlockCardState extends State<_ModelBlockCard> {
           ),
           const SizedBox(height: 10),
 
-          // 多模态能力：图片与音频同一行两个 Checkbox，无冒号
           Row(
             children: [
               Text(
@@ -790,40 +780,30 @@ class _ModelBlockCardState extends State<_ModelBlockCard> {
                 ),
               ),
               const SizedBox(width: 16),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Checkbox(
-                    value: widget.model.supportImages,
-                    onChanged: (v) {
-                      widget.onUpdate(
-                        widget.model.copyWith(supportImages: v ?? false),
-                      );
-                    },
-                  ),
-                  Text(
-                    l10n.globalAiSupportImages,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ],
+              AppCheckboxRow(
+                value: widget.model.supportImages,
+                onChanged: (v) {
+                  widget.onUpdate(
+                    widget.model.copyWith(supportImages: v ?? false),
+                  );
+                },
+                title: Text(
+                  l10n.globalAiSupportImages,
+                  style: theme.textTheme.bodyMedium,
+                ),
               ),
               const SizedBox(width: 16),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Checkbox(
-                    value: widget.model.supportAudio,
-                    onChanged: (v) {
-                      widget.onUpdate(
-                        widget.model.copyWith(supportAudio: v ?? false),
-                      );
-                    },
-                  ),
-                  Text(
-                    l10n.globalAiSupportAudio,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ],
+              AppCheckboxRow(
+                value: widget.model.supportAudio,
+                onChanged: (v) {
+                  widget.onUpdate(
+                    widget.model.copyWith(supportAudio: v ?? false),
+                  );
+                },
+                title: Text(
+                  l10n.globalAiSupportAudio,
+                  style: theme.textTheme.bodyMedium,
+                ),
               ),
             ],
           ),

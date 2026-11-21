@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 class PhoneFinder {
   const PhoneFinder._();
 
-  static const _channel = MethodChannel('oronbox/find_phone');
+  static const _channel = MethodChannel('org.oroncanopy.oronbox/find_phone');
 
   static Future<void> setFinding(bool finding) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;

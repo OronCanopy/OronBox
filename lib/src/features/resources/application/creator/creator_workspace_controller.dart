@@ -238,10 +238,15 @@ class CreatorWorkspaceController extends Notifier<CreatorWorkspaceState> {
     String name,
     CreatorResourceKind kind,
   ) async {
+    final kindWire = switch (kind) {
+      CreatorResourceKind.watchface => 'watchface',
+      CreatorResourceKind.canopus => 'canopus',
+      CreatorResourceKind.quickApp => 'quickapp',
+    };
     await _mutate('creator.create', {
       'slug': slug,
       'name': name,
-      'kind': kind == CreatorResourceKind.watchface ? 'watchface' : 'quickapp',
+      'kind': kindWire,
     }, operation: CreatorOperation.creating);
     logDiagnostic(
       _log,
@@ -250,9 +255,7 @@ class CreatorWorkspaceController extends Notifier<CreatorWorkspaceState> {
       fields: {
         'resource': state.selected?.resource.id,
         'slug': slug,
-        'kind': kind == CreatorResourceKind.watchface
-            ? 'watchface'
-            : 'quickapp',
+        'kind': kindWire,
       },
     );
   }
@@ -263,11 +266,16 @@ class CreatorWorkspaceController extends Notifier<CreatorWorkspaceState> {
     required String summary,
     required CreatorResourceKind kind,
   }) async {
+    final kindWire = switch (kind) {
+      CreatorResourceKind.watchface => 'watchface',
+      CreatorResourceKind.canopus => 'canopus',
+      CreatorResourceKind.quickApp => 'quickapp',
+    };
     await _runCollectionMutation('creator.collections.create', {
       'slug': slug,
       'name': name,
       'summary': summary,
-      'kind': kind == CreatorResourceKind.watchface ? 'watchface' : 'quickapp',
+      'kind': kindWire,
     }, CreatorOperation.creatingCollection);
   }
 

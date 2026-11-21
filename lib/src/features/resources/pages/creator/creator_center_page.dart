@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:segmented_list/segmented_list.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
+import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
 import 'package:oronbox/src/app/widgets/page_container.dart';
 import 'package:oronbox/src/app/widgets/sys_app_bar.dart';
 import 'package:oronbox/src/app/widgets/stable_fab.dart';
@@ -637,33 +638,16 @@ class _CreatorTermsGateState extends ConsumerState<_CreatorTermsGate> {
         CreatorBottomBar(
           children: [
             Expanded(
-              child: MouseRegion(
-                cursor: _bottomReached
-                    ? SystemMouseCursors.click
-                    : SystemMouseCursors.basic,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _bottomReached
-                      ? () => setState(() => _checked = !_checked)
-                      : null,
-                  child: Row(
-                    children: [
-                      Checkbox(
-                        value: _checked,
-                        onChanged: _bottomReached
-                            ? (value) =>
-                                  setState(() => _checked = value == true)
-                            : null,
-                      ),
-                      Flexible(
-                        child: Text(
-                          _bottomReached
-                              ? l10n.creatorTermsAccept
-                              : l10n.oobeAgreementHint,
-                        ),
-                      ),
-                    ],
-                  ),
+              child: AppCheckboxRow(
+                value: _checked,
+                onChanged: _bottomReached
+                    ? (value) => setState(() => _checked = value == true)
+                    : null,
+                expanded: true,
+                title: Text(
+                  _bottomReached
+                      ? l10n.creatorTermsAccept
+                      : l10n.oobeAgreementHint,
                 ),
               ),
             ),

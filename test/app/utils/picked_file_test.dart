@@ -1,10 +1,37 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:oronbox/src/app/utils/picked_file.dart';
 
 void main() {
+  final binding = TestWidgetsFlutterBinding.ensureInitialized();
+  late Directory imports;
+  setUp(() async {
+    imports = await Directory.systemTemp.createTemp('oronbox-picker-');
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (_) async => imports.path,
+    );
+  });
+  tearDown(() async {
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      null,
+    );
+    await imports.delete(recursive: true);
+  });
+  test('consumed picker copies are released and repeated reads use the captured bytes', () async {
+    final directory = await Directory('${imports.path}/file_picker/session')
+        .create(recursive: true);
+    final file = await File('${directory.path}/input').writeAsBytes([1, 2, 3]);
+    final picked = PickedFileData(name: 'input', path: file.path);
+    expect(await picked.readAsBytes(), [1, 2, 3]);
+    expect(await file.exists(), isFalse);
+    expect(picked.path, isNull);
+    expect(await picked.readAsBytes(), [1, 2, 3]);
+    expect(await picked.xFile!.readAsBytes(), [1, 2, 3]);
+  });
   test('bounded reads reject oversized memory and file inputs', () async {
     await expectLater(
       PickedFileData(

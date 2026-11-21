@@ -17,14 +17,46 @@ class AppDataMaintenance {
     required this.stopRuntimes,
     required this.reload,
   });
+  static const leaseDuration = Duration(seconds: 30);
   final DeviceManager deviceManager;
   final Future<void> Function() initialize, stopRuntimes, reload;
   String? _token;
-  DateTime? _grantedAt;
+  Timer? _leaseCheck;
+  Future<void>? _ending;
   bool _beginning = false;
+  bool _closed = false;
   bool owns(String token) => _token == token;
   final _calls = <Future<void>>{};
+
   bool get active => _token != null;
+
+  void _reset() {
+    final token = _token;
+    _token = null;
+    _leaseCheck?.cancel();
+    _leaseCheck = null;
+    ZeppOsLocalDataGuard.active = false;
+    if (token != null) {
+      HealthStore.resumeForOwner(token);
+    }
+  }
+
+  void _checkLeaseLater(String token) {
+    _leaseCheck = Timer(leaseDuration, () async {
+      try {
+        final lease = await openAppDataDirectory(
+          'storage/maintenance/app-data',
+        );
+        await lease.tryExclusive(() async {
+          if (!_closed && owns(token)) await end(token);
+        });
+      } catch (_) {
+        // A storage error cannot establish that the lease has been abandoned.
+      } finally {
+        if (!_closed && owns(token)) _checkLeaseLater(token);
+      }
+    });
+  }
 
   Future<T> hostCall<T>(Future<T> Function() action) async {
     if (active) throw StateError('Data maintenance is active');
@@ -40,21 +72,9 @@ class AppDataMaintenance {
 
   Future<String> begin() async {
     await initialize();
-    if (active) {
-      if (_beginning ||
-          DateTime.now().difference(_grantedAt!) < const Duration(seconds: 5)) {
-        throw StateError('Data maintenance is active');
-      }
-      final previous = await openAppDataDirectory(
-        'storage/maintenance/app-data',
-      );
-      if (!await previous.tryExclusive(() async {})) {
-        throw StateError('Data maintenance is active');
-      }
-    }
+    if (_closed || active) throw StateError('Data maintenance is unavailable');
     final token = const Uuid().v4();
     _token = token;
-    _grantedAt = DateTime.now();
     _beginning = true;
     ZeppOsLocalDataGuard.active = true;
     try {
@@ -75,27 +95,50 @@ class AppDataMaintenance {
       await Future.wait(_calls.toList()).timeout(const Duration(seconds: 15));
       await ZeppOsSettingsCoordinator.instance.settle();
       await HealthStore.pauseForOwner(token, deviceManager.waitForHealthSync);
-      _grantedAt = DateTime.now();
+      if (_closed) throw StateError('Data maintenance is unavailable');
+      _checkLeaseLater(token);
       return token;
     } catch (_) {
-      HealthStore.resumeForOwner(token);
-      _token = null;
-      ZeppOsLocalDataGuard.active = false;
+      _reset();
       rethrow;
     } finally {
       _beginning = false;
     }
   }
 
-  Future<void> end(String token) async {
-    if (token != _token) throw StateError('Invalid data maintenance owner');
+  Future<void> dispose() async {
+    _closed = true;
+    _leaseCheck?.cancel();
     try {
-      await deviceManager.reloadSavedDevices();
-      await reload();
+      await _ending;
+    } catch (_) {}
+    final token = _token;
+    if (token == null || _beginning) return;
+    try {
+      final lease = await openAppDataDirectory('storage/maintenance/app-data');
+      await lease.tryExclusive(() async {
+        if (owns(token)) _reset();
+      });
+    } catch (_) {
+      // Leave the owner's guard in place if the lease cannot be inspected.
+    }
+  }
+
+  Future<void> end(String token) {
+    if (!owns(token)) {
+      return Future.error(StateError('Invalid data maintenance owner'));
+    }
+    return _ending ??= _end(token).whenComplete(() => _ending = null);
+  }
+
+  Future<void> _end(String token) async {
+    try {
+      if (!_closed) {
+        await deviceManager.reloadSavedDevices();
+        if (!_closed) await reload();
+      }
     } finally {
-      HealthStore.resumeForOwner(token);
-      _token = null;
-      ZeppOsLocalDataGuard.active = false;
+      if (owns(token)) _reset();
     }
   }
 }
@@ -114,7 +157,7 @@ Future<T> runWithAppDataMaintenance<T>(
   final token = acquired.value as String;
   var ended = false;
   Future<void> end() async {
-    ended = true;
+    if (ended) return;
     final released = await host.execute(
       OronBoxCommand(
         method: 'appdata.maintenance.end',
@@ -124,6 +167,7 @@ Future<T> runWithAppDataMaintenance<T>(
     if (!released.ok) {
       throw StateError('Unable to release data maintenance');
     }
+    ended = true;
   }
 
   try {
@@ -145,6 +189,10 @@ Future<T> runWithAppDataMaintenance<T>(
       }
     });
   } finally {
-    if (!ended) await end();
+    if (!ended) {
+      try {
+        await end();
+      } catch (_) {}
+    }
   }
 }

@@ -10,7 +10,7 @@ import 'package:oronbox/src/features/resources/domain/community_resource_codec.d
 import 'package:oronbox/src/features/resources/services/install_queue_notifier.dart';
 import 'package:oronbox/src/features/resources/services/resource_install_service.dart';
 import 'package:oronbox/src/host/application_host_provider.dart';
-import 'package:oronbox/src/device/core/xiaomi_wearable_catalog.dart';
+import 'package:oronbox/src/device/xiaomi/xiaomi_device_catalog.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_device_catalog.dart';
 
 export 'package:oronbox/src/features/resources/services/resource_install_service.dart'
@@ -22,6 +22,7 @@ class ResourceTask {
     required this.resource,
     required this.file,
     required this.codename,
+    this.deviceId,
     this.status = ResourceTaskStatus.pending,
     this.progress = 0,
     this.error,
@@ -34,6 +35,7 @@ class ResourceTask {
   final CommunityResourceDetail resource;
   final CommunityResourceFile file;
   final String codename;
+  final String? deviceId;
   final ResourceTaskStatus status;
   final double progress;
   final String? error;
@@ -87,14 +89,17 @@ class DownloadQueueNotifier extends Notifier<List<ResourceTask>> {
     required CommunityResourceDetail resource,
     required CommunityResourceFile file,
     required String codename,
+    String? deviceId,
   }) {
-    final key = '${resource.ref.key}:${file.id}:$codename';
+    final key =
+        '${resource.ref.key}:${file.id}:$codename${deviceId == null ? '' : ':$deviceId'}';
     if (_enqueuing.contains(key)) return false;
     if (state.any(
       (task) =>
           task.resource.ref == resource.ref &&
           task.file.id == file.id &&
           task.codename == codename &&
+          task.deviceId == deviceId &&
           task.status != ResourceTaskStatus.completed,
     )) {
       return false;
@@ -105,6 +110,7 @@ class DownloadQueueNotifier extends Notifier<List<ResourceTask>> {
         resource,
         file,
         codename,
+        deviceId,
       ).whenComplete(() => _enqueuing.remove(key)),
     );
     return true;
@@ -114,12 +120,14 @@ class DownloadQueueNotifier extends Notifier<List<ResourceTask>> {
     CommunityResourceDetail resource,
     CommunityResourceFile file,
     String codename,
+    String? deviceId,
   ) async {
     final task = ResourceTask(
-      id: '${resource.ref.key}:${file.id}:$codename',
+      id: '${resource.ref.key}:${file.id}:$codename${deviceId == null ? '' : ':$deviceId'}',
       resource: resource,
       file: file,
       codename: codename,
+      deviceId: deviceId,
     );
     state = [...state, task];
     _startNext();
@@ -182,6 +190,7 @@ class DownloadQueueNotifier extends Notifier<List<ResourceTask>> {
         resource: resource,
         file: task.file,
         codename: task.codename,
+        deviceId: task.deviceId,
         status: ResourceTaskStatus.completed,
         progress: 1,
         filePath: downloaded.path,
@@ -230,6 +239,7 @@ class DownloadQueueNotifier extends Notifier<List<ResourceTask>> {
         resource: resource,
         file: task.file,
         codename: task.codename,
+        deviceId: task.deviceId,
         status: ResourceTaskStatus.completed,
         progress: 1,
         filePath: download['path']?.toString() ?? '',
@@ -257,7 +267,8 @@ class DownloadQueueNotifier extends Notifier<List<ResourceTask>> {
           CommunityResourceType.miniprogram => LocalDeviceInstallType.app,
           CommunityResourceType.watchface => LocalDeviceInstallType.watchface,
           CommunityResourceType.firmware => LocalDeviceInstallType.firmware,
-          CommunityResourceType.canopus => LocalDeviceInstallType.watchface,
+          CommunityResourceType.canopus => LocalDeviceInstallType.canopus,
+          CommunityResourceType.resPack => LocalDeviceInstallType.resPack,
         },
         source: 'download-queue',
       );
@@ -267,6 +278,7 @@ class DownloadQueueNotifier extends Notifier<List<ResourceTask>> {
             resource: task.resource,
             file: task.file,
             codename: task.codename,
+            deviceId: task.deviceId,
             filePath: task.filePath,
             bytes: bytes,
             analysis: analysis,
@@ -288,6 +300,7 @@ class DownloadQueueNotifier extends Notifier<List<ResourceTask>> {
                   'path': task.filePath,
                   'title': task.resource.name,
                   'description': task.codename,
+                  if (task.deviceId != null) 'device': task.deviceId,
                   'deleteAfter': true,
                   'autoClean': true,
                   'resource': communityResourceDetailToJson(task.resource),
@@ -323,6 +336,7 @@ class DownloadQueueNotifier extends Notifier<List<ResourceTask>> {
             resource: task.resource,
             file: task.file,
             codename: task.codename,
+            deviceId: task.deviceId,
             status: status,
             progress: normalized,
             error: error,
@@ -360,6 +374,7 @@ class DownloadQueueNotifier extends Notifier<List<ResourceTask>> {
             resource: task.resource,
             file: task.file,
             codename: task.codename,
+            deviceId: task.deviceId,
           )
         else
           task,

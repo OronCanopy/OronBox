@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -142,7 +143,11 @@ String creatorTargetLabel(AppLocalizations l10n, String target) =>
     };
 
 String creatorKindLabel(AppLocalizations l10n, CreatorResourceKind kind) =>
-    kind == CreatorResourceKind.watchface ? l10n.watchface : l10n.quickApp;
+    switch (kind) {
+      CreatorResourceKind.watchface => l10n.watchface,
+      CreatorResourceKind.canopus => l10n.module,
+      CreatorResourceKind.quickApp => l10n.quickApp,
+    };
 
 String creatorWorkspaceTitle(CreatorWorkspace workspace) {
   final latest = workspace.latestRevision;
@@ -270,9 +275,11 @@ class _CreatorResourceThumbnailState
       ),
       child: Center(
         child: Icon(
-          _effectiveKind == CreatorResourceKind.watchface
-              ? Icons.watch_outlined
-              : Icons.apps_outlined,
+          switch (_effectiveKind) {
+            CreatorResourceKind.watchface => Icons.watch_outlined,
+            CreatorResourceKind.canopus => Icons.memory_outlined,
+            CreatorResourceKind.quickApp => Icons.apps_outlined,
+          },
           color: colors.onSurfaceVariant,
           size: widget.size * 0.5,
         ),
@@ -283,7 +290,7 @@ class _CreatorResourceThumbnailState
 
 void showCreatorFailure(BuildContext context, Object error) {
   final l10n = AppLocalizations.of(context)!;
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = appScaffoldMessengerOf(context);
   messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(localizedErrorMessage(l10n, error))));

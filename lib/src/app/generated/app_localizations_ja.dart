@@ -31,7 +31,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get pluginMarket => 'プラグインマーケット';
 
   @override
-  String get pluginMarketUnavailable => 'プラグインマーケットはまだ利用できません';
+  String get pluginMarketEmpty => '利用できるプラグインはありません';
+
+  @override
+  String get pluginSearchEmpty => '一致するプラグインが見つかりません';
 
   @override
   String get pluginEmpty => 'インストール済みのプラグインはありません';
@@ -64,12 +67,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get pluginPermissions => '権限';
 
   @override
-  String get pluginInstallConfirmTitle => 'プラグインのインストールを確認';
-
-  @override
-  String get pluginUpdateConfirmTitle => 'プラグインの更新を確認';
-
-  @override
   String get pluginDeclaredPermissions => 'このプラグインは次の権限を宣言しています：';
 
   @override
@@ -83,39 +80,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get pluginUninstallMessage => 'プラグインのデータも削除されます';
-
-  @override
-  String get pluginUpload => 'プラグインをアップロード';
-
-  @override
-  String get pluginPublishTitle => 'プラグインを公開';
-
-  @override
-  String get pluginPublishNew => '新しいプラグインとして公開';
-
-  @override
-  String get pluginPublishUpdate => '同じIDの公開済みプラグインを更新';
-
-  @override
-  String get pluginTakedown => '非公開にする';
-
-  @override
-  String get pluginTakedownConfirm => 'このプラグインをマーケットから完全に削除します';
-
-  @override
-  String get pluginLoginRequired => 'プラグインをアップロードするにはログインしてください';
-
-  @override
-  String get pluginSubmittedForReview => '審査に送信しました。承認後に掲載されます';
-
-  @override
-  String get pluginStatePending => '審査中';
-
-  @override
-  String get pluginStateRejected => '却下';
-
-  @override
-  String get pluginStateDelisted => '非公開';
 
   @override
   String get pluginLegacyWarningTitle => '旧形式のプラグイン';
@@ -171,6 +135,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get creatorResourceSummary => 'リソース概要';
+
+  @override
+  String get creatorSummaryHint => '1〜2文の簡単な紹介（1行プレーンテキスト）';
+
+  @override
+  String get creatorDescriptionHint => '詳細な説明（複数行の Markdown を使用可能）';
 
   @override
   String get creatorResourceMetadataRequired => 'リソース名と概要は必須です';
@@ -288,14 +258,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get creatorAtLeastOneDevice => '各リソースファイルには少なくとも1台のデバイスを紐付けてください';
 
   @override
-  String get resourceAstroBoxEncryptedTitle => 'OronBoxはこのAstroBoxリソースを処理できません';
-
-  @override
-  String get resourceAstroBoxEncryptedMessage =>
-      'このリソースはAstroBox Creator Consoleの非公開暗号化アップロードを使用しています。OronBoxでは復号、ダウンロード、インストールできません。AstroBoxで開いてください';
-
-  @override
-  String get resourceAstroBoxEncryptedAction => '了解';
+  String get resourceAstroBoxPurchaseAction => '了解';
 
   @override
   String get filter => 'フィルター';
@@ -528,6 +491,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceWatchfaceCount => '文字盤数';
 
   @override
+  String get deviceModuleCount => 'モジュール数';
+
+  @override
+  String get modules => 'モジュール';
+
+  @override
   String get connection => '接続';
 
   @override
@@ -755,6 +724,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceFeaturesInstallWatchface => '文字盤をインストール';
 
   @override
+  String get deviceFeaturesInstallModule => 'モジュールをインストール';
+
+  @override
   String get deviceFeaturesInstallFirmware => 'ファームウェア更新';
 
   @override
@@ -792,7 +764,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get firmwareDownloadLatestFull => '最新の完全パッケージをダウンロード';
 
   @override
-  String get firmwareUpdateNow => '更新';
+  String get firmwareUpdateIncrementalPackage => '差分パッケージで更新';
+
+  @override
+  String get firmwareUpdateFullPackage => '完全パッケージで更新';
 
   @override
   String get firmwareReleaseNotes => 'リリースノート';
@@ -861,12 +836,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get voiceLabContinuousCaptureDescription => '現在の録音が終わると次の録音を要求';
-
-  @override
-  String get voiceLabDisableMonitoring => 'ライブ監視を無効化';
-
-  @override
-  String get voiceLabEnableMonitoring => 'ライブ監視を有効化';
 
   @override
   String get voiceLabReplyLabel => '時計へ返信を送信';
@@ -1432,12 +1401,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceMusicTransferred => '音楽の転送完了';
 
   @override
-  String get deviceMusicLibrary => 'デバイスの音楽';
-
-  @override
-  String get deviceMusicLibraryDescription => 'デバイス上の曲とプレイリストを管理';
-
-  @override
   String get deviceMusicSongs => '曲';
 
   @override
@@ -1516,12 +1479,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceRecordingsDescription => '時計から録音を同期して書き出し';
-
-  @override
-  String get deviceRecordingsLibrary => 'デバイス録音';
-
-  @override
-  String get deviceRecordingsLibraryDescription => '時計から録音を書き出します';
 
   @override
   String get deviceRecordingsHint => '録音は1件ずつ受信・検証します。同期後に各元ファイルを書き出してください';
@@ -1794,6 +1751,29 @@ class AppLocalizationsJa extends AppLocalizations {
   String get watchfaceManagementNone => '文字盤はありません';
 
   @override
+  String get moduleManagementTitle => 'モジュール管理';
+
+  @override
+  String get moduleManagementNone => 'インストール済みのモジュールはありません';
+
+  @override
+  String moduleUninstallConfirm(String name) {
+    return 'モジュール「$name」をアンインストールしますか？';
+  }
+
+  @override
+  String get moduleStatusEnabled => '有効';
+
+  @override
+  String get moduleStatusDisabled => '無効';
+
+  @override
+  String get moduleEnable => '有効にする';
+
+  @override
+  String get moduleDisable => '無効にする';
+
+  @override
   String get open => '開く';
 
   @override
@@ -2043,6 +2023,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsMiAccountMissingCredentials => 'ユーザー名とパスワードを入力してください';
 
   @override
+  String get settingsMiAccountTwoFactorTitle => 'Xiaomiアカウント認証';
+
+  @override
   String get settingsMiAccountTwoFactorPrompt => '2段階認証を完了してください';
 
   @override
@@ -2137,7 +2120,7 @@ class AppLocalizationsJa extends AppLocalizations {
       'デバイスが予期せず切断されたときに再接続を試みる';
 
   @override
-  String get deviceReconnectAttempting => 'デバイス接続に異常があり、再接続を試行中';
+  String get deviceReconnectAttempting => 'デバイスへの再接続を試行中';
 
   @override
   String get deviceReconnectSucceeded => '再接続しました';
@@ -2555,9 +2538,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get pluginPermissionExportFile => 'ホストへファイルを書き出す';
 
   @override
-  String get pluginPermissionNetwork => 'ネットワークへアクセス';
-
-  @override
   String get pluginPermissionInterconnect => 'デバイスアプリと通信';
 
   @override
@@ -2698,6 +2678,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get resourceTypeQuickApp => 'クイックアプリ';
+
+  @override
+  String get resourceTypeResPack => 'リソースパック';
 
   @override
   String get resourceTypeWatchface => '文字盤';
@@ -2886,7 +2869,35 @@ class AppLocalizationsJa extends AppLocalizations {
   String get installQueueFixWatchfaceId => '文字盤IDを修正';
 
   @override
-  String get installQueueFixWatchfaceIdHint => '12桁以内の数字を入力';
+  String get installQueueFixWatchfaceIdHint => '新しい文字盤 ID を入力';
+
+  @override
+  String get installQueueReinstallWatchface => '文字盤の再インストール';
+
+  @override
+  String get installQueueRetryDirectly => 'そのまま再試行';
+
+  @override
+  String get installLowStorageMessage =>
+      'デバイスの予約済みストレージ容量が不足しているか、保存件数の上限に達しています';
+
+  @override
+  String get installLowBatteryMessage => 'デバイスのバッテリー残量が不足しています';
+
+  @override
+  String get installQuantityLimitMessage => 'デバイスへのインストール数が上限に達しています';
+
+  @override
+  String get installQueueReplaceWatchface => '削除して再インストール';
+
+  @override
+  String installQueueReplaceWatchfaceMessage(String id) {
+    return 'ID $id の文字盤がデバイスに存在するため、このバージョンを直接インストールできません\nそのまま再試行するか、既存の文字盤を削除して再インストールできます\n削除後にインストールが失敗した場合、元の文字盤は自動的に復元できません';
+  }
+
+  @override
+  String get watchfaceDowngradeMessage =>
+      '同じ ID の文字盤がデバイスに存在するため、このバージョンを直接インストールできません';
 
   @override
   String get authorize => '認証';
@@ -3988,7 +3999,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get weatherAutoSyncDescription => 'デバイスデータの同期時に天気データを自動同期';
 
   @override
-  String get alarmManagementTitle => 'Alarm management';
+  String get alarmManagementTitle => 'アラーム管理';
+
+  @override
+  String get alarmManagementNone => '設定されたアラームはありません';
 
   @override
   String get alarmManagementDescription =>
@@ -4819,7 +4833,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get errorSppBondRemovalFailed =>
-      'Android 11 未満ではシステムが removeBond をサポートしていません。頻繁に切断される場合は、Xiaomi Fitness で別のデバイスに切り替えるか、「付近のデバイス」権限をオフにしてください';
+      'Bluetooth のペアリングを解除できませんでした\nスマートフォンの Bluetooth 設定で解除してから再試行してください';
 
   @override
   String get viewAllResources => 'すべて表示';
@@ -5014,7 +5028,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get qrScanImageFailed => 'この画像を読み取れません';
 
   @override
-  String get qrScanCameraUnavailable => 'カメラを利用できません\n画像からQRコードを読み取れます';
+  String get qrScanCameraUnavailable => 'カメラを利用できません';
 
   @override
   String get qrScanChooseCode => 'QRコードを選択';
@@ -5271,7 +5285,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get appDataClearCacheDescription =>
-      '画像、プラグイン、文書のキャッシュと期限切れ一時ファイルを削除\n実行中のプラグインとデバイスアプリを停止します';
+      '画像、WebAssembly コンパイル、プラグイン、ドキュメントのキャッシュと期限切れの一時ファイルを削除\n必要に応じて再生成またはダウンロードされます\n実行中のプラグインとデバイスアプリは停止します';
 
   @override
   String get appDataCacheCleared => 'キャッシュを削除しました';
@@ -5357,7 +5371,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appDataDownloadsDescription => 'ダウンロードとインストールの一時ファイル';
 
   @override
-  String get appDataPluginCacheDescription => 'プラグインのキャッシュと一時ファイル';
+  String get appDataPluginCacheDescription => 'プラグインが作成したキャッシュと一時ファイル';
 
   @override
   String get appDataImagesDescription => 'リソース閲覧で保存した画像キャッシュ';
@@ -5492,7 +5506,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get appDataClearCachedCategoryDescription =>
-      '未使用のキャッシュのみ削除します\n必要に応じて再ダウンロードされます';
+      '未使用のキャッシュファイルを削除\n必要に応じて再生成またはダウンロードされます';
 
   @override
   String get appDataClearModelsDescription =>
@@ -6015,14 +6029,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get globalAiDelete => 'Delete';
 
   @override
-  String get globalAiNoProvidersPrompt =>
-      'No providers added\nPlease add a new provider above';
-
-  @override
-  String get globalAiNoModelsPrompt =>
-      'No models available, please add a model first';
-
-  @override
   String get globalAiSystemPrompt => 'System prompt';
 
   @override
@@ -6131,16 +6137,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get globalAiTestStart => 'Start Test';
 
   @override
-  String get wasmUnsupportedTitle => '現在のシステムでは Wasm ランタイムを読み込めません';
-
-  @override
-  String get wasmUnsupportedMessage =>
-      'Android 8 のカーネルセキュリティ制限により、\n音声ストリーミング認識と画像圧縮機能は利用できません\n\n上記機能を使用するには Android 9+ にアップデートするか、\nAndroid 8 以外のデバイスをご利用ください';
-
-  @override
-  String get doNotShowAgainThisSession => '今回の起動中は再表示しない';
-
-  @override
   String get settingsMiAccountRegion => 'サーバー地域';
 
   @override
@@ -6160,4 +6156,453 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get settingsMiAccountRegionIn => 'インド (IN)';
+
+  @override
+  String get pluginPermissionReadClipboard => 'クリップボードを読み取る';
+
+  @override
+  String get pluginPermissionWriteClipboard => 'クリップボードに書き込む';
+
+  @override
+  String get pluginPermissionHostServer => 'ローカル HTTP サーバーを起動する';
+
+  @override
+  String get pluginPermissionReceiveLink => 'アプリのリンクを受信する';
+
+  @override
+  String get pluginProviderUnavailable => 'このプラグインのリソースプロバイダーは現在利用できません';
+
+  @override
+  String get pluginDisabled => 'プラグインは無効です';
+
+  @override
+  String get pluginOpenWindow => '別ウィンドウで開く';
+
+  @override
+  String get pluginRunSettings => '実行設定';
+
+  @override
+  String get pluginEnable => '有効にする';
+
+  @override
+  String get pluginDisable => '無効にする';
+
+  @override
+  String get pluginEnabled => 'プラグインを有効にする';
+
+  @override
+  String get pluginBackground => 'バックグラウンド実行';
+
+  @override
+  String get pluginBackgroundDescription => '10 分間操作や通信がないと停止';
+
+  @override
+  String get pluginBackgroundForbidden => '禁止';
+
+  @override
+  String get pluginBackgroundActive => 'アクティブを維持';
+
+  @override
+  String get pluginBackgroundContinuous => '実行を継続';
+
+  @override
+  String get pluginBackgroundForbiddenDescription => 'プラグインを離れると停止';
+
+  @override
+  String get pluginBackgroundContinuousDescription => 'プラグインを離れても実行を継続';
+
+  @override
+  String get pluginAutoStart => '自動起動';
+
+  @override
+  String get pluginAutoStartDescription => 'OronBox を開いたときに起動します';
+
+  @override
+  String get pluginRunStatus => '実行状態';
+
+  @override
+  String get pluginStopped => '停止中';
+
+  @override
+  String get pluginExistingGrant => '既存の許可';
+
+  @override
+  String get pluginPermissionAsk => '確認する';
+
+  @override
+  String get pluginPermissionAllow => '許可';
+
+  @override
+  String get pluginTargetPermissions => '操作と対象の許可';
+
+  @override
+  String get pluginNoTargetPermissions => 'デバイスやアプリへの許可はありません';
+
+  @override
+  String get errorPlatformCapabilityUnavailable =>
+      'このプラットフォームまたはブラウザーでは利用できません';
+
+  @override
+  String get oauthPopupBlocked => 'このサイトのポップアップを許可してから、もう一度ログインしてください';
+
+  @override
+  String get oauthBrowserCompleting => '元のページでログインを完了しています';
+
+  @override
+  String get oauthBrowserCompleted => 'ログインしました このページを閉じてください';
+
+  @override
+  String get oauthBrowserOriginalClosed => '元のページから応答がありません ここでログインを続行できます';
+
+  @override
+  String get oauthBrowserContinue => 'ログインを続行';
+
+  @override
+  String get wasmCompatibilityTitle => 'ランタイム互換性テスト';
+
+  @override
+  String get wasmCompatibilityMessage =>
+      'OronBox はこの端末で WebAssembly を実行できるかテストする必要があります\n\n次の場合にこの案内が表示されます\n• Android 8~9 と Linux 4.x カーネルを使用している\n• ランタイムの読み込み中またはテスト中にアプリが予期せず終了した\n\n既知の互換性リスクにより、テスト中にアプリが強制終了する可能性があります\n端末のセキュリティポリシーがランタイムと互換性を持たない可能性があります\n\n強制終了した場合は OronBox を再度開いてください\n再度の強制終了を防ぐため、ランタイムの読み込みを一時停止します\n\n画像処理、音声処理、一部のプラグイン、Huami アプリのバックグラウンドスクリプトなどは、関連機能を再び使用する前にテストに成功するまで利用できない場合があります';
+
+  @override
+  String get wasmCompatibilityDefer => '今はテストしない';
+
+  @override
+  String get wasmCompatibilityStart => 'テスト開始';
+
+  @override
+  String get wasmCompatibilityTesting => 'テスト中です、お待ちください';
+
+  @override
+  String get wasmCompatibilityPassed => '互換性テストに成功しました';
+
+  @override
+  String get wasmCompatibilityTestFailed => 'テストが完了していません、再試行するか後でテストしてください';
+
+  @override
+  String get wasmCompatibilityRequired => 'この機能を使用する前に互換性テストを完了してください';
+
+  @override
+  String get pluginType => 'プラグインの種類';
+
+  @override
+  String get pluginTypeAstroBox => 'AstroBox-NG';
+
+  @override
+  String get pluginTypeOronBox => 'OronBox';
+
+  @override
+  String get appDataCompilationCache => 'コンパイルキャッシュ';
+
+  @override
+  String get appDataCompilationCacheDescription => 'WebAssembly コンパイルキャッシュ';
+
+  @override
+  String get openExternally => '外部で開く';
+
+  @override
+  String get externalOpenFailed => 'ブラウザーを開けません';
+
+  @override
+  String get resourceAstroBoxPurchaseTitle => 'このファイルには購入または認証が必要です';
+
+  @override
+  String get resourceAstroBoxPurchaseMessage =>
+      'このリソースは AstroBox Creator Console で暗号化してアップロードされています\n復号には購入または利用許可が必要です\nAstroBox で開いてください';
+
+  @override
+  String get resourceAstroBoxAccessCheckFailed =>
+      'ファイルへのアクセス権を確認できません\nもう一度お試しください';
+
+  @override
+  String get resourceAstroBoxDecryptionFailed => 'ファイルを復号できませんでした\nもう一度お試しください';
+
+  @override
+  String get appDataClearPluginCacheDescription =>
+      'プラグインのキャッシュと一時ファイルを削除\n必要に応じて再生成またはダウンロードされます';
+
+  @override
+  String get appDataClearCompilationCacheDescription =>
+      'WebAssembly コンパイルキャッシュを削除\n必要に応じて再生成されます';
+
+  @override
+  String get resourceMoreDevicesDownload => '他のデバイス用にダウンロード';
+
+  @override
+  String get resourceCompatibleWithDevice => 'このリソースはお使いのデバイスに対応しています';
+
+  @override
+  String get resourceIncompatibleWithDevice => 'このリソースはお使いのデバイスにまだ対応していません';
+
+  @override
+  String get resourceInstallSucceeded => 'インストール成功';
+
+  @override
+  String get installStorageFullTitle => 'デバイスの空き容量が不足しています';
+
+  @override
+  String get installQuantityLimitTitle => 'インストール数の上限に達しました';
+
+  @override
+  String get installStorageFullHelp =>
+      'デバイスの予約領域が不足しているか、リソース数の上限に達しています\nリソースをいくつか削除してから、インストールを再試行してください';
+
+  @override
+  String get installQuantityLimitHelp =>
+      'デバイスのリソースのインストール数が上限に達しています\nリソースをいくつか削除してから、インストールを再試行してください';
+
+  @override
+  String get installTargetDeviceChanged => '先にこのインストールタスクの対象デバイスに切り替えてください';
+
+  @override
+  String get debugNoLogs => 'ログはありません';
+
+  @override
+  String get debugNoLayoutTree => 'このソースにはレイアウトツリーがありません';
+
+  @override
+  String get debugSelectElement => '要素を選択して詳細を表示';
+
+  @override
+  String get debugEmptyDirectory => 'ディレクトリは空です';
+
+  @override
+  String get debugNoProtocolEvents => 'プロトコルイベントはまだ記録されていません';
+
+  @override
+  String get globalAiNoProvidersTitle => 'プロバイダーが追加されていません';
+
+  @override
+  String get globalAiNoProvidersMessage => '上でプロバイダーを追加してください';
+
+  @override
+  String get globalAiNoModelsTitle => '利用できるモデルはありません';
+
+  @override
+  String get globalAiNoModelsMessage => '先にモデルを追加してください';
+
+  @override
+  String get debugNoMatchingLogs => '一致するログはありません';
+
+  @override
+  String get appManagementNoVisibleApps => '表示できるアプリはありません';
+
+  @override
+  String get zeppOsAppCompatibilityEmpty => 'アプリの互換性ファイルが追加されていません';
+
+  @override
+  String get qrScanCameraUnavailableMessage => '画像からQRコードを読み取れます';
+
+  @override
+  String get resourceFeaturesDisabledTitle => 'リソース機能が無効になっています';
+
+  @override
+  String get pairingConnectStep => 'デバイスに接続';
+
+  @override
+  String get pairingAccountStep => 'アカウントを連携';
+
+  @override
+  String get pairingLocalStep => 'ローカルでペアリング';
+
+  @override
+  String get pairingAuthStep => 'デバイスを認証';
+
+  @override
+  String get pairingUnbound => '未ペアリング';
+
+  @override
+  String get pairingContinue => '続ける';
+
+  @override
+  String get pairingStartPrompt => 'このデバイスは紐付けられていません\n案内に従って紐付けを完了してください';
+
+  @override
+  String get pairingSuccess => '接続に成功しました';
+
+  @override
+  String get pairingTitle => 'デバイスを紐付ける';
+
+  @override
+  String get pairingConnecting => 'デバイスに接続しています';
+
+  @override
+  String get pairingConfirmOnDevice => 'デバイスで紐付けを確認してください';
+
+  @override
+  String get pairingCompareCode => '紐付けコードが一致することを確認してください';
+
+  @override
+  String get pairingRebind => 'デバイスを再度紐付ける必要があります';
+
+  @override
+  String get pairingAlreadyBound => 'このデバイスはすでにペアリングされています';
+
+  @override
+  String get pairingUseExistingKey => '既存のキーで接続';
+
+  @override
+  String get engineeringTitle => 'MiWear エンジニアリングモード';
+
+  @override
+  String get engineeringDescription => 'デバイスモードの切替とファームウェア更新';
+
+  @override
+  String get engineeringMode => 'デバイスモード';
+
+  @override
+  String get engineeringUser => 'ユーザーモード';
+
+  @override
+  String get engineeringUserDebug => 'ユーザーデバッグモード';
+
+  @override
+  String get engineeringEng => 'エンジニアリングモード';
+
+  @override
+  String get engineeringModeConfirm => 'デバイスが再起動して接続が切れます\n再起動後に再接続してください';
+
+  @override
+  String get engineeringConnectDevice => 'デバイスを接続';
+
+  @override
+  String get engineeringConnectConfirm => '現在のデバイスとの接続が切れます\n操作するデバイスを確認してください';
+
+  @override
+  String get engineeringFirmwareHint => 'デバイスに対応するファームウェアを選択してください';
+
+  @override
+  String get engineeringOtaConfirm =>
+      '接続中のデバイスをこのファームウェアで更新しますか？\n機種が一致することを確認してください\n更新中は十分な電池残量を確保してください';
+
+  @override
+  String get engineeringReturn => 'ユーザーモードで再起動';
+
+  @override
+  String get engineeringIdle => '操作待ち';
+
+  @override
+  String get engineeringScanning => 'エンジニアリングデバイスを検索中';
+
+  @override
+  String get engineeringConnecting => '接続中';
+
+  @override
+  String get engineeringUpdateBackBlocked =>
+      'ファームウェアを更新しています\n操作が完了するまでお待ちください';
+
+  @override
+  String get engineeringUploading => 'ファームウェアをアップロード中';
+
+  @override
+  String get engineeringRestarting => 'デバイスの再起動を要求中';
+
+  @override
+  String get engineeringWaiting => 'デバイスの再起動を待っています\n起動後に再接続してください';
+
+  @override
+  String get engineeringFailed => '更新が中断されました';
+
+  @override
+  String get engineeringEmpty => 'エンジニアリングデバイスが見つかりません\nモードを確認して再検索してください';
+
+  @override
+  String get engineeringFirmwareError => '空でないファームウェアファイルを選択してください';
+
+  @override
+  String get engineeringResponseError => 'デバイスが要求を拒否したか、予期しない応答を返しました';
+
+  @override
+  String get engineeringTimeout => 'デバイスの応答がタイムアウトしました\n再接続して再試行してください';
+
+  @override
+  String get engineeringMtuError => '制御メッセージを送信できません\n再接続するか SPP を使用してください';
+
+  @override
+  String get engineeringBusyError => '現在の操作を完了またはキャンセルしてください';
+
+  @override
+  String get engineeringConnectionError => '先にエンジニアリングデバイスに接続してください';
+
+  @override
+  String get deviceSettingsTitle => 'デバイス設定';
+
+  @override
+  String get deviceSettingsDescription => 'このデバイスの使い方に合わせて設定を調整';
+
+  @override
+  String get deviceSettingsUnavailable => 'このデバイスで設定できる項目はありません';
+
+  @override
+  String get deviceNotificationSync => '通知の同期';
+
+  @override
+  String get deviceNotificationSyncDescription => '選択したアプリの通知をこのデバイスに送信します';
+
+  @override
+  String get deviceNotificationApps => '同期するアプリ';
+
+  @override
+  String get deviceNotificationAppsEmpty => 'アプリが見つかりません';
+
+  @override
+  String get updateReminderInbox => '受信トレイの通知';
+
+  @override
+  String get inboxNotificationUnread => '未読のメッセージがあります';
+
+  @override
+  String get notificationPermissionsSection => '通知の権限';
+
+  @override
+  String get notificationPermissionDisplay => '通知を表示';
+
+  @override
+  String get notificationPermissionRead => '通知を読み取る';
+
+  @override
+  String get notificationPermissionEnabled => 'オン';
+
+  @override
+  String get notificationPermissionDisabled => 'オフ';
+
+  @override
+  String get notificationPermissionUnavailable => '権限の状態を確認できません';
+
+  @override
+  String get updateReminderFirmwareTitle => 'ファームウェアの更新が見つかりました';
+
+  @override
+  String get updateReminderResourcesTitle => 'リソースの更新が見つかりました';
+
+  @override
+  String get updateReminderPluginsTitle => 'プラグインの更新が見つかりました';
+
+  @override
+  String get updateReminderFirmwareMessage => 'お使いのデバイスのファームウェアを更新できます';
+
+  @override
+  String get updateReminderResourcesMessage => 'お使いのデバイスのリソースを更新できます';
+
+  @override
+  String updateReminderCurrentVersion(String version) {
+    return '現在のバージョン  $version';
+  }
+
+  @override
+  String updateReminderLatestFirmware(String version) {
+    return '最新のファームウェア  $version';
+  }
+
+  @override
+  String get updateReminderSilence => '次の更新まで通知しない';
+
+  @override
+  String get updateReminderInstall => '更新';
+
+  @override
+  String get updateReminderInstallAll => 'すべて更新';
+
+  @override
+  String get updateReminderChanged => '現在、この更新は実行できません';
 }

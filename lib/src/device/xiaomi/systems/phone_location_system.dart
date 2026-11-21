@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
-import 'package:oronbox_location/oronbox_location.dart';
+import 'package:wear_location/wear_location.dart';
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/core/services/phone_location_sessions.dart';
 import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart'

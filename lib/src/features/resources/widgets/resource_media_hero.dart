@@ -42,19 +42,21 @@ class ResourceMediaHero extends StatelessWidget {
   final BoxFit fit;
 
   @override
-  Widget build(BuildContext context) => Opacity(
-    opacity: ResourceLayoutMediaOpacity.of(context),
-    child: Hero(
-      tag: tag,
-      transitionOnUserGestures: true,
-      flightShuttleBuilder: _flightShuttleBuilder,
-      child: _ResourceMediaEndpoint(
-        url: url,
-        width: width,
-        height: height,
-        style: style,
-        fit: fit,
-      ),
+  Widget build(BuildContext context) => Hero(
+    tag: tag,
+    transitionOnUserGestures: true,
+    flightShuttleBuilder: _flightShuttleBuilder,
+    createRectTween: (begin, end) => _ResourceHeroRectTween(
+      begin: begin,
+      end: end,
+      progress: _PredictiveHeroProgress(context),
+    ),
+    child: _ResourceMediaEndpoint(
+      url: url,
+      width: width,
+      height: height,
+      style: style,
+      fit: fit,
     ),
   );
 
@@ -70,40 +72,89 @@ class ResourceMediaHero extends StatelessWidget {
     if (from is! _ResourceMediaEndpoint || to is! _ResourceMediaEndpoint) {
       return from;
     }
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (context, _) {
-        final t = flightDirection == HeroFlightDirection.push
-            ? animation.value
-            : 1 - animation.value;
-        return _ResourceMediaSurface(
-          url: t < .5 ? from.url : to.url,
-          style: ResourceMediaHeroStyle.lerp(from.style, to.style, t),
-          fit: t < .5 ? from.fit : to.fit,
-        );
-      },
+    final progress = flightDirection == HeroFlightDirection.push
+        ? animation
+        : ReverseAnimation(animation);
+    final gestureProgress = _PredictiveHeroProgress(toHeroContext);
+    Widget image(_ResourceMediaEndpoint endpoint) => NetworkImgLayer(
+      src: endpoint.url,
+      width: double.infinity,
+      height: double.infinity,
+      fit: endpoint.fit,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      borderRadius: BorderRadius.zero,
+    );
+    final fromImage = image(from);
+    final toImage = from.url == to.url && from.fit == to.fit ? null : image(to);
+    return InheritedTheme.captureAll(
+      fromHeroContext,
+      AnimatedBuilder(
+        animation: progress,
+        child: fromImage,
+        builder: (context, child) {
+          final value = gestureProgress.transform(progress.value);
+          final style = ResourceMediaHeroStyle.lerp(
+            from.style,
+            to.style,
+            value,
+          );
+          return Opacity(
+            opacity: style.opacity,
+            child: ClipRRect(
+              borderRadius: style.borderRadius,
+              child: toImage == null
+                  ? child
+                  : Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        child!,
+                        Opacity(opacity: value, child: toImage),
+                      ],
+                    ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
 
-class ResourceLayoutMediaOpacity extends InheritedWidget {
-  const ResourceLayoutMediaOpacity({
-    super.key,
-    required this.opacity,
-    required super.child,
-  });
+// Flutter restarts its page animation at predictive-back commit. Keep the
+// Hero's rectangle and appearance progressing from the last dragged position.
+class _PredictiveHeroProgress {
+  _PredictiveHeroProgress(BuildContext context)
+    : _destination = ModalRoute.of(context),
+      _enabled =
+          Theme.of(context).platform == TargetPlatform.android &&
+          Navigator.of(context).userGestureInProgress;
 
-  final double opacity;
+  final ModalRoute<dynamic>? _destination;
+  final bool _enabled;
+  double _previous = 0;
+  double? _committedFrom;
 
-  static double of(BuildContext context) =>
-      context
-          .dependOnInheritedWidgetOfExactType<ResourceLayoutMediaOpacity>()
-          ?.opacity ??
-      1;
+  double transform(double value) {
+    if (_enabled &&
+        _committedFrom == null &&
+        _destination?.isCurrent == true &&
+        value < _previous) {
+      _committedFrom = _previous;
+    }
+    _previous = value;
+    final start = _committedFrom;
+    return start == null ? value : start + (1 - start) * value;
+  }
+}
 
+class _ResourceHeroRectTween extends MaterialRectCenterArcTween {
+  _ResourceHeroRectTween({super.begin, super.end, required this.progress});
+
+  final _PredictiveHeroProgress progress;
+
+  // Tween.transform bypasses lerp at 0 and 1, including the commit reset.
   @override
-  bool updateShouldNotify(ResourceLayoutMediaOpacity oldWidget) =>
-      opacity != oldWidget.opacity;
+  Rect? transform(double t) => super.lerp(progress.transform(t));
 }
 
 class _ResourceMediaEndpoint extends StatelessWidget {

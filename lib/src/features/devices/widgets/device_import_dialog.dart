@@ -10,7 +10,9 @@ import 'package:oronbox/src/features/accounts/models/mi_account_models.dart';
 import 'package:oronbox/src/features/accounts/services/mi_account_service.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 
-const _wearableLogChannel = MethodChannel('oronbox/wearable_log');
+const _wearableLogChannel = MethodChannel(
+  'org.oroncanopy.oronbox/wearable_log',
+);
 
 Future<void> showWearableLogSyncDialog(BuildContext context, WidgetRef ref) =>
     _showDeviceImportDialog(context, ref);

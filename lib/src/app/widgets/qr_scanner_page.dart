@@ -1,8 +1,9 @@
+import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:file_picker/file_picker.dart' show FileType;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, compute;
 import 'package:image/image.dart' as image;
-import 'package:flutter/material.dart' as flutter;
+import 'package:material_ui/material_ui.dart' as flutter;
 import 'package:flutter_zxing/flutter_zxing.dart' as zxing;
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
@@ -60,7 +61,11 @@ class _QrScannerPageState extends State<QrScannerPage> {
       // Unmount the camera before opening the picker or a result dialog.
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
-      final selected = await pickFileData(type: FileType.image);
+      final selected = await pickFileData(
+        type: FileType.image,
+        loadBytes: true,
+        maxBytes: 20 * 1024 * 1024,
+      );
       if (!mounted || selected == null) return;
       final result = await compute(_decodeQrImage, selected);
       if (!mounted || _completed) return;
@@ -145,35 +150,28 @@ class _QrScannerPageState extends State<QrScannerPage> {
                         ),
                         child: _pickingImage
                             ? const Center(child: CircularProgressIndicator())
-                            : !_supportsCamera || _cameraFailed
-                            ? Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(24),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.qr_code_scanner,
-                                        size: 48,
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        kIsWeb
-                                            ? l10n.qrScanUnsupported
-                                            : l10n.qrScanCameraUnavailable,
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      if (_supportsCamera)
-                                        TextButton(
-                                          onPressed: () => setState(() {
-                                            _cameraFailed = false;
-                                            _cameraGeneration++;
-                                          }),
-                                          child: Text(l10n.retry),
-                                        ),
-                                    ],
-                                  ),
-                                ),
+                            : !_supportsCamera
+                            ? EmptyStateView(
+                                compact: true,
+                                icon: Icons.qr_code_scanner,
+                                title: kIsWeb
+                                    ? l10n.qrScanUnsupported
+                                    : l10n.qrScanCameraUnavailable,
+                                message: kIsWeb
+                                    ? null
+                                    : l10n.qrScanCameraUnavailableMessage,
+                              )
+                            : _cameraFailed
+                            ? ErrorStateView(
+                                compact: true,
+                                icon: Icons.qr_code_scanner,
+                                title: l10n.qrScanCameraUnavailable,
+                                message: l10n.qrScanCameraUnavailableMessage,
+                                retryLabel: l10n.retry,
+                                onRetry: () => setState(() {
+                                  _cameraFailed = false;
+                                  _cameraGeneration++;
+                                }),
                               )
                             : flutter.Theme(
                                 data: flutter.ThemeData(

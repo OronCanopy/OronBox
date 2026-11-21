@@ -5,12 +5,15 @@ import 'dart:io';
 import 'package:oronbox/src/core/storage/app_data_directory_io.dart';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
+import 'package:oronbox/src/core/storage/managed_temporary_files.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:oronbox/src/commands/command_protocol.dart';
 import 'package:oronbox/src/core/services/shared_prefs_service.dart';
 import 'package:oronbox/src/host/tasks/task_queue.dart';
 
 void main() {
+  final binding = TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPrefsService.instance.init();
@@ -22,8 +25,16 @@ void main() {
     await SharedPrefsService.instance.remove('daemon.tasks');
     root = await Directory.systemTemp.createTemp('oronbox-tasks-test-');
     storage = IoAppDataDirectory(root);
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (_) async => root.path,
+    );
   });
   tearDown(() async {
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      null,
+    );
     await root.delete(recursive: true);
   });
 
@@ -39,6 +50,129 @@ void main() {
     expect(bus.methods, ['first', 'second']);
     await queue.close();
   });
+
+  test('watchface deletion authorization is consumed before execution and ordinary retries', () async {
+    final bus = _ReplacementBus();
+    final queue = HostTaskQueue(bus, storage: storage);
+    final id = queue.enqueue(
+      const OronBoxCommand(
+        method: 'install.local',
+        params: {'replaceWatchfaceId': '123456789', 'device': 'watch'},
+      ),
+    );
+    await bus.started.future;
+    expect(bus.commands.single.params['replaceWatchfaceId'], '123456789');
+    expect(
+      queue.get(id)!.command.params.containsKey('replaceWatchfaceId'),
+      isFalse,
+    );
+    bus.complete.complete();
+    expect((await queue.wait(id))?.status, 'failed');
+    expect(queue.retry(id), isTrue);
+    await queue.wait(id);
+    expect(bus.commands.last.params.containsKey('replaceWatchfaceId'), isFalse);
+    expect(bus.commands.last.params['device'], 'watch');
+    await queue.close();
+  });
+
+  test('offline plugin tasks wait without blocking others and pause survives reconnect', () async {
+    var connected = false;
+    final bus = _DelayedBus();
+    final queue = HostTaskQueue(
+      bus,
+      storage: storage,
+      canRun: (task) => task.command.params['pluginId'] == null || connected,
+    );
+    final waiting = queue.enqueue(
+      const OronBoxCommand(
+        method: 'install.local',
+        params: {'pluginId': 'plugin'},
+      ),
+    );
+    final other = queue.enqueue(const OronBoxCommand(method: 'other'));
+    await queue.wait(other);
+    expect(queue.get(waiting)?.status, 'waiting_device');
+    expect(bus.methods, ['other']);
+    expect(queue.holdPending(), 1);
+    connected = true;
+    queue.resumeWaiting();
+    expect(queue.get(waiting)?.status, 'held');
+    queue.startHeld();
+    expect((await queue.wait(waiting))?.status, 'completed');
+    await queue.close();
+  });
+
+  test('plugin files survive pending work and are deleted on completion or cancellation', () async {
+    final queue = HostTaskQueue(_DelayedBus(), storage: storage);
+    Future<String> stage() => ManagedTemporaryFiles.create(
+      TemporaryFilePurpose.installs,
+      'package.rpk',
+      (path) async {
+        await File(path).writeAsBytes([1, 2, 3]);
+      },
+    );
+    final path = await stage();
+    final id = queue.enqueue(
+      OronBoxCommand(
+        method: 'install.local',
+        params: {'pluginId': 'plugin', 'path': path},
+      ),
+      held: true,
+    );
+    expect(await File(path).readAsBytes(), [1, 2, 3]);
+    queue.startHeld();
+    await queue.wait(id);
+    expect(await File(path).exists(), false);
+    final cancelledPath = await stage();
+    final cancelled = queue.enqueue(
+      OronBoxCommand(
+        method: 'install.local',
+        params: {'pluginId': 'plugin', 'path': cancelledPath},
+      ),
+      held: true,
+    );
+    expect(queue.cancel(cancelled), true);
+    await queue.close();
+    expect(await File(cancelledPath).exists(), false);
+    expect(queue.retry(cancelled), false);
+  });
+
+  test(
+    'closing waits for active cancellation and releases pending plugin files',
+    () async {
+      final bus = _BlockingBus();
+      final queue = HostTaskQueue(
+        bus,
+        storage: storage,
+        onCancelRunning: () async => bus.release(),
+      );
+      final running = queue.enqueue(
+        const OronBoxCommand(method: 'install.local'),
+      );
+      await bus.started.future;
+      final path = await ManagedTemporaryFiles.create(
+        TemporaryFilePurpose.installs,
+        'package.rpk',
+        (path) async {
+          await File(path).writeAsBytes([1]);
+        },
+      );
+      final pending = queue.enqueue(
+        OronBoxCommand(
+          method: 'install.local',
+          params: {'pluginId': 'plugin', 'path': path},
+        ),
+      );
+      await queue.close();
+      expect(queue.get(running)?.status, 'cancelled');
+      expect(queue.get(pending)?.status, 'cancelled');
+      expect(await File(path).exists(), false);
+      expect(
+        () => queue.enqueue(const OronBoxCommand(method: 'other')),
+        throwsStateError,
+      );
+    },
+  );
 
   test('cancelling a running task invokes the cancellation hook', () async {
     final bus = _BlockingBus();
@@ -277,4 +411,26 @@ class _ProgressEvent {
   final double value;
   final String? path;
   final String? operationId;
+}
+
+class _ReplacementBus implements OronBoxCommandBus {
+  final commands = <OronBoxCommand>[];
+  final started = Completer<void>();
+  final complete = Completer<void>();
+
+  @override
+  Stream<CommandEvent> get events => const Stream.empty();
+
+  @override
+  Future<CommandResult> execute(OronBoxCommand command) async {
+    commands.add(command);
+    if (!started.isCompleted) started.complete();
+    await complete.future;
+    return const CommandResult.failure(
+      CommandError('failed', 'Install failed'),
+    );
+  }
+
+  @override
+  Future<void> close() async {}
 }

@@ -108,10 +108,11 @@ npx oronbox-cli pair
 
 ### 环境准备
 
-Flutter stable 与 Rust stable 是所有平台的前提：
+用 [FVM](https://fvm.app) 安装 `.fvmrc` 指定的 Flutter 版本后，获取项目依赖：
 
-- Flutter stable：版本见 `.fvmrc`，可用 [fvm](https://fvm.app) 安装，装好后 `flutter pub get`
-- Rust stable：用 rustup 安装；WASM 运行库在首次构建时从源码编译
+```sh
+fvm flutter pub get --enforce-lockfile
+```
 
 Debian / Ubuntu 依赖：
 
@@ -121,15 +122,9 @@ sudo apt install libsecret-1-dev clang cmake ninja-build pkg-config zip curl \
   libbluetooth-dev libayatana-appindicator3-dev dpkg-dev rpm flatpak flatpak-builder
 ```
 
-ARM64 另需音频库（`flutter_soloud` 自带的 Xiph `.so` 仅 amd64，ARM64 改用系统库）：
-
-```sh
-sudo apt install libflac-dev libogg-dev libopus-dev libvorbis-dev
-```
-
 其他发行版按对应包名安装同等依赖与打包工具：gtk3、webkit2gtk-4.1、bluez、libblkid、libasound2、xz，以及 dpkg-deb / rpmbuild / makepkg / linuxdeploy / appimagetool / flatpak-builder
 
-Windows：Visual Studio 2022（C++ 桌面工作负载）；WebView2 SDK 可用 `windows/scripts/install_webview2_sdk.ps1` 安装
+Windows：Visual Studio 2022（C++ 桌面工作负载）；WebView2 SDK 由 `webview_all` 插件管理
 
 macOS：Xcode，仅能在 macOS 主机上构建
 
@@ -175,7 +170,7 @@ fvm exec tool/build_macos.sh [--format zip|dmg|all] [--abi arm64|x86_64|universa
 #### Windows
 
 ```powershell
-powershell -File tool/build_windows.ps1 [-Dev] [-SkipWebView2Sdk] [-WebView2SdkVersion <版本>]
+powershell -File tool/build_windows.ps1 [-Dev]
 ```
 
 或在 CMD 中执行批处理：

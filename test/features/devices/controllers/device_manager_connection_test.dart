@@ -272,98 +272,93 @@ void main() {
     },
   );
 
-    test(
-      'reconnecting in error state aborts stale connect and begins fresh attempt',
-      () async {
-        final bluetooth = _BlockingBluetoothPlatform()
-          ..errorToThrow = Exception('Simulated Bluetooth SPP failure');
-        final container = ProviderContainer(
-          overrides: [bluetoothPlatformProvider.overrideWithValue(bluetooth)],
-        );
-        addTearDown(container.dispose);
-        final manager = container.read(deviceManagerProvider.notifier);
+  test(
+    'reconnecting in error state aborts stale connect and begins fresh attempt',
+    () async {
+      final bluetooth = _BlockingBluetoothPlatform()
+        ..errorToThrow = Exception('Simulated Bluetooth SPP failure');
+      final container = ProviderContainer(
+        overrides: [bluetoothPlatformProvider.overrideWithValue(bluetooth)],
+      );
+      addTearDown(container.dispose);
+      final manager = container.read(deviceManagerProvider.notifier);
 
-        final first = manager.connect(
-          'AA:BB:CC:DD:EE:FF',
-          'Xiaomi Watch S5',
-          'test-auth-key',
-          connectType: ConnectType.spp.name,
-        );
-        await first;
+      final first = manager.connect(
+        'AA:BB:CC:DD:EE:FF',
+        'Xiaomi Watch S5',
+        'test-auth-key',
+        connectType: ConnectType.spp.name,
+      );
+      await first;
 
-        expect(
-          container.read(deviceManagerProvider).protocolState,
-          ProtocolState.error,
-        );
+      expect(
+        container.read(deviceManagerProvider).protocolState,
+        ProtocolState.error,
+      );
 
-        bluetooth.errorToThrow = null;
-        final initialCalls = bluetooth.connectCalls;
+      bluetooth.errorToThrow = null;
+      final initialCalls = bluetooth.connectCalls;
 
-        final second = manager.connect(
-          'AA:BB:CC:DD:EE:FF',
-          'Xiaomi Watch S5',
-          'test-auth-key',
-          connectType: ConnectType.spp.name,
-        );
-        await _waitFor(() => bluetooth.connectCalls > initialCalls);
+      final second = manager.connect(
+        'AA:BB:CC:DD:EE:FF',
+        'Xiaomi Watch S5',
+        'test-auth-key',
+        connectType: ConnectType.spp.name,
+      );
+      await _waitFor(() => bluetooth.connectCalls > initialCalls);
 
-        expect(second, isNot(same(first)));
-        await manager.cancelConnect();
-      },
+      expect(second, isNot(same(first)));
+      await manager.cancelConnect();
+    },
+  );
+
+  test('reconnecting after manual cancellation preserves active connecting state without superseded teardown clobber', () async {
+    final bluetooth = _BlockingBluetoothPlatform();
+    final container = ProviderContainer(
+      overrides: [bluetoothPlatformProvider.overrideWithValue(bluetooth)],
+    );
+    addTearDown(container.dispose);
+    final manager = container.read(deviceManagerProvider.notifier);
+
+    final first = manager.connect(
+      'AA:BB:CC:DD:EE:FF',
+      'Xiaomi Watch S5',
+      'test-auth-key',
+      connectType: ConnectType.spp.name,
+    );
+    await _waitFor(() => bluetooth.connectCalls == 1);
+
+    await manager.cancelConnect();
+    expect(container.read(deviceManagerProvider).connecting, isFalse);
+
+    final second = manager.connect(
+      'AA:BB:CC:DD:EE:FF',
+      'Xiaomi Watch S5',
+      'test-auth-key',
+      connectType: ConnectType.spp.name,
+    );
+    await _waitFor(() => bluetooth.connectCalls == 2);
+
+    // Allow any background teardown from the cancelled first connect to settle.
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+
+    final state = container.read(deviceManagerProvider);
+    expect(
+      state.connecting,
+      isTrue,
+      reason:
+          'superseded connect teardown must not reset active connecting state',
+    );
+    expect(
+      state.connectionTargetAddr,
+      'AA:BB:CC:DD:EE:FF',
+      reason: 'superseded connect teardown must not clear connectionTargetAddr',
     );
 
-    test(
-      'reconnecting after manual cancellation preserves active connecting state without superseded teardown clobber',
-      () async {
-        final bluetooth = _BlockingBluetoothPlatform();
-        final container = ProviderContainer(
-          overrides: [bluetoothPlatformProvider.overrideWithValue(bluetooth)],
-        );
-        addTearDown(container.dispose);
-        final manager = container.read(deviceManagerProvider.notifier);
-
-        final first = manager.connect(
-          'AA:BB:CC:DD:EE:FF',
-          'Xiaomi Watch S5',
-          'test-auth-key',
-          connectType: ConnectType.spp.name,
-        );
-        await _waitFor(() => bluetooth.connectCalls == 1);
-
-        await manager.cancelConnect();
-        expect(container.read(deviceManagerProvider).connecting, isFalse);
-
-        final second = manager.connect(
-          'AA:BB:CC:DD:EE:FF',
-          'Xiaomi Watch S5',
-          'test-auth-key',
-          connectType: ConnectType.spp.name,
-        );
-        await _waitFor(() => bluetooth.connectCalls == 2);
-
-        // Allow any background teardown from the cancelled first connect to settle.
-        await Future<void>.delayed(const Duration(milliseconds: 60));
-
-        final state = container.read(deviceManagerProvider);
-        expect(
-          state.connecting,
-          isTrue,
-          reason: 'superseded connect teardown must not reset active connecting state',
-        );
-        expect(
-          state.connectionTargetAddr,
-          'AA:BB:CC:DD:EE:FF',
-          reason: 'superseded connect teardown must not clear connectionTargetAddr',
-        );
-
-        await manager.cancelConnect();
-        await Future.wait([
-          first.catchError((_) {}),
-          second.catchError((_) {}),
-        ]);
-      },
-    );
-  }
+    await manager.cancelConnect();
+    await Future.wait([first.catchError((_) {}), second.catchError((_) {})]);
+  });
+}
 
 Future<void> _waitFor(bool Function() condition) async {
   for (var attempt = 0; attempt < 100; attempt++) {

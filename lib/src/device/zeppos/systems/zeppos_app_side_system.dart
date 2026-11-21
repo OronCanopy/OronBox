@@ -7,10 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/core/network/app_http_transport.dart';
 import 'package:oronbox/src/device/core/system.dart';
-import 'package:oronbox/src/device/zeppos/app_side/zeppos_app_side_storage.dart';
 import 'package:oronbox/src/device/zeppos/zeppos_device_component.dart';
-import 'package:oronbox/src/features/plugins/runtime/plugin_runtime.dart';
-import 'package:oronbox/src/features/plugins/runtime/plugin_runtime_factory.dart';
+import 'package:oronbox/src/device/zeppos/app_side/zeppos_app_side_runtime.dart';
+import 'package:oronbox/src/device/zeppos/app_side/zeppos_app_side_storage.dart';
 
 class ZeppOsAppSideSessionInfo {
   const ZeppOsAppSideSessionInfo({
@@ -272,7 +271,7 @@ class ZeppOsAppSideSystem extends System {
       _addEvent(appId, type: 'error', message: 'settingsStorage 加载失败：$error');
     }
     _addEvent(appId, type: 'start', message: '脚本加载成功（${source.length} 字符）');
-    final runtime = createJavaScriptPluginRuntime();
+    final runtime = createZeppOsAppSideRuntime();
     final session = _AppSideSession(
       appId: appId,
       version: version,
@@ -326,7 +325,8 @@ class ZeppOsAppSideSystem extends System {
           utf8.encode('${_appSideBootstrap(jsonEncode(settings))}\n$source'),
         ),
         bootstrap: '',
-        hostCall: (method, arguments) => _hostCall(session, method, arguments),
+        hostCall: (method, arguments) async =>
+            _hostCall(session, method, arguments),
       );
       session.runtimeStarted = true;
       await runtime.dispatchEvent('appside.lifecycle.start', '');
@@ -354,7 +354,7 @@ class ZeppOsAppSideSystem extends System {
       port2: header?.port2 ?? 1004,
       extra: header?.extra ?? 0,
       watchSessionOpen: header != null,
-      sourceOverride: '$source\n__zbInstallZmlHooks();',
+      sourceOverride: '$source\n__obInstallZmlHooks();',
       zmlHookHandler: hookHandler,
     );
   }
@@ -705,7 +705,7 @@ class _AppSideSession {
   final int port2;
   final int extra;
   final bool watchSessionOpen;
-  final PluginRuntime runtime;
+  final ZeppOsAppSideRuntime runtime;
   final Map<String, String> settings;
   final ZeppOsZmlHookHandler? zmlHookHandler;
   Future<void> settingsWrite = Future.value();
@@ -726,7 +726,7 @@ class _AppSideSession {
 }
 
 String _appSideBootstrap(String initialSettings) =>
-    'const __zbInitialSettings = $initialSettings;\n'
+    'const __obInitialSettings = $initialSettings;\n'
     r'''
 (() => {
   const listeners = [];
@@ -751,13 +751,13 @@ String _appSideBootstrap(String initialSettings) =>
     }
   };
   globalThis.AstroBox = Object.freeze({event: Object.freeze(eventApi)});
-  globalThis.__zbDispatchEvent = async (name, payload) => {
+  globalThis.__obDispatchEvent = async (name, payload) => {
     for (const callback of [...(runtimeEvents.get(name) || [])]) {
       await callback(payload);
     }
   };
-  globalThis.__zbStartPlugin = async () => {};
-  const initialSettings = __zbInitialSettings;
+  globalThis.__obStartPlugin = async () => {};
+  const initialSettings = __obInitialSettings;
   if (typeof globalThis.ValueError !== 'function') {
     globalThis.ValueError = class ValueError extends Error {
       constructor(message = '') {
@@ -791,30 +791,30 @@ String _appSideBootstrap(String initialSettings) =>
     }
     return result;
   };
-  class ZbBuffer extends Uint8Array {
+  class OronBoxBuffer extends Uint8Array {
     static from(value, encoding = 'utf8') {
       if (typeof value === 'string') {
         if (encoding === 'hex') {
           if (value.length % 2 || !/^[0-9a-f]*$/i.test(value)) throw new TypeError('Invalid hex string');
-          return new ZbBuffer(value.match(/../g)?.map(byte => parseInt(byte, 16)) ?? []);
+          return new OronBoxBuffer(value.match(/../g)?.map(byte => parseInt(byte, 16)) ?? []);
         }
         if (encoding !== 'utf8' && encoding !== 'utf-8') throw new TypeError(`Unknown encoding: ${encoding}`);
-        return new ZbBuffer(utf8Encode(value));
+        return new OronBoxBuffer(utf8Encode(value));
       }
-      if (value instanceof ArrayBuffer) return new ZbBuffer(value);
-      if (ArrayBuffer.isView(value)) return new ZbBuffer(value.buffer, value.byteOffset, value.byteLength);
-      return new ZbBuffer(value || []);
+      if (value instanceof ArrayBuffer) return new OronBoxBuffer(value);
+      if (ArrayBuffer.isView(value)) return new OronBoxBuffer(value.buffer, value.byteOffset, value.byteLength);
+      return new OronBoxBuffer(value || []);
     }
     static alloc(size, fill = 0, encoding) {
-      const value = new ZbBuffer(size);
+      const value = new OronBoxBuffer(size);
       value.fill(fill, 0, value.length, encoding);
       return value;
     }
-    static allocUnsafe(size) { return new ZbBuffer(size); }
+    static allocUnsafe(size) { return new OronBoxBuffer(size); }
     static concat(values, length) {
-      const buffers = Array.from(values, value => ZbBuffer.from(value));
+      const buffers = Array.from(values, value => OronBoxBuffer.from(value));
       const size = length === undefined ? buffers.reduce((sum, value) => sum + value.length, 0) : Number(length);
-      const result = ZbBuffer.alloc(size);
+      const result = OronBoxBuffer.alloc(size);
       let offset = 0;
       for (const value of buffers) {
         result.set(value.subarray(0, Math.max(0, size - offset)), offset);
@@ -823,8 +823,8 @@ String _appSideBootstrap(String initialSettings) =>
       }
       return result;
     }
-    static isBuffer(value) { return value instanceof ZbBuffer; }
-    static byteLength(value, encoding) { return typeof value === 'string' ? ZbBuffer.from(value, encoding).length : ZbBuffer.from(value).length; }
+    static isBuffer(value) { return value instanceof OronBoxBuffer; }
+    static byteLength(value, encoding) { return typeof value === 'string' ? OronBoxBuffer.from(value, encoding).length : OronBoxBuffer.from(value).length; }
     toString(encoding = 'utf8') {
       if (encoding === 'hex') return Array.from(this, byte => byte.toString(16).padStart(2, '0')).join('');
       if (encoding !== 'utf8' && encoding !== 'utf-8') throw new TypeError(`Unknown encoding: ${encoding}`);
@@ -833,7 +833,7 @@ String _appSideBootstrap(String initialSettings) =>
     slice(start = 0, end = this.length) { return this.subarray(start, end); }
     subarray(start = 0, end = this.length) {
       const view = Uint8Array.prototype.subarray.call(this, start, end);
-      return new ZbBuffer(view.buffer, view.byteOffset, view.byteLength);
+      return new OronBoxBuffer(view.buffer, view.byteOffset, view.byteLength);
     }
     copy(target, targetStart = 0, sourceStart = 0, sourceEnd = this.length) {
       if (!ArrayBuffer.isView(target)) throw new TypeError('target must be a Buffer or Uint8Array');
@@ -852,13 +852,13 @@ String _appSideBootstrap(String initialSettings) =>
         Uint8Array.prototype.fill.call(this, value & 0xff, start, end);
         return this;
       }
-      const pattern = typeof value === 'string' ? ZbBuffer.from(value, encoding) : ZbBuffer.from(value);
+      const pattern = typeof value === 'string' ? OronBoxBuffer.from(value, encoding) : OronBoxBuffer.from(value);
       if (!pattern.length) throw new TypeError('fill value must not be empty');
       for (let i = start; i < end; i++) this[i] = pattern[(i - start) % pattern.length];
       return this;
     }
     equals(other) {
-      const value = ZbBuffer.from(other);
+      const value = OronBoxBuffer.from(other);
       return this.length === value.length && this.every((byte, index) => byte === value[index]);
     }
     readUInt8(offset = 0) { return this[offset]; }
@@ -876,7 +876,7 @@ String _appSideBootstrap(String initialSettings) =>
     writeUInt32LE(value, offset = 0) { return this.writeUIntLE(value, offset, 4); }
     writeUInt32BE(value, offset = 0) { return this.writeUIntBE(value, offset, 4); }
   }
-  globalThis.Buffer = ZbBuffer;
+  globalThis.Buffer = OronBoxBuffer;
   const peerSocket = {
     addListener: (event, callback) => {
       if (typeof callback !== 'function') throw new TypeError('peerSocket listener must be a function');
@@ -889,7 +889,7 @@ String _appSideBootstrap(String initialSettings) =>
       if (index !== -1) listeners.splice(index, 1);
     },
     send: data => sendMessage('OronBoxHost', JSON.stringify({
-      method: 'appside.peer.send', args: [ZbBuffer.from(data).toString('hex')]
+      method: 'appside.peer.send', args: [OronBoxBuffer.from(data).toString('hex')]
     }))
   };
   globalThis.messaging = {peerSocket};
@@ -925,7 +925,7 @@ String _appSideBootstrap(String initialSettings) =>
         output.push(bits >> bitCount & 0xff);
       }
     }
-    return new ZbBuffer(output);
+    return new OronBoxBuffer(output);
   };
   globalThis.fetch = (input, options) => {
     const request = typeof input === 'string'
@@ -949,7 +949,7 @@ String _appSideBootstrap(String initialSettings) =>
       );
       response.arrayBuffer = () => Promise.resolve(
         response.bodyBase64 == null
-          ? ZbBuffer.from(bodyText()).buffer
+          ? OronBoxBuffer.from(bodyText()).buffer
           : decodeBase64(response.bodyBase64).buffer
       );
       response.clone = () => ({...response});
@@ -1017,7 +1017,7 @@ String _appSideBootstrap(String initialSettings) =>
     service = value;
     globalThis.appSideService = value;
   };
-  globalThis.__zbInvokeRegistered = async (id, args) => {
+  globalThis.__obInvokeRegistered = async (id, args) => {
     if (!service) throw new Error('ZML AppSideService was not registered');
     if (id === 'appside.zml.request') {
       return await service.request(args[0], args[1] || {});
@@ -1069,7 +1069,7 @@ String _appSideBootstrap(String initialSettings) =>
     }
   });
   AstroBox.event.addEventListener('appside.peer', hex => {
-    const message = ZbBuffer.from(hex, 'hex');
+    const message = OronBoxBuffer.from(hex, 'hex');
     for (const callback of [...listeners]) {
       try {
         callback(message);
@@ -1078,7 +1078,7 @@ String _appSideBootstrap(String initialSettings) =>
       }
     }
   });
-  globalThis.__zbInstallZmlHooks = () => {
+  globalThis.__obInstallZmlHooks = () => {
     if (!service) throw new Error('ZML AppSideService was not registered');
     service.onCall = message => sendMessage('OronBoxHost', JSON.stringify({
       method: 'appside.zml.hook', args: ['onCall', message]

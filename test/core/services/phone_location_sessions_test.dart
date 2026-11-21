@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:oronbox_location/oronbox_location.dart';
+import 'package:wear_location/wear_location.dart';
 import 'package:oronbox/src/core/services/phone_location_sessions.dart';
 import 'package:oronbox/src/core/services/shared_prefs_service.dart';
 
-class _Platform extends OronboxLocation {
+class _Platform extends WearLocation {
   final updates = StreamController<Position>.broadcast();
   int starts = 0, stops = 0;
   int cancellations = 0;

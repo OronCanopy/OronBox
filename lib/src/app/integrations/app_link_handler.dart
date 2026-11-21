@@ -8,12 +8,12 @@ import 'package:app_links/app_links.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/window/desktop_window.dart';
 import 'package:oronbox/src/core/models/bt_models.dart';
 import 'package:oronbox/src/features/accounts/application/host_accounts.dart';
 import 'package:oronbox/src/features/devices/services/device_share_link.dart';
+import 'package:oronbox/src/features/accounts/services/bandbbs_browser_authorization.dart';
 
 final initialDeepLinksProvider = Provider<List<String>>((ref) => const []);
 
@@ -33,12 +33,22 @@ class _AppLinkHandlerState extends ConsumerState<AppLinkHandler> {
   final AppLinks _appLinks = AppLinks();
   final Set<String> _handledLinks = {};
   StreamSubscription<Uri>? _linkSubscription;
+  StreamSubscription<Uri>? _browserCallbacks;
   StreamSubscription<List<String>>? _launchArgumentsSubscription;
   bool _handledInitialLinks = false;
 
   @override
   void initState() {
     super.initState();
+    _browserCallbacks = bandBbsBrowserCallbacks.listen((uri) async {
+      await _handleBandBbsCallback(uri);
+      if (!mounted) return;
+      final accounts = ref.read(hostAccountsProvider);
+      completeBandBbsBrowserCallback(
+        uri,
+        success: accounts.bandbbs.isSignedIn && accounts.error == null,
+      );
+    });
     _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
       _handleLink(uri.toString());
     });
@@ -52,6 +62,8 @@ class _AppLinkHandlerState extends ConsumerState<AppLinkHandler> {
   @override
   void dispose() {
     _linkSubscription?.cancel();
+    _browserCallbacks?.cancel();
+    cancelBandBbsAuthorization();
     _launchArgumentsSubscription?.cancel();
     super.dispose();
   }
@@ -95,7 +107,7 @@ class _AppLinkHandlerState extends ConsumerState<AppLinkHandler> {
           .handleBandBbsCallback(uri);
       if (!handled || !mounted) return handled;
       if (kIsWeb && uri.queryParameters['oauth'] == 'bandbbs') {
-        context.go(uri.path.isEmpty ? '/' : uri.path);
+        clearBandBbsBrowserCallback();
       }
       final l10n = AppLocalizations.of(context)!;
       final state = ref.read(hostAccountsProvider).bandbbs;

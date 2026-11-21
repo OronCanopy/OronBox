@@ -19,7 +19,13 @@ class PluginCommunityCatalog implements CommunityResourceCatalog {
 
   @override
   CommunityCatalogCapabilities get capabilities =>
-      const CommunityCatalogCapabilities(serverSort: true);
+      manager.providerAvailable(_providerId)
+      ? const CommunityCatalogCapabilities(serverSort: true)
+      : const CommunityCatalogCapabilities(
+          search: false,
+          deviceFilter: false,
+          typeFilter: false,
+        );
 
   @override
   Future<CommunityResourcePage> getPage(CommunityResourceQuery query) async {
@@ -28,6 +34,10 @@ class PluginCommunityCatalog implements CommunityResourceCatalog {
         'page': query.page,
         'pageSize': query.pageSize,
         'query': query.query,
+        'keyword': query.query,
+        'category': query.type?.name,
+        'order': query.sort == CommunitySortRule.name ? 'name' : 'last_update',
+        'direction': 'desc',
         'sort': query.sort == CommunitySortRule.recommendation
             ? CommunitySortRule.time.name
             : query.sort.name,
@@ -172,20 +182,25 @@ class PluginCommunityCatalog implements CommunityResourceCatalog {
       name: _required(json, 'name'),
       type: _resourceType(json['type']),
       paidType: _paidType(json['paidType']),
-      authors: (json['authors'] as List? ?? const [])
-          .map((value) {
-            final author = _map(value, 'Plugin provider author');
-            return CommunityResourceAuthor(
-              name: _required(author, 'name'),
-              url: _uri(author['url']),
-              avatarUrl: _uri(author['avatarUrl']),
-            );
-          })
-          .toList(growable: false),
+      authors:
+          (json['authors'] as List? ??
+                  (json['author'] == null ? const [] : [json['author']]))
+              .map((value) {
+                if (value is String) {
+                  return CommunityResourceAuthor(name: value);
+                }
+                final author = _map(value, 'Plugin provider author');
+                return CommunityResourceAuthor(
+                  name: _required(author, 'name'),
+                  url: _uri(author['url']),
+                  avatarUrl: _uri(author['avatarUrl']),
+                );
+              })
+              .toList(growable: false),
       supportedDevices: _strings(json['supportedDevices']),
       iconUrl: _uri(json['iconUrl']),
       coverUrl: _uri(json['coverUrl']),
-      summary: json['summary']?.toString() ?? '',
+      summary: (json['summary'] ?? json['description'])?.toString() ?? '',
       publicUrl: _uri(json['publicUrl']),
       tags: _strings(json['tags']).toList(growable: false),
       version: json['version']?.toString(),
@@ -215,13 +230,20 @@ class PluginCommunityCatalog implements CommunityResourceCatalog {
     return value;
   }
 
-  Set<String> _strings(Object? value) =>
-      (value as List? ?? const []).map((item) => item.toString()).toSet();
+  Set<String> _strings(Object? value) => (value as List? ?? const [])
+      .map(
+        (item) => item is Map
+            ? (item['codename'] ?? item['id'] ?? '').toString()
+            : item.toString(),
+      )
+      .where((item) => item.isNotEmpty)
+      .toSet();
 
   CommunityResourceType _resourceType(Object? value) => switch (value) {
     'watchface' => CommunityResourceType.watchface,
     'firmware' => CommunityResourceType.firmware,
     'canopus' => CommunityResourceType.canopus,
+    'res_pack' || 'resPack' => CommunityResourceType.resPack,
     'quickApp' || 'quickapp' => CommunityResourceType.quickApp,
     'miniprogram' => CommunityResourceType.miniprogram,
     _ => throw FormatException('Unsupported plugin resource type: $value'),

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:oronbox/src/core/storage/managed_temporary_files.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
@@ -22,7 +25,7 @@ class InstallLocalPage extends ConsumerStatefulWidget {
   ConsumerState<InstallLocalPage> createState() => _InstallLocalPageState();
 }
 
-enum InstallType { app, watchface }
+enum InstallType { app, watchface, canopus }
 
 class _InstallLocalPageState extends ConsumerState<InstallLocalPage> {
   String? _fileName;
@@ -43,6 +46,11 @@ class _InstallLocalPageState extends ConsumerState<InstallLocalPage> {
     if (file == null || selected == null) return;
     final selectedSize = await selected.length();
 
+    if (!mounted) {
+      await ManagedTemporaryFiles.releaseImport(selected.path);
+      return;
+    }
+    final previous = _file;
     setState(() {
       _fileName = file.name;
       _file = selected;
@@ -50,12 +58,16 @@ class _InstallLocalPageState extends ConsumerState<InstallLocalPage> {
       _error = null;
       _progress = 0;
     });
+    if (previous != null) {
+      await ManagedTemporaryFiles.releaseImport(previous.path);
+    }
     await _confirmAndEnqueue();
   }
 
   LocalDeviceInstallType get _selectedType => switch (widget.type) {
     InstallType.app => LocalDeviceInstallType.app,
     InstallType.watchface => LocalDeviceInstallType.watchface,
+    InstallType.canopus => LocalDeviceInstallType.canopus,
   };
 
   Future<void> _install() async {
@@ -69,6 +81,7 @@ class _InstallLocalPageState extends ConsumerState<InstallLocalPage> {
         ref: ref,
         selectedType: _selectedType,
         file: file,
+        retainSource: true,
       );
       if (!mounted) return;
       if (enqueued) {
@@ -89,11 +102,19 @@ class _InstallLocalPageState extends ConsumerState<InstallLocalPage> {
   Future<void> _confirmAndEnqueue() => _install();
 
   @override
+  void dispose() {
+    final file = _file;
+    if (file != null) unawaited(ManagedTemporaryFiles.releaseImport(file.path));
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final title = switch (widget.type) {
       InstallType.app => l10n.deviceFeaturesInstallApp,
       InstallType.watchface => l10n.deviceFeaturesInstallWatchface,
+      InstallType.canopus => l10n.deviceFeaturesInstallModule,
     };
 
     return Scaffold(

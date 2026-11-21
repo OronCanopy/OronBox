@@ -1,3 +1,4 @@
+import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
@@ -45,7 +46,7 @@ Future<bool?> showAutoBackupConfigDialog(BuildContext context) {
           bool value,
           ValueChanged<bool?> onChanged,
         ) {
-          return CheckboxListTile(
+          return AppCheckboxTile(
             dense: true,
             visualDensity: VisualDensity.compact,
             contentPadding: EdgeInsets.zero,

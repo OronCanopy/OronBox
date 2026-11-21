@@ -1,6 +1,7 @@
 import 'package:oronbox/src/core/models/bt_models.dart';
 import 'package:oronbox/src/core/models/xiaomi_health_models.dart';
 import 'package:oronbox/src/device/core/device_state.dart';
+import 'package:oronbox/src/device/xiaomi/systems/canopus_system.dart';
 
 enum DeviceConnectionPhase {
   preparing,
@@ -27,6 +28,11 @@ class DeviceManagerState {
     this.systemInfo,
     this.apps = const [],
     this.watchfaces = const [],
+    this.appsLoaded = false,
+    this.watchfacesLoaded = false,
+    this.hasCanopus = false,
+    this.moduleCount = 0,
+    this.modules = const [],
     this.xiaoAiActive = false,
     this.xiaoAiFrameCount = 0,
     this.xiaoAiCapabilities = const {},
@@ -51,6 +57,11 @@ class DeviceManagerState {
   final SystemInfo? systemInfo;
   final List<AppInfo> apps;
   final List<WatchfaceInfo> watchfaces;
+  final bool appsLoaded;
+  final bool watchfacesLoaded;
+  final bool hasCanopus;
+  final int moduleCount;
+  final List<CanopusModuleInfo> modules;
   final bool xiaoAiActive;
   final int xiaoAiFrameCount;
   final Map<String, Object?> xiaoAiCapabilities;
@@ -75,6 +86,11 @@ class DeviceManagerState {
     SystemInfo? systemInfo,
     List<AppInfo>? apps,
     List<WatchfaceInfo>? watchfaces,
+    bool? appsLoaded,
+    bool? watchfacesLoaded,
+    bool? hasCanopus,
+    int? moduleCount,
+    List<CanopusModuleInfo>? modules,
     bool? xiaoAiActive,
     int? xiaoAiFrameCount,
     Map<String, Object?>? xiaoAiCapabilities,
@@ -90,6 +106,11 @@ class DeviceManagerState {
     bool clearConnectionTarget = false,
     bool clearConnectionPhase = false,
   }) {
+    final inventoryReset =
+        clearCurrentDevice ||
+        (currentDevice != null &&
+            currentDevice.addr != this.currentDevice?.addr) ||
+        (protocolState != null && protocolState != ProtocolState.ready);
     return DeviceManagerState(
       currentDevice: clearCurrentDevice
           ? null
@@ -114,6 +135,12 @@ class DeviceManagerState {
       systemInfo: clearSystemInfo ? null : (systemInfo ?? this.systemInfo),
       apps: apps ?? this.apps,
       watchfaces: watchfaces ?? this.watchfaces,
+      appsLoaded: appsLoaded ?? (!inventoryReset && this.appsLoaded),
+      watchfacesLoaded:
+          watchfacesLoaded ?? (!inventoryReset && this.watchfacesLoaded),
+      hasCanopus: hasCanopus ?? this.hasCanopus,
+      moduleCount: moduleCount ?? this.moduleCount,
+      modules: modules ?? this.modules,
       xiaoAiActive: xiaoAiActive ?? this.xiaoAiActive,
       xiaoAiFrameCount: xiaoAiFrameCount ?? this.xiaoAiFrameCount,
       xiaoAiCapabilities: xiaoAiCapabilities ?? this.xiaoAiCapabilities,

@@ -1,3 +1,4 @@
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -66,5 +67,51 @@ Future<void> openResourceExternalLink(BuildContext context, Uri uri) async {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     case null:
       return;
+  }
+}
+
+bool isAstroBoxResourcePurchaseRequired(Object? error) {
+  final message = error?.toString() ?? '';
+  return message.contains('astrobox_purchase_required');
+}
+
+Future<void> showAstroBoxResourcePurchaseDialog(
+  BuildContext context,
+  ResourceRef resource,
+) async {
+  final l10n = AppLocalizations.of(context)!;
+  final openExternally = await OronBoxDialog.show<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      icon: const Icon(Icons.lock_outline),
+      title: Text(l10n.resourceAstroBoxPurchaseTitle),
+      content: Text(l10n.resourceAstroBoxPurchaseMessage),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: Text(l10n.resourceAstroBoxPurchaseAction),
+        ),
+        FilledButton.icon(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          icon: const Icon(Icons.open_in_new),
+          label: Text(l10n.openExternally),
+        ),
+      ],
+    ),
+  );
+  if (openExternally != true || !context.mounted) return;
+  final uri = Uri.https('astrobox.online', '/open', {
+    'source': 'resv2',
+    'id': resource.id,
+    'provider': 'OfficialV2',
+  });
+  try {
+    if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+  } catch (_) {
+    // Some platforms throw when no browser can handle the URL.
+  }
+  if (context.mounted) {
+    appScaffoldMessengerOf(context)
+        .showSnackBar(SnackBar(content: Text(l10n.externalOpenFailed)));
   }
 }

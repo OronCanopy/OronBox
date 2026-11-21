@@ -15,18 +15,28 @@ import 'asr.dart';
 import 'asr_model_download.dart';
 import 'asr_runtime_spec.dart';
 
-AsrRuntimeSpec get _spec => switch (Abi.current()) {
-  Abi.androidArm64 => androidAsrRuntimes[0],
-  Abi.androidArm => androidAsrRuntimes[1],
-  Abi.androidX64 => androidAsrRuntimes[2],
-  _ => throw const AsrFailure('unsupported'),
-};
-String get _relative =>
-    'ai/runtimes/sherpa-onnx/${AsrRuntimeSpec.version}/${_spec.abi}';
+final _usesDownloadedRuntime =
+    Platform.isAndroid ||
+    Platform.isWindows ||
+    (Platform.isLinux && !File('/.flatpak-info').existsSync());
+
+AsrRuntimeSpec get _spec =>
+    downloadedAsrRuntimes[Abi.current()] ??
+    (throw const AsrFailure('unsupported'));
+
+String _runtimeDirectory(Abi abi, AsrRuntimeSpec spec) =>
+    spec.package.startsWith('sherpa_onnx_android_')
+    ? spec.archiveDirectory.split('/').last
+    : abi.toString();
+
+const _runtimeRoot = 'ai/runtimes/sherpa-onnx';
+String get _runtimeGroup =>
+    '${AsrRuntimeSpec.version}/${_runtimeDirectory(Abi.current(), _spec)}';
+String get _relative => '$_runtimeRoot/$_runtimeGroup';
 Future<AppDataDirectory> _store() => openAppDataDirectory(_relative);
 
 Future<bool> isAsrRuntimeInstalled() async {
-  if (!Platform.isAndroid) return true;
+  if (!_usesDownloadedRuntime) return true;
   try {
     final store = await _store();
     final manifest = await store.read('manifest.json');
@@ -55,7 +65,7 @@ Future<void> installAsrRuntime({
   required CancelToken cancel,
   required void Function(int, int) onProgress,
 }) async {
-  if (!Platform.isAndroid) return;
+  if (!_usesDownloadedRuntime) return;
   final spec = _spec;
   final store = await _store();
   final acquired = await store.tryExclusive(() async {
@@ -91,19 +101,16 @@ Future<void> installAsrRuntime({
         onProgress: (n) => onProgress(n, spec.bytes),
       );
       if (cancel.isCancelled) throw const AsrFailure('cancelled');
+      final archive = await staged.read('runtime.tar.gz');
+      if (archive == null) throw const AsrFailure('model_checksum');
+      final abi = Abi.current();
       final files = await compute(
-        extractAsrRuntimeArchive,
-        (await staged.read('runtime.tar.gz'))!,
+        (bytes) => extractAsrRuntimeArchive(bytes, abi: abi),
+        archive,
         debugLabel: 'ASR runtime extraction',
       );
       for (final file in spec.files) {
-        final bytes = files['${spec.abi}/${file.name}'];
-        if (bytes == null ||
-            bytes.length != file.bytes ||
-            sha256.convert(bytes).toString() != file.sha256) {
-          throw const AsrFailure('model_checksum');
-        }
-        await staged.write(file.name, bytes);
+        await staged.write(file.name, files[file.name]!);
       }
       if (cancel.isCancelled) throw const AsrFailure('cancelled');
       for (final file in spec.files) {
@@ -117,6 +124,10 @@ Future<void> installAsrRuntime({
         Uint8List.fromList(utf8.encode(AsrRuntimeSpec.version)),
       );
       await _clearStaging(store);
+    } on DioException catch (error) {
+      throw AsrFailure(
+        CancelToken.isCancel(error) ? 'cancelled' : 'model_download',
+      );
     } finally {
       dio.close();
     }
@@ -125,19 +136,20 @@ Future<void> installAsrRuntime({
 }
 
 /// The entire pinned pub archive is verified before processing its members.
-Map<String, Uint8List> extractAsrRuntimeArchive(Uint8List bytes) {
-  final spec = androidAsrRuntimes
-      .where(
-        (s) =>
-            s.bytes == bytes.length &&
-            s.sha256 == sha256.convert(bytes).toString(),
-      )
-      .firstOrNull;
-  if (spec == null) throw const AsrFailure('model_checksum');
+Map<String, Uint8List> extractAsrRuntimeArchive(
+  Uint8List bytes, {
+  required Abi abi,
+}) {
+  final spec = downloadedAsrRuntimes[abi];
+  if (spec == null ||
+      spec.bytes != bytes.length ||
+      spec.sha256 != sha256.convert(bytes).toString()) {
+    throw const AsrFailure('model_checksum');
+  }
   final archive = TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
   final result = <String, Uint8List>{};
   for (final file in spec.files) {
-    final name = 'android/src/main/jniLibs/${spec.abi}/${file.name}';
+    final name = '${spec.archiveDirectory}/${file.name}';
     final entries = archive.files.where((f) => f.name == name).toList();
     if (entries.length != 1 ||
         !entries.single.isFile ||
@@ -149,15 +161,38 @@ Map<String, Uint8List> extractAsrRuntimeArchive(Uint8List bytes) {
     if (sha256.convert(data).toString() != file.sha256) {
       throw const AsrFailure('model_checksum');
     }
-    result['${spec.abi}/${file.name}'] = Uint8List.fromList(data);
+    result[file.name] = Uint8List.fromList(data);
   }
   return result;
 }
 
+({DynamicLibrary dependency, DynamicLibrary sherpa}) openDownloadedAsrRuntime(
+  String path,
+) {
+  final names = _spec.files;
+  final directory = Platform.isWindows ? path.replaceAll('/', '\\') : path;
+  final separator = Platform.pathSeparator;
+  final dependency = DynamicLibrary.open('$directory$separator${names[0].name}');
+  try {
+    final sherpa = DynamicLibrary.open('$directory$separator${names[1].name}');
+    return (dependency: dependency, sherpa: sherpa);
+  } catch (_) {
+    dependency.close();
+    rethrow;
+  }
+}
+
 void _tryLoad(String path) {
   try {
-    DynamicLibrary.open('$path/libonnxruntime.so');
-    DynamicLibrary.open('$path/libsherpa-onnx-c-api.so');
+    final libraries = openDownloadedAsrRuntime(path);
+    try {
+      libraries.sherpa.lookup<NativeFunction<Pointer<Char> Function()>>(
+        'SherpaOnnxGetVersionStr',
+      );
+    } finally {
+      libraries.sherpa.close();
+      libraries.dependency.close();
+    }
   } catch (_) {
     throw const AsrFailure('local_inference');
   }
@@ -165,7 +200,7 @@ void _tryLoad(String path) {
 
 Future<({String? path, Future<void> Function() release})>
 acquireAsrRuntime() async {
-  if (!Platform.isAndroid) return (path: null, release: () async {});
+  if (!_usesDownloadedRuntime) return (path: null, release: () async {});
   final store = await _store();
   final ready = Completer<String>();
   final release = Completer<void>();
@@ -205,7 +240,7 @@ acquireAsrRuntime() async {
 }
 
 Future<void> removeAsrRuntime() async {
-  if (!Platform.isAndroid) return;
+  if (!_usesDownloadedRuntime) return;
   final store = await _store();
   if (!await store.tryExclusive(() async {
     for (final file in await store.files(includeTemporary: true)) {
@@ -216,7 +251,7 @@ Future<void> removeAsrRuntime() async {
   }
 }
 
-int get asrRuntimeDownloadBytes => Platform.isAndroid ? _spec.bytes : 0;
+int get asrRuntimeDownloadBytes => _usesDownloadedRuntime ? _spec.bytes : 0;
 
 Future<void> _clearStaging(AppDataDirectory store) async {
   final staged = store.scope('.staging');
@@ -226,21 +261,25 @@ Future<void> _clearStaging(AppDataDirectory store) async {
 }
 
 Future<void> cleanupAsrRuntimes() async {
-  if (!Platform.isAndroid) return;
-  final root = await openAppDataDirectory('ai/runtimes/sherpa-onnx');
+  if (!_usesDownloadedRuntime) return;
+  final root = await openAppDataDirectory(_runtimeRoot);
+  final directories = {
+    for (final entry in downloadedAsrRuntimes.entries)
+      _runtimeDirectory(entry.key, entry.value),
+  };
   final groups = <String>{};
   for (final file in await root.files(includeTemporary: true)) {
     final parts = file.path.split('/');
     if (parts.length >= 3 &&
         RegExp(r'^[0-9]+\.[0-9]+\.[0-9]+$').hasMatch(parts[0]) &&
-        androidAsrRuntimes.any((s) => s.abi == parts[1])) {
+        directories.contains(parts[1])) {
       groups.add('${parts[0]}/${parts[1]}');
     }
   }
-  final current = '${AsrRuntimeSpec.version}/${_spec.abi}';
+  final current = _runtimeGroup;
   final expiry = DateTime.now().subtract(const Duration(days: 7));
   for (final group in groups) {
-    final store = await openAppDataDirectory('ai/runtimes/sherpa-onnx/$group');
+    final store = await openAppDataDirectory('$_runtimeRoot/$group');
     await store.tryExclusive(() async {
       for (final file in await store.files(includeTemporary: true)) {
         if (group != current ||

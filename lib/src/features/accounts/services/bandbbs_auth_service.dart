@@ -7,7 +7,10 @@ import 'package:oronbox/src/core/services/oauth_credential_store.dart';
 import 'package:oronbox/src/features/accounts/services/oronbox_session_client.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+import 'bandbbs_browser_authorization.dart';
+import 'bandbbs_oauth_callback.dart';
+
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/core/errors/coded_error.dart';
 import 'package:oronbox/src/core/constants/oronbox_server.dart';
@@ -426,17 +429,10 @@ class BandBbsAuthNotifier extends Notifier<BandBbsAuthState>
   Future<void> _startAuthorization({String? purpose}) async {
     state = state.copyWith(isBusy: true, clearLastError: true);
     try {
-      final returnUri = kIsWeb
-          ? Uri.base
-                .replace(
-                  queryParameters: {
-                    ...Uri.base.queryParameters,
-                    'oauth': 'bandbbs',
-                  },
-                  fragment: '',
-                )
-                .toString()
-          : _callbackUri;
+      if (kIsWeb && bandBbsBrowserReturnUri == null) {
+        reserveBandBbsAuthorization();
+      }
+      final returnUri = bandBbsBrowserReturnUri ?? _callbackUri;
       late final Uri uri;
       if (purpose == 'publish') {
         final session = await sessionIfNeeded();
@@ -469,27 +465,20 @@ class BandBbsAuthNotifier extends Notifier<BandBbsAuthState>
         'BandBBS OAuth start method=GET endpoint=${_endpoint(uri)} '
         'platform=${_platformName()} appVersion=${BuildInfoService.appVersion}',
       );
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      final launched = await openBandBbsAuthorization(uri);
       if (!launched) {
         throw StateError('failed to open BandBBS OAuth page');
       }
       state = state.copyWith(isBusy: false);
     } catch (e) {
+      cancelBandBbsAuthorization();
       state = state.copyWith(isBusy: false, lastError: e.toString());
       rethrow;
     }
   }
 
   Future<bool> handleCallback(Uri uri) async {
-    final nativeCallback =
-        uri.scheme == 'oronbox' &&
-        uri.host == 'oauth' &&
-        uri.path == '/bandbbs';
-    final webCallback = kIsWeb && uri.queryParameters['oauth'] == 'bandbbs';
-    if (!nativeCallback && !webCallback) {
+    if (!isBandBbsOAuthCallback(uri, webLocation: kIsWeb ? Uri.base : null)) {
       return false;
     }
     final ticket = uri.queryParameters['ticket']?.trim() ?? '';
@@ -499,7 +488,10 @@ class BandBbsAuthNotifier extends Notifier<BandBbsAuthState>
         isBusy: false,
         lastError: error?.isNotEmpty == true ? error : 'missing ticket',
       );
-      return true;
+      throw const CommandError(
+        'oauth_callback_failed',
+        'BandBBS authorization did not complete',
+      );
     }
     await exchangeTicket(ticket);
     return true;

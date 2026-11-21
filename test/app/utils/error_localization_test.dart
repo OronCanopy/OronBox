@@ -1,9 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oronbox/src/app/generated/app_localizations_en.dart';
+import 'package:oronbox/src/app/generated/app_localizations_ja.dart';
+import 'package:oronbox/src/app/generated/app_localizations_ru.dart';
 import 'package:oronbox/src/app/generated/app_localizations_zh.dart';
 import 'package:oronbox/src/app/utils/error_localization.dart';
 import 'package:oronbox/src/core/errors/coded_error.dart';
+import 'package:oronbox/src/core/wasm/wasm_compatibility.dart';
+import 'package:oronbox/src/core/errors/platform_capability_error.dart';
 import 'package:oronbox/src/features/accounts/services/bandbbs_auth_service.dart';
 
 void main() {
@@ -11,6 +15,81 @@ void main() {
   final zh = AppLocalizationsZh();
 
   group('localizedErrorMessage', () {
+    test(
+      'installation failures explain the cause in every supported language',
+      () {
+        for (final l10n in [
+          en,
+          zh,
+          AppLocalizationsZhTw(),
+          AppLocalizationsJa(),
+          AppLocalizationsRu(),
+        ]) {
+          final messages = {
+            'watchface_downgrade': l10n.watchfaceDowngradeMessage,
+            'install_low_storage': l10n.installLowStorageMessage,
+            'install_low_battery': l10n.installLowBatteryMessage,
+            'install_quantity_limit': l10n.installQuantityLimitMessage,
+          };
+          for (final entry in messages.entries) {
+            expect(entry.value, isNot(entry.key));
+            expect(localizedErrorMessage(l10n, entry.key), entry.value);
+            expect(
+              localizedErrorMessage(
+                l10n,
+                _TestCodedError(entry.key, 'Raw device diagnostic'),
+              ),
+              entry.value,
+            );
+          }
+        }
+        expect(
+          localizedErrorMessage(en, 'install_low_storage'),
+          'The device has insufficient reserved storage or has reached its item limit',
+        );
+        expect(
+          localizedErrorMessage(en, 'install_low_battery'),
+          'The device battery is too low',
+        );
+      },
+    );
+    test('compatibility protection remains localized across plugin errors', () {
+      for (final error in [
+        const WasmCompatibilityRequired(),
+        'PluginExecutionException(test): wasm_compatibility_required',
+      ]) {
+        expect(localizedErrorMessage(zh, error), zh.wasmCompatibilityRequired);
+      }
+    });
+    test('browser capability and popup errors describe the platform', () {
+      expect(
+        localizedErrorMessage(
+          zh,
+          const PlatformCapabilityError('Web cookies unavailable'),
+        ),
+        zh.errorPlatformCapabilityUnavailable,
+      );
+      expect(
+        localizedErrorMessage(
+          zh,
+          'platform_capability_unavailable: Cross-origin scripts unavailable',
+        ),
+        zh.errorPlatformCapabilityUnavailable,
+      );
+      expect(
+        localizedErrorMessage(
+          zh,
+          const _TestCodedError('oauth_popup_blocked', 'oauth_popup_blocked'),
+        ),
+        zh.oauthPopupBlocked,
+      );
+    });
+    test('plugin provider placeholder has a localized user message', () {
+      expect(
+        localizedErrorMessage(zh, StateError('plugin_provider_unavailable')),
+        zh.pluginProviderUnavailable,
+      );
+    });
     test('comment rejection never displays raw AI reasoning', () {
       expect(
         localizedErrorMessage(
@@ -194,9 +273,20 @@ void main() {
             en,
             _TestCodedError(code, 'actual backend message'),
           ),
-          code == 'comment_blocked'
-              ? en.commentBlocked
-              : 'actual backend message',
+          switch (code) {
+            'comment_blocked' => en.commentBlocked,
+            'astrobox_access_check_failed' =>
+              en.resourceAstroBoxAccessCheckFailed,
+            'astrobox_decryption_failed' => en.resourceAstroBoxDecryptionFailed,
+            'astrobox_purchase_required' => en.resourceAstroBoxPurchaseMessage,
+            'wasm_compatibility_required' => en.wasmCompatibilityRequired,
+            'watchface_downgrade' => en.watchfaceDowngradeMessage,
+            'install_low_storage' => en.installLowStorageMessage,
+            'install_low_battery' => en.installLowBatteryMessage,
+            'install_quantity_limit' => en.installQuantityLimitMessage,
+            'certificate_error' => en.errorCertificateVerificationFailed,
+            _ => 'actual backend message',
+          },
           reason: code,
         );
       }

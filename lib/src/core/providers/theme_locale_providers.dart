@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oronbox/src/core/services/shared_prefs_service.dart';
@@ -142,6 +144,20 @@ class LocaleSettings {
 
   final AppLocale locale;
 
+  static Locale? currentActiveLocale;
+
+  static Locale resolveActiveLocale() {
+    if (currentActiveLocale != null) return currentActiveLocale!;
+    try {
+      final configured = load().materialLocale;
+      if (configured != null) {
+        currentActiveLocale = configured;
+        return configured;
+      }
+    } catch (_) {}
+    return PlatformDispatcher.instance.locale;
+  }
+
   LocaleSettings copyWith({AppLocale? locale}) {
     return LocaleSettings(locale: locale ?? this.locale);
   }
@@ -151,9 +167,11 @@ class LocaleSettings {
   static LocaleSettings load() {
     final prefs = SharedPrefsService.instance;
     final raw = prefs.getString(_keyLocale);
-    return LocaleSettings(
+    final settings = LocaleSettings(
       locale: AppLocale.values.byName(raw ?? AppLocale.system.name),
     );
+    currentActiveLocale = settings.materialLocale;
+    return settings;
   }
 
   Future<void> save() async {
@@ -174,10 +192,15 @@ class LocaleSettings {
 
 class LocaleSettingsNotifier extends Notifier<LocaleSettings> {
   @override
-  LocaleSettings build() => LocaleSettings.load();
+  LocaleSettings build() {
+    final loaded = LocaleSettings.load();
+    LocaleSettings.currentActiveLocale = loaded.materialLocale;
+    return loaded;
+  }
 
   Future<void> setLocale(AppLocale locale) async {
     state = state.copyWith(locale: locale);
+    LocaleSettings.currentActiveLocale = state.materialLocale;
     await state.save();
   }
 }

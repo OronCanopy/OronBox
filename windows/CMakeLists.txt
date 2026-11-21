@@ -81,6 +81,14 @@ install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
+list(FILTER PLUGIN_BUNDLED_LIBRARIES EXCLUDE REGEX
+  "/(sherpa-onnx-c-api|onnxruntime)[.]dll$")
+# The install directory is reused between Windows builds.
+install(CODE [[
+  file(REMOVE "${CMAKE_INSTALL_PREFIX}/sherpa-onnx-c-api.dll"
+              "${CMAKE_INSTALL_PREFIX}/onnxruntime.dll")
+]] COMPONENT Runtime)
+
 if(PLUGIN_BUNDLED_LIBRARIES)
   install(FILES "${PLUGIN_BUNDLED_LIBRARIES}"
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"

@@ -3,6 +3,8 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:oronbox/src/core/errors/coded_error.dart';
+import 'package:oronbox/src/device/xiaomi/systems/watchface_system.dart';
 import 'package:fixnum/fixnum.dart';
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/device/core/event_bus.dart';
@@ -29,6 +31,8 @@ import 'package:oronbox/src/device/xiaomi/protocol/transport/mass_transfer.dart'
 class XiaomiInstallSystem extends XiaomiPbSystem {
   static final _log = getLogger('XiaomiInstallSystem');
   final _inProgress = <MassDataType>{};
+  _ProtoWaiter? _resultWaiter;
+  int _generation = 0;
 
   XiaomiMassSystem get _massSystem => entity.system<XiaomiMassSystem>()!;
   XiaomiInfoSystem get _infoSystem => entity.system<XiaomiInfoSystem>()!;
@@ -72,9 +76,7 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
         );
 
         final status = prepareRet.thirdpartyApp.installResponse.prepareStatus;
-        if (status != pb_common.PrepareStatus.READY) {
-          throw ProtocolException('App prepare not READY: $status');
-        }
+        _checkPrepareStatus(status, 'App prepare not READY: $status');
 
         final result = await _sendMassAndWaitResult(
           dataType: MassDataType.thirdPartyApp,
@@ -99,9 +101,10 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
     );
   }
 
-  Future<void> installWatchface(
+  Future<String> installWatchface(
     Uint8List watchfaceBytes, {
     required String watchfaceId,
+    String? replaceWatchfaceId,
     void Function(double progress)? onProgress,
   }) async {
     final restrictedId = restrictedWatchfaceIdFor(
@@ -124,44 +127,76 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
           watchfaceId,
           fileData,
         );
-        final idBytes = Uint8List.fromList(effectiveWatchfaceId.codeUnits);
-        final paddedIdBytes = Uint8List(12);
-        for (var i = 0; i < 12 && i < idBytes.length; i++) {
-          paddedIdBytes[i] = idBytes[i];
-        }
-        for (var i = 0; i < 12; i++) {
-          fileData[0x28 + i] = paddedIdBytes[i];
+        if (!writeVelaWatchfaceId(fileData, effectiveWatchfaceId)) {
+          throw const FormatException('Invalid Vela watchface ID field');
         }
 
-        final prepareRet = await component.requestPool.request<pb.WearPacket>(
-          packet: pb.WearPacket(
-            type: pb.WearPacket_Type.WATCH_FACE,
-            id: pb_watchface
-                .WatchFace_WatchFaceID
-                .PREPARE_INSTALL_WATCH_FACE
-                .value,
-            watchFace: pb_watchface.WatchFace(
-              prepareInfo: pb_watchface.PrepareInfo(
-                id: effectiveWatchfaceId,
-                size: fileData.length,
-                versionCode: Int64(65536),
+        final generation = _generation;
+        if (replaceWatchfaceId != null &&
+            replaceWatchfaceId != effectiveWatchfaceId) {
+          throw StateError(
+            'Watchface replacement ID no longer matches the payload',
+          );
+        }
+        Future<pb.WearPacket> prepare() =>
+            component.requestPool.request<pb.WearPacket>(
+              packet: pb.WearPacket(
+                type: pb.WearPacket_Type.WATCH_FACE,
+                id: pb_watchface
+                    .WatchFace_WatchFaceID
+                    .PREPARE_INSTALL_WATCH_FACE
+                    .value,
+                watchFace: pb_watchface.WatchFace(
+                  prepareInfo: pb_watchface.PrepareInfo(
+                    id: effectiveWatchfaceId,
+                    size: fileData.length,
+                    versionCode: Int64(65536),
+                  ),
+                ),
               ),
-            ),
-          ),
-          typeMatcher: (p) =>
-              p.whichPayload() == pb.WearPacket_Payload.watchFace &&
-              p.id ==
-                  pb_watchface
-                      .WatchFace_WatchFaceID
-                      .PREPARE_INSTALL_WATCH_FACE
-                      .value,
-          responseMapper: (p) => p,
-        );
+              typeMatcher: (p) =>
+                  p.whichPayload() == pb.WearPacket_Payload.watchFace &&
+                  p.id ==
+                      pb_watchface
+                          .WatchFace_WatchFaceID
+                          .PREPARE_INSTALL_WATCH_FACE
+                          .value,
+              responseMapper: (p) => p,
+              timeout: const Duration(seconds: 30),
+            );
 
-        final status = prepareRet.watchFace.prepareStatus;
-        if (status != pb_common.PrepareStatus.READY) {
-          throw ProtocolException('Watchface prepare not READY: $status');
+        var prepareRet = await prepare();
+        if (entity.isDisposed || generation != _generation) {
+          throw StateError('Device disconnected during watchface preparation');
         }
+        var status = _watchfacePrepareStatus(prepareRet);
+        if (status == pb_common.PrepareStatus.DOWNGRADE &&
+            replaceWatchfaceId != null) {
+          final watchfaces = entity.system<XiaomiWatchfaceSystem>();
+          if (watchfaces == null) {
+            throw StateError('Watchface management is unavailable');
+          }
+          await watchfaces.uninstallWatchface(effectiveWatchfaceId);
+          if (entity.isDisposed || generation != _generation) {
+            throw StateError(
+              'Device disconnected during watchface replacement',
+            );
+          }
+          prepareRet = await prepare();
+          if (entity.isDisposed || generation != _generation) {
+            throw StateError(
+              'Device disconnected during watchface preparation',
+            );
+          }
+          status = _watchfacePrepareStatus(prepareRet);
+        }
+        if (status == pb_common.PrepareStatus.DOWNGRADE) {
+          throw WatchfaceDowngradeException(
+            watchfaceId: effectiveWatchfaceId,
+            deviceId: entity.id,
+          );
+        }
+        _checkPrepareStatus(status, 'Watchface prepare not READY: $status');
 
         final result = await _sendMassAndWaitResult(
           dataType: MassDataType.watchface,
@@ -170,7 +205,12 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
           resultType: pb.WearPacket_Type.WATCH_FACE.value,
           resultId:
               pb_watchface.WatchFace_WatchFaceID.REPORT_INSTALL_RESULT.value,
-          timeout: const Duration(seconds: 60),
+          timeout: const Duration(seconds: 120),
+          expectedSliceLength:
+              prepareRet.watchFace.hasPrepareReply() &&
+                  prepareRet.watchFace.prepareReply.hasExpectedSliceLength()
+              ? prepareRet.watchFace.prepareReply.expectedSliceLength
+              : null,
         );
 
         final code = result!.watchFace.installResult.code;
@@ -181,6 +221,7 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
           component.sar.abortPendingTransmissions(error);
           throw error;
         }
+        return effectiveWatchfaceId;
       },
     );
   }
@@ -218,9 +259,7 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
         );
 
         final status = prepareRet.system.prepareOtaResponse.prepareStatus;
-        if (status != pb_common.PrepareStatus.READY) {
-          throw ProtocolException('Firmware prepare not READY: $status');
-        }
+        _checkPrepareStatus(status, 'Firmware prepare not READY: $status');
 
         final result = await _sendMassAndWaitResult(
           dataType: MassDataType.firmware,
@@ -236,9 +275,10 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
         final resp = result.system.prepareOtaResponse;
         final resultStatus = resp.prepareStatus;
         _log.info('[${entity.id}] firmware install result: $resultStatus');
-        if (resultStatus != pb_common.PrepareStatus.READY) {
-          throw ProtocolException('Firmware install failed: $resultStatus');
-        }
+        _checkPrepareStatus(
+          resultStatus,
+          'Firmware install failed: $resultStatus',
+        );
       },
     );
   }
@@ -278,11 +318,10 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
             );
 
         final status = prepareRet.appIconResponse.prepareStatus;
-        if (status != pb_common.PrepareStatus.READY) {
-          throw ProtocolException(
-            'Notification icon prepare not READY: $status',
-          );
-        }
+        _checkPrepareStatus(
+          status,
+          'Notification icon prepare not READY: $status',
+        );
 
         final expectedSliceLength =
             prepareRet.appIconResponse.hasExpectedSliceLength()
@@ -299,14 +338,15 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
     );
   }
 
-  Future<void> _runInstall({
+  Future<T> _runInstall<T>({
     required MassDataType dataType,
     required Uint8List fileData,
     required void Function(double progress)? onProgress,
-    required Future<void> Function() run,
+    required Future<T> Function() run,
   }) async {
-    if (_inProgress.contains(dataType)) {
-      throw StateError('install already in progress for $dataType');
+    if (entity.isDisposed) throw StateError('Xiaomi install system disposed');
+    if (_inProgress.isNotEmpty) {
+      throw StateError('install already in progress for ${_inProgress.first}');
     }
     _inProgress.add(dataType);
 
@@ -316,10 +356,11 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
     entity.emit(InstallPrepared(deviceId: entity.id));
 
     try {
-      await run();
+      final result = await run();
       _log.info('[${entity.id}] install $dataType completed');
       entity.emit(InstallCompleted(deviceId: entity.id));
       await _refreshPostInstallState(dataType);
+      return result;
     } catch (e, st) {
       _log.severe('[${entity.id}] install $dataType failed', e, st);
       entity.emit(InstallFailed(deviceId: entity.id, error: e.toString()));
@@ -330,30 +371,10 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
   }
 
   static String _normalizeWatchfaceId(String watchfaceId, Uint8List fileData) {
-    final extracted = _extractWatchfaceIdFromBin(fileData);
-    // A non-empty caller value is an explicit user override. Automatic
-    // installs pass an empty value and retain a valid embedded identifier.
-    if (_isValidWatchfaceId(watchfaceId)) return watchfaceId;
-    if (extracted != null && _isValidWatchfaceId(extracted)) return extracted;
+    if (isValidVelaWatchfaceId(watchfaceId)) return watchfaceId;
+    final extracted = extractVelaWatchfaceId(fileData);
+    if (isValidVelaWatchfaceId(extracted)) return extracted!;
     return _generateWatchfaceId();
-  }
-
-  static String? _extractWatchfaceIdFromBin(Uint8List bytes) {
-    const idOffset = 0x28;
-    const idLength = 12;
-    if (bytes.length < idOffset + idLength) return null;
-    final raw = bytes.sublist(idOffset, idOffset + idLength);
-    final trimmed = raw
-        .takeWhile((b) => b != 0)
-        .map((b) => String.fromCharCode(b))
-        .join();
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
-  static bool _isValidWatchfaceId(String id) {
-    if (id.isEmpty || id.length > 12) return false;
-    if (RegExp(r'^[0]+$').hasMatch(id)) return false;
-    return RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(id);
   }
 
   static String _generateWatchfaceId() {
@@ -368,9 +389,50 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
     return id;
   }
 
+  static void _checkPrepareStatus(
+    pb_common.PrepareStatus status,
+    String failureMessage,
+  ) {
+    if (status == pb_common.PrepareStatus.READY) return;
+    if (status == pb_common.PrepareStatus.LOW_STORAGE) {
+      throw const XiaomiInstallException('install_low_storage');
+    }
+    if (status == pb_common.PrepareStatus.LOW_BATTERY) {
+      throw const XiaomiInstallException('install_low_battery');
+    }
+    if (status == pb_common.PrepareStatus.EXCEED_QUANTITY_LIMIT) {
+      throw const XiaomiInstallException('install_quantity_limit');
+    }
+    throw ProtocolException(failureMessage);
+  }
+
+  static pb_common.PrepareStatus _watchfacePrepareStatus(pb.WearPacket packet) {
+    if (packet.watchFace.hasPrepareReply()) {
+      return packet.watchFace.prepareReply.prepareStatus;
+    }
+    if (packet.watchFace.hasPrepareStatus()) {
+      return packet.watchFace.prepareStatus;
+    }
+    throw const FormatException('Watchface prepare response has no status');
+  }
+
   @override
   void onWearPacket(pb.WearPacket packet) {
-    // Install results are waited via _waitProto; nothing to handle here.
+    // Installation results use the temporary packet listener.
+  }
+
+  void abortPending([Object? reason, StackTrace? stackTrace]) {
+    _generation++;
+    _resultWaiter?.cancel(
+      reason ?? StateError('Xiaomi install aborted'),
+      stackTrace,
+    );
+  }
+
+  @override
+  Future<void> dispose() async {
+    abortPending(StateError('Xiaomi install system disposed'));
+    await super.dispose();
   }
 
   Future<void> _refreshPostInstallState(MassDataType dataType) async {
@@ -425,12 +487,19 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
     required int resultId,
     required Duration timeout,
     bool allowMissingResult = false,
+    int? expectedSliceLength,
   }) async {
-    final resultWaiter = _listenProto(resultType, resultId);
+    final resultWaiter = _resultWaiter = _ProtoWaiter(
+      expectType: resultType,
+      expectId: resultId,
+      allowMissingResult: allowMissingResult,
+      listeners: component.requestPool.onPacketListeners,
+    );
     try {
       await _massSystem.sendFile(
         fileData: fileData,
         dataType: dataType,
+        expectedSliceLength: expectedSliceLength,
         onProgress: (data) => _emitProgress(data, onProgress),
       );
 
@@ -445,15 +514,8 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
       }
     } finally {
       resultWaiter.dispose();
+      if (identical(_resultWaiter, resultWaiter)) _resultWaiter = null;
     }
-  }
-
-  _ProtoWaiter _listenProto(int expectType, int expectId) {
-    return _ProtoWaiter(
-      expectType: expectType,
-      expectId: expectId,
-      listeners: component.requestPool.onPacketListeners,
-    );
   }
 
   static Uint8List _calcMd5(Uint8List data) {
@@ -465,22 +527,55 @@ class XiaomiInstallSystem extends XiaomiPbSystem {
   }
 }
 
+class XiaomiInstallException implements CodedError {
+  const XiaomiInstallException(this.code);
+
+  @override
+  final String code;
+  @override
+  String get message => code;
+  @override
+  Object? get details => null;
+  @override
+  String toString() => message;
+}
+
+class WatchfaceDowngradeException extends XiaomiInstallException {
+  const WatchfaceDowngradeException({
+    required this.watchfaceId,
+    required this.deviceId,
+  }) : super('watchface_downgrade');
+
+  final String watchfaceId;
+  final String deviceId;
+
+  @override
+  Map<String, Object?> get details => {
+    'watchfaceId': watchfaceId,
+    'deviceId': deviceId,
+  };
+}
+
 class _ProtoWaiter {
   _ProtoWaiter({
     required this.expectType,
     required this.expectId,
+    required this.allowMissingResult,
     required this.listeners,
   }) {
     listeners.add(_onPacket);
+    // Cancellation can arrive before the MASS transfer has finished.
+    unawaited(_completer.future.then<void>((_) {}, onError: (_, _) {}));
   }
 
   final int expectType;
   final int expectId;
+  final bool allowMissingResult;
   final List<void Function(pb.WearPacket packet)> listeners;
-  final _completer = Completer<pb.WearPacket>();
+  final _completer = Completer<pb.WearPacket?>();
   var _disposed = false;
 
-  Future<pb.WearPacket> wait(Duration timeout) async {
+  Future<pb.WearPacket?> wait(Duration timeout) async {
     try {
       return await _completer.future.timeout(timeout);
     } on TimeoutException {
@@ -495,6 +590,18 @@ class _ProtoWaiter {
     if (_disposed) return;
     _disposed = true;
     listeners.remove(_onPacket);
+  }
+
+  void cancel(Object error, [StackTrace? stackTrace]) {
+    if (!_completer.isCompleted) {
+      if (allowMissingResult) {
+        // The caller still requires the MASS transfer to complete successfully.
+        _completer.complete();
+      } else {
+        _completer.completeError(error, stackTrace);
+      }
+    }
+    dispose();
   }
 
   void _onPacket(pb.WearPacket packet) {

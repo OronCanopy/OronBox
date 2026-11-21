@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-enum OronBoxWindowRole { main, debug, plugin }
+enum OronBoxWindowRole { main, debug, plugin, webview }
 
 class WindowLaunchSpec {
   const WindowLaunchSpec({
@@ -31,6 +31,7 @@ class WindowLaunchSpec {
             final role = switch (roleName) {
               'debug' => OronBoxWindowRole.debug,
               'plugin' => OronBoxWindowRole.plugin,
+              'webview' => OronBoxWindowRole.webview,
               _ => OronBoxWindowRole.main,
             };
             return WindowLaunchSpec(
@@ -41,10 +42,7 @@ class WindowLaunchSpec {
           }
         } catch (_) {}
       }
-      return WindowLaunchSpec(
-        role: OronBoxWindowRole.main,
-        windowId: windowId,
-      );
+      return WindowLaunchSpec(role: OronBoxWindowRole.main, windowId: windowId);
     }
 
     final index = arguments.indexOf('--window');

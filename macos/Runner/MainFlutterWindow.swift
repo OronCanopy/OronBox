@@ -1,12 +1,10 @@
 import Cocoa
 import FlutterMacOS
 import desktop_multi_window
-import window_manager
 
 class MainFlutterWindow: NSWindow {
+  private var systemNotifications: SystemNotificationChannel?
   private var rfcommChannel: MacOSRfcommChannel?
-  private var miAccountTwoFactorChannel: MacOSMiAccountTwoFactorChannel?
-  private var zeppSettingsChannel: MacOSZeppSettingsChannel?
 
   override func awakeFromNib() {
     let noGui = ProcessInfo.processInfo.arguments.contains("--nogui")
@@ -16,23 +14,19 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    Self.registerWindowHandle(flutterViewController)
     FlutterMultiWindowPlugin.setOnWindowCreatedCallback { controller in
       RegisterGeneratedPlugins(registry: controller)
+      Self.registerWindowHandle(controller)
     }
     rfcommChannel = MacOSRfcommChannel(
       messenger: flutterViewController.engine.binaryMessenger
     )
-    miAccountTwoFactorChannel = MacOSMiAccountTwoFactorChannel(
-      messenger: flutterViewController.engine.binaryMessenger,
-      parentWindow: self
-    )
-    zeppSettingsChannel = MacOSZeppSettingsChannel(
-      messenger: flutterViewController.engine.binaryMessenger,
-      parentWindow: self
-    )
-
+    if !noGui {
+      systemNotifications = SystemNotificationChannel(messenger: flutterViewController.engine.binaryMessenger)
+    }
     let fileChannel = FlutterMethodChannel(
-      name: "oronbox/file_open",
+      name: "org.oroncanopy.oronbox/file_open",
       binaryMessenger: flutterViewController.engine.binaryMessenger
     )
     fileChannel.setMethodCallHandler { call, result in
@@ -46,7 +40,7 @@ class MainFlutterWindow: NSWindow {
     AppDelegate.fileOpenChannel = fileChannel
 
     let windowChannel = FlutterMethodChannel(
-      name: "oronbox/window",
+      name: "org.oroncanopy.oronbox/window",
       binaryMessenger: flutterViewController.engine.binaryMessenger
     )
     windowChannel.setMethodCallHandler { call, result in
@@ -79,8 +73,21 @@ class MainFlutterWindow: NSWindow {
     }
   }
 
-  override public func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
-    super.order(place, relativeTo: otherWin)
-    hiddenWindowAtLaunch()
+  private static func registerWindowHandle(_ controller: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "org.oroncanopy.oronbox/window_handle",
+      binaryMessenger: controller.engine.binaryMessenger
+    )
+    channel.setMethodCallHandler { [weak controller] call, result in
+      guard call.method == "get" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let window = controller?.view.window else {
+        result(FlutterError(code: "WINDOW_UNAVAILABLE", message: "Window unavailable", details: nil))
+        return
+      }
+      result(Int64(Int(bitPattern: Unmanaged.passUnretained(window).toOpaque())))
+    }
   }
 }

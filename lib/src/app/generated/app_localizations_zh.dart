@@ -31,7 +31,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pluginMarket => '插件市场';
 
   @override
-  String get pluginMarketUnavailable => '插件市场暂未接入';
+  String get pluginMarketEmpty => '暂无可用插件';
+
+  @override
+  String get pluginSearchEmpty => '未找到匹配的插件';
 
   @override
   String get pluginEmpty => '尚未安装插件';
@@ -64,12 +67,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pluginPermissions => '权限';
 
   @override
-  String get pluginInstallConfirmTitle => '插件安装确认';
-
-  @override
-  String get pluginUpdateConfirmTitle => '插件更新确认';
-
-  @override
   String get pluginDeclaredPermissions => '此插件声明了以下权限：';
 
   @override
@@ -83,39 +80,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pluginUninstallMessage => '插件数据也将被删除';
-
-  @override
-  String get pluginUpload => '上传插件';
-
-  @override
-  String get pluginPublishTitle => '发布插件';
-
-  @override
-  String get pluginPublishNew => '将作为新插件发布';
-
-  @override
-  String get pluginPublishUpdate => '将更新已发布的同名插件';
-
-  @override
-  String get pluginTakedown => '下架';
-
-  @override
-  String get pluginTakedownConfirm => '下架后该插件将从市场永久移除';
-
-  @override
-  String get pluginLoginRequired => '登录后上传插件';
-
-  @override
-  String get pluginSubmittedForReview => '已提交审核，通过后将上架';
-
-  @override
-  String get pluginStatePending => '审核中';
-
-  @override
-  String get pluginStateRejected => '审核未通过';
-
-  @override
-  String get pluginStateDelisted => '已被下架';
 
   @override
   String get pluginLegacyWarningTitle => 'Legacy 插件';
@@ -171,6 +135,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get creatorResourceSummary => '资源简介';
+
+  @override
+  String get creatorSummaryHint => '一两句话简单介绍，单行纯文本';
+
+  @override
+  String get creatorDescriptionHint => '详细描述，可使用多行 Markdown';
 
   @override
   String get creatorResourceMetadataRequired => '资源名称和简介不能为空';
@@ -262,7 +232,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String creatorKindMismatchMessage(Object detected, Object expected) {
-    return '这似乎是一个$detected文件，而你正在创建$expected资源。可以继续保留，但提交审核前请确认。';
+    return '这似乎是一个$detected文件，而你正在创建$expected资源\n可以继续保留，但提交审核前请确认';
   }
 
   @override
@@ -288,14 +258,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get creatorAtLeastOneDevice => '每个资源文件至少要绑定一台设备';
 
   @override
-  String get resourceAstroBoxEncryptedTitle => '此 AstroBox 资源无法由 OronBox 处理';
-
-  @override
-  String get resourceAstroBoxEncryptedMessage =>
-      '此资源使用 AstroBox Creator Console 的私有加密上传\nOronBox 无法解密、下载或安装它\n请改用 AstroBox 打开';
-
-  @override
-  String get resourceAstroBoxEncryptedAction => '知道了';
+  String get resourceAstroBoxPurchaseAction => '知道了';
 
   @override
   String get filter => '筛选';
@@ -417,14 +380,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get creatorBannedTitle => '账号已被封禁';
 
   @override
-  String get creatorBannedDescription => '你的账号已被管理员封禁，无法使用创作者中心。如有疑问请通过工单联系管理员';
+  String get creatorBannedDescription =>
+      '你的账号已被管理员封禁，无法使用创作者中心\n如有疑问请通过工单联系管理员';
 
   @override
   String get creatorFrozenTitle => '创作者功能已被冻结';
 
   @override
   String get creatorFrozenDescription =>
-      '你的创作者功能已被管理员冻结，暂时无法提交或管理资源。账号的其它功能不受影响';
+      '你的创作者功能已被管理员冻结，暂时无法提交或管理资源\n账号的其它功能不受影响';
 
   @override
   String get creatorBandBbsNoDevices => '请先为资源文件选择支持的设备';
@@ -521,6 +485,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceWatchfaceCount => '表盘数量';
+
+  @override
+  String get deviceModuleCount => '模块数量';
+
+  @override
+  String get modules => '模块';
 
   @override
   String get connection => '连接';
@@ -742,6 +712,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceFeaturesInstallWatchface => '安装表盘';
 
   @override
+  String get deviceFeaturesInstallModule => '安装模块';
+
+  @override
   String get deviceFeaturesInstallFirmware => '固件更新';
 
   @override
@@ -778,7 +751,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firmwareDownloadLatestFull => '下载最新完整包';
 
   @override
-  String get firmwareUpdateNow => '更新';
+  String get firmwareUpdateIncrementalPackage => '更新增量包';
+
+  @override
+  String get firmwareUpdateFullPackage => '更新完整包';
 
   @override
   String get firmwareReleaseNotes => '更新日志';
@@ -847,12 +823,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voiceLabContinuousCaptureDescription => '当前语音结束后自动请求下一段';
-
-  @override
-  String get voiceLabDisableMonitoring => '关闭实时监听';
-
-  @override
-  String get voiceLabEnableMonitoring => '开启实时监听';
 
   @override
   String get voiceLabReplyLabel => '返回给手表的消息';
@@ -954,11 +924,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get zeppOsMapGarminNoPreview =>
-      '该地图不包含 Zepp OS 的 11/x/y 瓦片目录，将保留原始 IMG 并作为单文件地图包传输，因此无法提供覆盖范围预览。';
+      '该地图不包含 Zepp OS 的 11/x/y 瓦片目录，将保留原始 IMG 并作为单文件地图包传输，因此无法提供覆盖范围预览';
 
   @override
   String zeppOsMapTileSummary(Object fileName, Object count) {
-    return '$fileName · $count 个瓦片\n预览仅表示地图包的覆盖范围，不代表手表上的 Garmin IMG 渲染效果。';
+    return '$fileName · $count 个瓦片\n预览仅表示地图包的覆盖范围，不代表手表上的 Garmin IMG 渲染效果';
   }
 
   @override
@@ -975,11 +945,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get zeppOsMapBtClassicHint =>
-      '当前使用 BT Classic 大文件通道。开始传输后，请同时在手表上确认安装。';
+      '当前使用 BT Classic 大文件通道\n开始传输后，请同时在手表上确认安装';
 
   @override
   String get zeppOsMapBleHint =>
-      'BLE 仅支持不超过 2 MB 的地图包；传输更大的地图前请切换至 BT Classic。开始传输后，请同时在手表上确认安装。';
+      'BLE 仅支持不超过 2 MB 的地图包，传输更大的地图前请切换至 BT Classic\n开始传输后，请同时在手表上确认安装';
 
   @override
   String get zeppOsMapPreviewTooLarge => '地图范围过大，无法完整预览';
@@ -1033,7 +1003,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get zeppOsStorageDescription =>
-      '这些数据由 setting 页面与 app-side 共享，并按照 Zepp OS 规范以字符串保存。';
+      '这些数据由 setting 页面与 app-side 共享，并按照 Zepp OS 规范以字符串保存';
 
   @override
   String get zeppOsStorageEmpty => '暂无存储项';
@@ -1077,7 +1047,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get zeppOsAppCompatibilityOverwriteHint =>
-      '保存会覆盖该 App ID 下的同名兼容文件，但不会修改手表内的小程序。';
+      '保存会覆盖该 App ID 下的同名兼容文件，但不会修改手表内的小程序';
 
   @override
   String zeppOsDebugRefreshFailed(Object error) {
@@ -1092,7 +1062,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String zeppOsDebugClearEventsDescription(Object appId) {
-    return '将清空 $appId 的全部调试事件。';
+    return '将清空 $appId 的全部调试事件';
   }
 
   @override
@@ -1105,7 +1075,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get zeppOsDebugAppList => 'App-side 列表';
 
   @override
-  String get zeppOsDebugNoApps => '暂无缓存脚本，也尚未检测到手表 app-side 会话。';
+  String get zeppOsDebugNoApps => '暂无缓存脚本，也尚未检测到手表 app-side 会话';
 
   @override
   String get zeppOsDebugCached => '已有缓存';
@@ -1123,13 +1093,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get zeppOsDebugLocalRuntime => '本地运行';
 
   @override
-  String get zeppOsDebugCannotStart => '此 App ID 没有缓存脚本，无法在本地启动。';
+  String get zeppOsDebugCannotStart => '此 App ID 没有缓存脚本，无法在本地启动';
 
   @override
-  String get zeppOsDebugCanStart => '可手动启动缓存脚本；不会伪造手表会话参数。';
+  String get zeppOsDebugCanStart => '可手动启动缓存脚本，不会伪造手表会话参数';
 
   @override
-  String get zeppOsDebugScriptRunning => '脚本正在本地 QuickJS 中运行。';
+  String get zeppOsDebugScriptRunning => '脚本正在本地 QuickJS 中运行';
 
   @override
   String get zeppOsDebugStartQuickJs => '启动 QuickJS';
@@ -1253,7 +1223,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get zeppOsMirrorInterval => '画面间隔';
 
   @override
-  String get zeppOsMirrorIntervalRange => '10–250';
+  String get zeppOsMirrorIntervalRange => '10~250';
 
   @override
   String get zeppOsOfflineMaps => '离线地图';
@@ -1418,12 +1388,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceMusicTransferred => '音乐传输完成';
 
   @override
-  String get deviceMusicLibrary => '设备音乐';
-
-  @override
-  String get deviceMusicLibraryDescription => '管理设备中的歌曲与歌单';
-
-  @override
   String get deviceMusicSongs => '歌曲';
 
   @override
@@ -1474,7 +1438,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceMusicDeletePlaylist => '删除歌单？';
 
   @override
-  String get deviceMusicDeletePlaylistDescription => '歌单中的歌曲不会从设备删除。';
+  String get deviceMusicDeletePlaylistDescription => '歌单中的歌曲不会从设备删除';
 
   @override
   String get deviceMusicManagePlaylists => '管理所属歌单';
@@ -1502,12 +1466,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceRecordingsDescription => '从手表同步并导出录音';
-
-  @override
-  String get deviceRecordingsLibrary => '设备录音';
-
-  @override
-  String get deviceRecordingsLibraryDescription => '导出设备中的录音';
 
   @override
   String get deviceRecordingsHint => '录音通过设备文件通道逐条接收并校验\n完成后可单独导出原始文件';
@@ -1579,11 +1537,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceMusicTransferTitle => '传输 MP3 文件';
 
   @override
-  String get deviceMusicVelaDescription => '将 MP3 文件同步至设备，单个文件不得超过 100 MB。';
+  String get deviceMusicVelaDescription => '将 MP3 文件同步至设备，单个文件不得超过 100 MB';
 
   @override
   String get deviceMusicZeppDescription =>
-      '支持最大 50 MB 的 MP3 文件。建议使用经典蓝牙以获得更快的传输速度；也可使用 BLE，但传输时间较长。';
+      '支持最大 50 MB 的 MP3 文件\n建议使用经典蓝牙以获得更快的传输速度，也可使用 BLE，但传输时间较长';
 
   @override
   String get deviceMusicChooseMp3 => '选择 MP3 文件';
@@ -1673,7 +1631,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String deviceEndpointUnavailable(String transport) {
-    return '未发现可用的 $transport 连接通道，请先完成系统蓝牙配对，然后重新扫描。';
+    return '未发现可用的 $transport 连接通道，请先完成系统蓝牙配对，然后重新扫描';
   }
 
   @override
@@ -1779,6 +1737,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get watchfaceManagementNone => '没有已安装的表盘';
+
+  @override
+  String get moduleManagementTitle => '模块管理';
+
+  @override
+  String get moduleManagementNone => '没有已安装的模块';
+
+  @override
+  String moduleUninstallConfirm(String name) {
+    return '确定要卸载模块「$name」吗？';
+  }
+
+  @override
+  String get moduleStatusEnabled => '已启用';
+
+  @override
+  String get moduleStatusDisabled => '已停用';
+
+  @override
+  String get moduleEnable => '启用';
+
+  @override
+  String get moduleDisable => '停用';
 
   @override
   String get open => '打开';
@@ -1964,7 +1945,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get accountSignOutMessage => '退出后，如需继续使用相关功能，需要重新登录。';
+  String get accountSignOutMessage => '退出后，如需继续使用相关功能，需要重新登录';
 
   @override
   String get bandBbsLoadPreviews => '加载资源帖预览图';
@@ -2030,6 +2011,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsMiAccountMissingCredentials => '请输入小米账号和密码';
+
+  @override
+  String get settingsMiAccountTwoFactorTitle => '小米账号验证';
 
   @override
   String get settingsMiAccountTwoFactorPrompt => '请在验证页面完成小米账号二次验证';
@@ -2123,7 +2107,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAutoReconnectOnDisconnectDesc => '被动与设备断开连接时尝试重连设备';
 
   @override
-  String get deviceReconnectAttempting => '设备连接异常，尝试重连中';
+  String get deviceReconnectAttempting => '正在尝试重新连接设备';
 
   @override
   String get deviceReconnectSucceeded => '重连成功';
@@ -2513,7 +2497,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String pluginPermissionRequestMessage(Object plugin, Object operation) {
-    return '“$plugin”希望$operation。';
+    return '“$plugin”希望$operation';
   }
 
   @override
@@ -2536,9 +2520,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pluginPermissionExportFile => '将文件导出到宿主环境';
-
-  @override
-  String get pluginPermissionNetwork => '访问网络';
 
   @override
   String get pluginPermissionInterconnect => '与设备应用通信';
@@ -2569,11 +2550,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String pluginErrorMessage(Object plugin, Object error) {
-    return '“$plugin”无法正常运行，可能已损坏。\n\n错误：$error\n\n是否卸载此插件？';
+    return '“$plugin”无法正常运行，可能已损坏\n\n错误：$error\n\n是否卸载此插件？';
   }
 
   @override
-  String get pluginPackageCorruptedMessage => '所选插件包无法读取，可能已损坏。请重新获取后再导入。';
+  String get pluginPackageCorruptedMessage => '所选插件包无法读取，可能已损坏\n请重新获取后再导入';
 
   @override
   String get pluginErrorClearData => '清除插件数据';
@@ -2588,7 +2569,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pluginSafeModeTitle => '插件安全模式已启用';
 
   @override
-  String get pluginSafeModeDescription => '所有插件均已停止，退出安全模式后才会重新加载。';
+  String get pluginSafeModeDescription => '所有插件均已停止，退出安全模式后才会重新加载';
 
   @override
   String get pluginSafeModeExit => '退出安全模式';
@@ -2678,6 +2659,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get resourceTypeQuickApp => '快应用';
+
+  @override
+  String get resourceTypeResPack => '资源包';
 
   @override
   String get resourceTypeWatchface => '表盘';
@@ -2865,7 +2849,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get installQueueFixWatchfaceId => '修改表盘 ID';
 
   @override
-  String get installQueueFixWatchfaceIdHint => '输入12位以内数字';
+  String get installQueueFixWatchfaceIdHint => '输入新的表盘 ID';
+
+  @override
+  String get installQueueReinstallWatchface => '重新安装表盘';
+
+  @override
+  String get installQueueRetryDirectly => '直接重试';
+
+  @override
+  String get installLowStorageMessage => '设备预留存储空间不足或达到数量上限';
+
+  @override
+  String get installLowBatteryMessage => '设备电量过低';
+
+  @override
+  String get installQuantityLimitMessage => '达到安装数量限制';
+
+  @override
+  String get installQueueReplaceWatchface => '删除后重装';
+
+  @override
+  String installQueueReplaceWatchfaceMessage(String id) {
+    return '设备上已有 ID 为 $id 的表盘\n当前版本无法直接安装\n可以直接重试，或删除原表盘后重新安装\n删除后若安装失败，原表盘无法自动恢复';
+  }
+
+  @override
+  String get watchfaceDowngradeMessage => '设备上已有相同 ID 的表盘\n当前版本无法直接安装';
 
   @override
   String get authorize => '授权';
@@ -3136,7 +3146,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageUnknownTitle => '通知';
 
   @override
-  String get messageUnknownBody => '无法获取此通知的详细数据。';
+  String get messageUnknownBody => '无法获取此通知的详细数据';
 
   @override
   String get messageCommentRepliedTitle => '评论收到新回复';
@@ -3146,10 +3156,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get messageCommentHiddenAutomatedBody =>
-      '你的评论未通过自动审核，当前暂不可见，可在消息中发起申诉。';
+      '你的评论未通过自动审核，当前暂不可见，可在消息中发起申诉';
 
   @override
-  String get messageCommentHiddenReviewedBody => '你的评论经人工复审后已被隐藏。';
+  String get messageCommentHiddenReviewedBody => '你的评论经人工复审后已被隐藏';
 
   @override
   String get messageReviewApprovedTitle => '资源审核已通过';
@@ -3236,10 +3246,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get messageRoleAdministrator => '管理员';
 
   @override
-  String get messageApprovedBody => '你的提交已通过审核。';
+  String get messageApprovedBody => '你的提交已通过审核';
 
   @override
-  String get messageNeedsChangesBody => '审核发现需要修改的问题。';
+  String get messageNeedsChangesBody => '审核发现需要修改的问题';
 
   @override
   String messageReasonBody(String reason) {
@@ -3277,7 +3287,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get messageStatusChangedBody => '该项目的状态已发生变化。';
+  String get messageStatusChangedBody => '该项目的状态已发生变化';
 
   @override
   String messageReportStatusBody(String status) {
@@ -3286,31 +3296,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String messageCoinAddedBody(String amount) {
-    return '你的账号增加了 $amount 枚硬币。';
+    return '你的账号增加了 $amount 枚硬币';
   }
 
   @override
   String messageCoinDeductedBody(String amount) {
-    return '你的账号扣除了 $amount 枚硬币。';
+    return '你的账号扣除了 $amount 枚硬币';
   }
 
   @override
   String messageCoinVoteRevokedBody(String amount) {
-    return '你对该资源投出的 $amount 枚硬币已被作废。';
+    return '你对该资源投出的 $amount 枚硬币已被作废';
   }
 
   @override
-  String get messageAppealOverturnedBody => '管理员已撤销原处理结果。';
+  String get messageAppealOverturnedBody => '管理员已撤销原处理结果';
 
   @override
-  String get messageAppealUpheldBody => '复核后维持原处理结果。';
+  String get messageAppealUpheldBody => '复核后维持原处理结果';
 
   @override
-  String get messageAppealDismissedBody => '该申诉未被受理。';
+  String get messageAppealDismissedBody => '该申诉未被受理';
 
   @override
   String messageRoleChangedBody(String role) {
-    return '你的账号角色已变更为 $role。';
+    return '你的账号角色已变更为 $role';
   }
 
   @override
@@ -3509,7 +3519,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get oronBoxCoinsDescription => '每日签到可获得 1～5 枚硬币，硬币可投给资源以支持创作者';
+  String get oronBoxCoinsDescription => '每日签到可获得 1~5 枚硬币，硬币可投给资源以支持创作者';
 
   @override
   String resourceFromCollection(String name) {
@@ -3602,7 +3612,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get creatorCollectionRepresentative => '代表资源';
 
   @override
-  String get creatorCollectionDeleteConfirm => '删除合集？资源不会被删除，只会解除归属。';
+  String get creatorCollectionDeleteConfirm => '删除合集？资源不会被删除，只会解除归属';
 
   @override
   String get creatorContentAttributes => '内容属性';
@@ -3957,6 +3967,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get alarmManagementTitle => '闹钟管理';
+
+  @override
+  String get alarmManagementNone => '没有已设置的闹钟';
 
   @override
   String get alarmManagementDescription => '添加、编辑、启用或删除设备闹钟';
@@ -4773,8 +4786,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '勾选的部分支持设备暂不支持同步发布到米坛社区，将会跳过这部分设备的发布';
 
   @override
-  String get errorSppBondRemovalFailed =>
-      '安卓版本低于 11，系统不支持 removeBond，如果出现频繁断连，请先在小米运动健康中切换到其他设备，或关闭其“发现附近的设备”权限';
+  String get errorSppBondRemovalFailed => '无法移除设备的蓝牙配对\n请在手机蓝牙设置中取消配对后重试';
 
   @override
   String get viewAllResources => '查看全部';
@@ -4968,7 +4980,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get qrScanImageFailed => '无法识别这张图片';
 
   @override
-  String get qrScanCameraUnavailable => '相机不可用\n可以选择图片识别二维码';
+  String get qrScanCameraUnavailable => '相机不可用';
 
   @override
   String get qrScanChooseCode => '选择二维码';
@@ -5222,7 +5234,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appDataClearCacheDescription =>
-      '清理图片、插件、文档缓存及过期临时文件\n运行中的插件和设备应用将停止';
+      '清理图片、WebAssembly 编译、插件和文档缓存及过期临时文件\n需要时会重新生成或下载\n运行中的插件和设备应用将停止';
 
   @override
   String get appDataCacheCleared => '缓存已清理';
@@ -5306,7 +5318,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appDataDownloadsDescription => '下载和安装产生的临时文件';
 
   @override
-  String get appDataPluginCacheDescription => '插件缓存和可回收临时文件';
+  String get appDataPluginCacheDescription => '插件运行产生的缓存和临时文件';
 
   @override
   String get appDataImagesDescription => '浏览资源时保存的图片缓存';
@@ -5438,7 +5450,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appDataClearHealthDescription => '将删除已同步的活动文件\n本地运动健康数据将清空';
 
   @override
-  String get appDataClearCachedCategoryDescription => '仅清理未使用的缓存文件\n需要时会重新下载';
+  String get appDataClearCachedCategoryDescription => '清理未使用的缓存文件\n需要时会重新生成或下载';
 
   @override
   String get appDataClearModelsDescription => '保留当前模型\n清理未使用的旧版本和过期下载';
@@ -5942,12 +5954,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get globalAiDelete => '删除';
 
   @override
-  String get globalAiNoProvidersPrompt => '暂未添加任何提供商\n请在上方添加新提供商';
-
-  @override
-  String get globalAiNoModelsPrompt => '暂无可用模型，请先添加模型';
-
-  @override
   String get globalAiSystemPrompt => '系统提示词';
 
   @override
@@ -6051,16 +6057,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get globalAiTestStart => '开始测试';
 
   @override
-  String get wasmUnsupportedTitle => '当前系统无法加载 Wasm 运行时';
-
-  @override
-  String get wasmUnsupportedMessage =>
-      '受 Android 8 系统内核安全策略限制\n实时语音流识别与创作者图片压缩处理不可用\n\n如需使用以上特性，请升级系统至 Android 9+\n或使用非 Android 8 系统的设备';
-
-  @override
-  String get doNotShowAgainThisSession => '本次运行期间不再提示';
-
-  @override
   String get settingsMiAccountRegion => '服务器区域';
 
   @override
@@ -6080,6 +6076,448 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsMiAccountRegionIn => '印度 (IN)';
+
+  @override
+  String get pluginPermissionReadClipboard => '读取剪贴板';
+
+  @override
+  String get pluginPermissionWriteClipboard => '写入剪贴板';
+
+  @override
+  String get pluginPermissionHostServer => '运行本地 HTTP 服务';
+
+  @override
+  String get pluginPermissionReceiveLink => '接收应用链接';
+
+  @override
+  String get pluginProviderUnavailable => '此插件资源源暂不可用';
+
+  @override
+  String get pluginDisabled => '插件已停用';
+
+  @override
+  String get pluginOpenWindow => '在独立窗口中打开';
+
+  @override
+  String get pluginRunSettings => '运行设置';
+
+  @override
+  String get pluginEnable => '启用';
+
+  @override
+  String get pluginDisable => '禁用';
+
+  @override
+  String get pluginEnabled => '启用插件';
+
+  @override
+  String get pluginBackground => '后台运行';
+
+  @override
+  String get pluginBackgroundDescription => '无活动 10 分钟后停止';
+
+  @override
+  String get pluginBackgroundForbidden => '禁止';
+
+  @override
+  String get pluginBackgroundActive => '保持活跃';
+
+  @override
+  String get pluginBackgroundContinuous => '持续运行';
+
+  @override
+  String get pluginBackgroundForbiddenDescription => '离开插件后停止运行';
+
+  @override
+  String get pluginBackgroundContinuousDescription => '离开插件后继续运行';
+
+  @override
+  String get pluginAutoStart => '自启动';
+
+  @override
+  String get pluginAutoStartDescription => '打开 OronBox 时启动插件';
+
+  @override
+  String get pluginRunStatus => '运行状态';
+
+  @override
+  String get pluginStopped => '已停止';
+
+  @override
+  String get pluginExistingGrant => '已有授权';
+
+  @override
+  String get pluginPermissionAsk => '询问';
+
+  @override
+  String get pluginPermissionAllow => '允许';
+
+  @override
+  String get pluginTargetPermissions => '操作与目标授权';
+
+  @override
+  String get pluginNoTargetPermissions => '暂无设备或应用授权';
+
+  @override
+  String get errorPlatformCapabilityUnavailable => '当前平台或浏览器暂不支持此操作';
+
+  @override
+  String get oauthPopupBlocked => '请允许此网站打开弹出窗口，然后重新登录';
+
+  @override
+  String get oauthBrowserCompleting => '正在原页面完成登录';
+
+  @override
+  String get oauthBrowserCompleted => '登录成功，可以关闭此页面';
+
+  @override
+  String get oauthBrowserOriginalClosed => '原页面暂未响应，可以在此继续登录';
+
+  @override
+  String get oauthBrowserContinue => '继续登录';
+
+  @override
+  String get wasmCompatibilityTitle => '运行时兼容性测试';
+
+  @override
+  String get wasmCompatibilityMessage =>
+      'OronBox 需要测试此设备能否运行 WebAssembly\n\n如果你看到此提示，可能有以下原因\n• 设备运行 Android 8~9，且使用 Linux 4.x 内核\n• 上次加载运行时或进行测试时意外退出\n\n测试期间可能出现闪退，这是已知的兼容性风险\n这可能是由于设备的系统安全策略与运行时不兼容\n\n如果发生闪退，请重新打开 OronBox\n应用会暂停加载运行时以避免再次闪退\n\n届时图片处理、语音处理、部分插件\n和华米应用后台脚本等功能可能无法使用\n直到你再次使用相关功能前成功通过测试';
+
+  @override
+  String get wasmCompatibilityDefer => '暂不测试';
+
+  @override
+  String get wasmCompatibilityStart => '开始测试';
+
+  @override
+  String get wasmCompatibilityTesting => '正在测试，请稍候';
+
+  @override
+  String get wasmCompatibilityPassed => '兼容性测试通过';
+
+  @override
+  String get wasmCompatibilityTestFailed => '测试未完成，请重试或暂不测试';
+
+  @override
+  String get wasmCompatibilityRequired => '使用此功能前需要完成兼容性测试';
+
+  @override
+  String get pluginType => '插件类型';
+
+  @override
+  String get pluginTypeAstroBox => 'AstroBox-NG';
+
+  @override
+  String get pluginTypeOronBox => 'OronBox';
+
+  @override
+  String get appDataCompilationCache => '编译缓存';
+
+  @override
+  String get appDataCompilationCacheDescription => 'WebAssembly 编译缓存';
+
+  @override
+  String get openExternally => '外部打开';
+
+  @override
+  String get externalOpenFailed => '无法打开浏览器';
+
+  @override
+  String get resourceAstroBoxPurchaseTitle => '此文件需要购买或授权';
+
+  @override
+  String get resourceAstroBoxPurchaseMessage =>
+      '此资源通过 AstroBox Creator Console 加密上传\n需购买或获得授权后才能解密\n请改用 AstroBox 打开';
+
+  @override
+  String get resourceAstroBoxAccessCheckFailed => '无法确认此文件的访问状态\n请重试';
+
+  @override
+  String get resourceAstroBoxDecryptionFailed => '文件解密失败\n请重试';
+
+  @override
+  String get appDataClearPluginCacheDescription => '清理插件缓存和临时文件\n需要时会重新生成或下载';
+
+  @override
+  String get appDataClearCompilationCacheDescription =>
+      '清理 WebAssembly 编译缓存\n需要时会重新生成';
+
+  @override
+  String get resourceMoreDevicesDownload => '更多设备下载';
+
+  @override
+  String get resourceCompatibleWithDevice => '此资源适配了您的设备';
+
+  @override
+  String get resourceIncompatibleWithDevice => '此资源暂未适配您的设备';
+
+  @override
+  String get resourceInstallSucceeded => '安装成功';
+
+  @override
+  String get installStorageFullTitle => '设备存储空间不足';
+
+  @override
+  String get installQuantityLimitTitle => '已达到安装数量限制';
+
+  @override
+  String get installStorageFullHelp => '设备预留存储空间不足或已达到资源数量上限\n请先删除一些资源，再重试安装';
+
+  @override
+  String get installQuantityLimitHelp => '设备已达到资源安装数量上限\n请先删除一些资源，再重试安装';
+
+  @override
+  String get installTargetDeviceChanged => '请先切换到此安装任务对应的设备';
+
+  @override
+  String get debugNoLogs => '暂无日志';
+
+  @override
+  String get debugNoLayoutTree => '此来源暂无布局树';
+
+  @override
+  String get debugSelectElement => '选择一个元素以查看详情';
+
+  @override
+  String get debugEmptyDirectory => '目录为空';
+
+  @override
+  String get debugNoProtocolEvents => '尚未捕获协议事件';
+
+  @override
+  String get globalAiNoProvidersTitle => '尚未添加提供商';
+
+  @override
+  String get globalAiNoProvidersMessage => '在上方添加提供商';
+
+  @override
+  String get globalAiNoModelsTitle => '暂无可用模型';
+
+  @override
+  String get globalAiNoModelsMessage => '请先添加模型';
+
+  @override
+  String get debugNoMatchingLogs => '没有匹配的日志';
+
+  @override
+  String get appManagementNoVisibleApps => '没有可显示的应用';
+
+  @override
+  String get zeppOsAppCompatibilityEmpty => '尚未添加应用兼容性文件';
+
+  @override
+  String get qrScanCameraUnavailableMessage => '可以选择图片识别二维码';
+
+  @override
+  String get resourceFeaturesDisabledTitle => '资源功能已关闭';
+
+  @override
+  String get pairingConnectStep => '连接设备';
+
+  @override
+  String get pairingAccountStep => '绑定账号';
+
+  @override
+  String get pairingLocalStep => '本地绑定';
+
+  @override
+  String get pairingAuthStep => '设备认证';
+
+  @override
+  String get pairingUnbound => '未绑定';
+
+  @override
+  String get pairingContinue => '继续';
+
+  @override
+  String get pairingStartPrompt => '此设备尚未绑定\n继续后请按提示完成绑定';
+
+  @override
+  String get pairingSuccess => '连接成功';
+
+  @override
+  String get pairingTitle => '绑定设备';
+
+  @override
+  String get pairingConnecting => '正在连接设备';
+
+  @override
+  String get pairingConfirmOnDevice => '请在设备上确认绑定';
+
+  @override
+  String get pairingCompareCode => '请核对绑定码是否一致';
+
+  @override
+  String get pairingRebind => '设备需要重新绑定';
+
+  @override
+  String get pairingAlreadyBound => '此设备已绑定';
+
+  @override
+  String get pairingUseExistingKey => '使用已有密钥连接';
+
+  @override
+  String get engineeringTitle => 'MiWear 工程模式';
+
+  @override
+  String get engineeringDescription => '设备模式切换与固件更新';
+
+  @override
+  String get engineeringMode => '设备模式';
+
+  @override
+  String get engineeringUser => '用户模式';
+
+  @override
+  String get engineeringUserDebug => '用户调试模式';
+
+  @override
+  String get engineeringEng => '工程模式';
+
+  @override
+  String get engineeringModeConfirm => '设备将重启并断开连接\n重启后请重新连接';
+
+  @override
+  String get engineeringConnectDevice => '连接设备';
+
+  @override
+  String get engineeringConnectConfirm => '将断开当前设备\n请确认连接的是需要操作的设备';
+
+  @override
+  String get engineeringFirmwareHint => '请选择设备对应的固件文件';
+
+  @override
+  String get engineeringOtaConfirm => '使用此固件更新当前连接的设备？\n请确认型号匹配\n更新期间保持设备电量充足';
+
+  @override
+  String get engineeringReturn => '重启到用户模式';
+
+  @override
+  String get engineeringIdle => '等待操作';
+
+  @override
+  String get engineeringScanning => '正在搜索工程设备';
+
+  @override
+  String get engineeringConnecting => '正在连接';
+
+  @override
+  String get engineeringUpdateBackBlocked => '正在更新固件\n请等待当前操作完成';
+
+  @override
+  String get engineeringUploading => '正在上传固件';
+
+  @override
+  String get engineeringRestarting => '正在请求设备重启';
+
+  @override
+  String get engineeringWaiting => '正在等待设备重启\n请在设备启动后重新连接';
+
+  @override
+  String get engineeringFailed => '更新已中断';
+
+  @override
+  String get engineeringEmpty => '未发现工程设备\n请确认设备已进入工程模式后重新搜索';
+
+  @override
+  String get engineeringFirmwareError => '请选择非空的固件文件';
+
+  @override
+  String get engineeringResponseError => '设备拒绝了请求或返回了异常响应';
+
+  @override
+  String get engineeringTimeout => '设备响应超时\n请重新连接后再试';
+
+  @override
+  String get engineeringMtuError => '当前蓝牙连接无法发送控制消息\n请重新连接或使用 SPP';
+
+  @override
+  String get engineeringBusyError => '请先完成或取消当前操作';
+
+  @override
+  String get engineeringConnectionError => '请先连接工程设备';
+
+  @override
+  String get deviceSettingsTitle => '设备设置';
+
+  @override
+  String get deviceSettingsDescription => '调整此设备的使用偏好';
+
+  @override
+  String get deviceSettingsUnavailable => '当前没有可用的设备设置';
+
+  @override
+  String get deviceNotificationSync => '通知同步';
+
+  @override
+  String get deviceNotificationSyncDescription => '将所选应用的通知同步到此设备';
+
+  @override
+  String get deviceNotificationApps => '同步的应用';
+
+  @override
+  String get deviceNotificationAppsEmpty => '未找到应用';
+
+  @override
+  String get updateReminderInbox => '消息箱通知';
+
+  @override
+  String get inboxNotificationUnread => '您有未读消息';
+
+  @override
+  String get notificationPermissionsSection => '通知权限';
+
+  @override
+  String get notificationPermissionDisplay => '显示通知';
+
+  @override
+  String get notificationPermissionRead => '读取通知';
+
+  @override
+  String get notificationPermissionEnabled => '已开启';
+
+  @override
+  String get notificationPermissionDisabled => '未开启';
+
+  @override
+  String get notificationPermissionUnavailable => '无法读取权限状态';
+
+  @override
+  String get updateReminderFirmwareTitle => '发现固件更新';
+
+  @override
+  String get updateReminderResourcesTitle => '发现资源更新';
+
+  @override
+  String get updateReminderPluginsTitle => '发现插件更新';
+
+  @override
+  String get updateReminderFirmwareMessage => '您设备上的固件有可用更新';
+
+  @override
+  String get updateReminderResourcesMessage => '您设备上的资源有可用更新';
+
+  @override
+  String updateReminderCurrentVersion(String version) {
+    return '当前版本  $version';
+  }
+
+  @override
+  String updateReminderLatestFirmware(String version) {
+    return '最新固件  $version';
+  }
+
+  @override
+  String get updateReminderSilence => '不再提示直到下次更新';
+
+  @override
+  String get updateReminderInstall => '更新';
+
+  @override
+  String get updateReminderInstallAll => '更新全部';
+
+  @override
+  String get updateReminderChanged => '当前无法执行此更新';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -6108,7 +6546,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get pluginMarket => '外掛程式市場';
 
   @override
-  String get pluginMarketUnavailable => '外掛程式市場尚未開放';
+  String get pluginMarketEmpty => '暫無可用外掛程式';
+
+  @override
+  String get pluginSearchEmpty => '找不到符合條件的外掛程式';
 
   @override
   String get pluginEmpty => '尚未安裝外掛程式';
@@ -6141,12 +6582,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get pluginPermissions => '權限';
 
   @override
-  String get pluginInstallConfirmTitle => '確認安裝外掛程式';
-
-  @override
-  String get pluginUpdateConfirmTitle => '確認更新外掛程式';
-
-  @override
   String get pluginDeclaredPermissions => '此外掛程式宣告了以下權限：';
 
   @override
@@ -6162,44 +6597,11 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get pluginUninstallMessage => '外掛程式資料也會一併刪除';
 
   @override
-  String get pluginUpload => '上傳外掛程式';
-
-  @override
-  String get pluginPublishTitle => '發佈外掛程式';
-
-  @override
-  String get pluginPublishNew => '作為新外掛程式發佈';
-
-  @override
-  String get pluginPublishUpdate => '更新相同 ID 的已發佈外掛程式';
-
-  @override
-  String get pluginTakedown => '下架';
-
-  @override
-  String get pluginTakedownConfirm => '此外掛程式將永久從市場移除';
-
-  @override
-  String get pluginLoginRequired => '登入後才能上傳外掛程式';
-
-  @override
-  String get pluginSubmittedForReview => '已提交審核，審核通過後才會上架';
-
-  @override
-  String get pluginStatePending => '審核中';
-
-  @override
-  String get pluginStateRejected => '未通過審核';
-
-  @override
-  String get pluginStateDelisted => '已下架';
-
-  @override
   String get pluginLegacyWarningTitle => '舊版外掛程式';
 
   @override
   String get pluginLegacyWarningMessage =>
-      '這是 AstroBox v1 外掛程式。OronBox 會嘗試以相容模式執行，但可能遇到問題。\n請檢查是否有更新的 OronBox 原生外掛程式，或聯絡作者進行移植';
+      '這是 AstroBox v1 外掛程式\nOronBox 會嘗試以相容模式執行，但可能遇到問題\n請檢查是否有更新的 OronBox 原生外掛程式，或聯絡作者進行移植';
 
   @override
   String get settingsTab => '設定';
@@ -6248,6 +6650,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get creatorResourceSummary => '資源簡介';
+
+  @override
+  String get creatorSummaryHint => '一兩句話簡單介紹，單行純文字';
+
+  @override
+  String get creatorDescriptionHint => '詳細描述，可使用多行 Markdown';
 
   @override
   String get creatorResourceMetadataRequired => '資源名稱和簡介為必填項目';
@@ -6320,7 +6728,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get creatorArchiveAction => '下架';
 
   @override
-  String get creatorArchiveConfirm => '下架後，這項資源會從商店隱藏。你可以隨時重新上架';
+  String get creatorArchiveConfirm => '下架後，這項資源會從商店隱藏\n你可以隨時重新上架';
 
   @override
   String get creatorRestoreAction => '重新上架';
@@ -6330,7 +6738,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get creatorDeletePublishedConfirm =>
-      '這會永久刪除 OronBox 資源及對應的 BandBBS 資源，且無法復原。已發佈至 AstroBox 的內容不受影響；如需下架，請聯絡 AstroBox-Repo 維護者';
+      '這會永久刪除 OronBox 資源及對應的 BandBBS 資源，且無法復原\n已發佈至 AstroBox 的內容不受影響，如需下架，請聯絡 AstroBox-Repo 維護者';
 
   @override
   String creatorArtifactCount(Object count) {
@@ -6339,7 +6747,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String creatorKindMismatchMessage(Object detected, Object expected) {
-    return '此檔案看起來是 $detected，但這項資源設定為 $expected。你可以保留檔案，但提交審核前請確認類型正確';
+    return '這似乎是一個$detected檔案，而你正在建立$expected資源\n可以繼續保留，但提交審核前請確認';
   }
 
   @override
@@ -6365,14 +6773,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get creatorAtLeastOneDevice => '每個資源檔案至少要繫結一部裝置';
 
   @override
-  String get resourceAstroBoxEncryptedTitle => 'OronBox 無法處理此 AstroBox 資源';
-
-  @override
-  String get resourceAstroBoxEncryptedMessage =>
-      '此資源使用 AstroBox Creator Console 的私有加密上傳格式。OronBox 無法解密、下載或安裝，請改用 AstroBox 開啟';
-
-  @override
-  String get resourceAstroBoxEncryptedAction => '知道了';
+  String get resourceAstroBoxPurchaseAction => '知道了';
 
   @override
   String get filter => '篩選';
@@ -6476,14 +6877,15 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get creatorStateFrozen => '已凍結';
 
   @override
-  String get creatorSuspendedByOwnerNotice => '此資源已下架。你可以繼續編輯並重新提交審核，也可以直接重新上架';
+  String get creatorSuspendedByOwnerNotice =>
+      '此資源已下架\n你可以繼續編輯並重新提交審核，也可以直接重新上架';
 
   @override
   String get creatorSuspendedByAdminNotice =>
-      '管理員已將此資源下架。編輯後重新提交審核，審核通過後即可重新上架';
+      '管理員已將此資源下架\n編輯後重新提交審核，審核通過後即可重新上架';
 
   @override
-  String get creatorFrozenNotice => '管理員已凍結此資源。你目前無法繼續編輯，只有管理員可以解除凍結';
+  String get creatorFrozenNotice => '管理員已凍結此資源\n你目前無法繼續編輯，只有管理員可以解除凍結';
 
   @override
   String creatorModerationReason(Object reason) {
@@ -6495,14 +6897,14 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get creatorBannedDescription =>
-      '你的帳號已被管理員封禁，創作者中心目前無法使用。如果你認為這是誤判，請透過支援工單聯絡團隊';
+      '你的帳號已被管理員封禁，無法使用創作者中心\n如有疑問請透過工單聯絡管理員';
 
   @override
   String get creatorFrozenTitle => '創作者功能已凍結';
 
   @override
   String get creatorFrozenDescription =>
-      '管理員已凍結你的創作者功能，目前無法提交或管理資源。帳號的其他功能不受影響';
+      '你的創作者功能已被管理員凍結，暫時無法提交或管理資源\n帳號的其它功能不受影響';
 
   @override
   String get creatorBandBbsNoDevices => '請先為資源檔案選擇支援的裝置';
@@ -6514,7 +6916,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get creatorBandBbsSharedCategory =>
-      '同一 BandBBS 分類對應了多個套件。請為每個分類繫結一個套件';
+      '同一 BandBBS 分類對應了多個套件\n請為每個分類繫結一個套件';
 
   @override
   String get creatorBandBbsUnresolved => '找不到對應的 BandBBS 分類';
@@ -6557,7 +6959,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get creatorBandBbsTermsNotice =>
-      'OronBox 審核通過後，資源會直接發佈至對應的 BandBBS 分類。刪除 OronBox 資源也會刪除對應的 BandBBS 資源';
+      'OronBox 審核通過後，資源會直接發佈至對應的 BandBBS 分類\n刪除 OronBox 資源也會刪除對應的 BandBBS 資源';
 
   @override
   String get creatorBandBbsLimitsNotice =>
@@ -6565,7 +6967,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get creatorAstroBoxTermsNotice =>
-      'OronBox 審核通過後，系統會建立資源儲存庫並向官方 AstroBox 儲存庫提交 PR，由 AstroBox 維護者獨立審核。資源公開後如需下架，請聯絡 AstroBox-Repo 維護者';
+      'OronBox 審核通過後，系統會建立資源儲存庫並向官方 AstroBox 儲存庫提交 PR，由 AstroBox 維護者獨立審核\n資源公開後如需下架，請聯絡 AstroBox-Repo 維護者';
 
   @override
   String get creatorAstroBoxReviewNotice =>
@@ -6602,6 +7004,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get deviceWatchfaceCount => '錶盤數量';
 
   @override
+  String get deviceModuleCount => '模組數量';
+
+  @override
+  String get modules => '模組';
+
+  @override
   String get connection => '連線';
 
   @override
@@ -6612,28 +7020,28 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get errorBluetoothUnavailable =>
-      '無法使用 Bluetooth。請確認 Bluetooth 已開啟，且 OronBox 已獲得使用權限';
+      '無法使用 Bluetooth，請確認 Bluetooth 已開啟，且 OronBox 已獲得使用權限';
 
   @override
   String get errorBluetoothConnectFailed =>
-      '連線失敗。請確認 Bluetooth 權限，讓裝置保持在附近且未被使用，在裝置上開啟「連線新手機」後再試一次';
+      '連線失敗，請確認 Bluetooth 權限，讓裝置保持在附近且未被使用，在裝置上開啟「連線新手機」後再試一次';
 
   @override
-  String get errorBluetoothDisconnected => 'Bluetooth 連線已中斷。請重新連線裝置後再試';
+  String get errorBluetoothDisconnected => 'Bluetooth 連線已中斷，請重新連線裝置後再試';
 
   @override
   String get errorOperationTimeout => '操作逾時';
 
   @override
-  String get errorDeviceNotReady => '裝置尚未就緒。請先連線並完成裝置驗證';
+  String get errorDeviceNotReady => '裝置尚未就緒，請先連線並完成裝置驗證';
 
   @override
   String get errorBleCharacteristicsMissing =>
-      '找不到必要的 BLE 通道。請重新連線裝置，或確認裝置是否支援此功能';
+      '找不到必要的 BLE 通道，請重新連線裝置，或確認裝置是否支援此功能';
 
   @override
   String get errorWebSerialUnavailable =>
-      '此瀏覽器不支援 Web Serial。請使用 Chrome、Edge 或其他相容 Web Serial 的瀏覽器';
+      '此瀏覽器不支援 Web Serial，請使用 Chrome、Edge 或其他相容 Web Serial 的瀏覽器';
 
   @override
   String get errorAccountPasswordIncorrect => 'Xiaomi 帳號或密碼錯誤';
@@ -6730,7 +7138,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get errorCertificateVerificationFailed =>
-      '憑證驗證失敗。如果你正在使用代理伺服器，請停用此應用程式的 HTTPS 攔截，或確認代理憑證受到信任';
+      '憑證驗證失敗，如果你正在使用代理伺服器，請停用此應用程式的 HTTPS 攔截，或確認代理憑證受到信任';
 
   @override
   String errorUnknownWithDetail(Object detail) {
@@ -6821,6 +7229,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get deviceFeaturesInstallWatchface => '安裝錶盤';
 
   @override
+  String get deviceFeaturesInstallModule => '安裝模組';
+
+  @override
   String get deviceFeaturesInstallFirmware => '更新韌體';
 
   @override
@@ -6857,7 +7268,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get firmwareDownloadLatestFull => '下載最新完整套件';
 
   @override
-  String get firmwareUpdateNow => '更新';
+  String get firmwareUpdateIncrementalPackage => '更新增量套件';
+
+  @override
+  String get firmwareUpdateFullPackage => '更新完整套件';
 
   @override
   String get firmwareReleaseNotes => '版本更新說明';
@@ -6926,12 +7340,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get voiceLabContinuousCaptureDescription => '目前錄音結束後要求下一段錄音';
-
-  @override
-  String get voiceLabDisableMonitoring => '停用即時監聽';
-
-  @override
-  String get voiceLabEnableMonitoring => '啟用即時監聽';
 
   @override
   String get voiceLabReplyLabel => '已將回覆傳送至手錶';
@@ -7033,7 +7441,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get zeppOsMapGarminNoPreview =>
-      '此地圖不包含 Zepp OS 11/x/y 瓦片樹。原始 IMG 將以單檔地圖套件傳輸，因此無法預覽涵蓋範圍';
+      '該地圖不包含 Zepp OS 的 11/x/y 瓦片目錄，將保留原始 IMG 並作為單檔案地圖包傳輸，因此無法提供覆蓋範圍預覽';
 
   @override
   String zeppOsMapTileSummary(Object fileName, Object count) {
@@ -7054,11 +7462,11 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get zeppOsMapBtClassicHint =>
-      'Bluetooth Classic 大量傳輸已啟用。開始傳輸後，請在手錶上確認安裝';
+      '目前使用 BT Classic 大檔案通道\n開始傳輸後，請同時在手錶上確認安裝';
 
   @override
   String get zeppOsMapBleHint =>
-      'BLE 支援最大 2 MB 的地圖套件。傳輸較大地圖前請切換至 Bluetooth Classic。開始傳輸後，請在手錶上確認安裝';
+      'BLE 僅支援不超過 2 MB 的地圖包，傳輸更大的地圖前請切換至 BT Classic\n開始傳輸後，請同時在手錶上確認安裝';
 
   @override
   String get zeppOsMapPreviewTooLarge => '地圖範圍過大，無法完整預覽';
@@ -7330,7 +7738,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get zeppOsMirrorInterval => '畫面間隔';
 
   @override
-  String get zeppOsMirrorIntervalRange => '10–250';
+  String get zeppOsMirrorIntervalRange => '10~250';
 
   @override
   String get zeppOsOfflineMaps => '離線地圖';
@@ -7495,12 +7903,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get deviceMusicTransferred => '音樂傳輸完成';
 
   @override
-  String get deviceMusicLibrary => '裝置音樂';
-
-  @override
-  String get deviceMusicLibraryDescription => '管理裝置上的歌曲與播放清單';
-
-  @override
   String get deviceMusicSongs => '歌曲';
 
   @override
@@ -7581,12 +7983,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get deviceRecordingsDescription => '同步並匯出手錶錄音';
 
   @override
-  String get deviceRecordingsLibrary => '裝置錄音';
-
-  @override
-  String get deviceRecordingsLibraryDescription => '匯出裝置中的錄音';
-
-  @override
   String get deviceRecordingsHint => '錄音會逐一接收並驗證\n同步後請分別匯出每個原始檔案';
 
   @override
@@ -7656,11 +8052,11 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get deviceMusicTransferTitle => '傳輸 MP3 檔案';
 
   @override
-  String get deviceMusicVelaDescription => '將 MP3 檔案同步至裝置。每個檔案不得超過 100 MB';
+  String get deviceMusicVelaDescription => '將 MP3 檔案同步至裝置，單個檔案不得超過 100 MB';
 
   @override
   String get deviceMusicZeppDescription =>
-      '支援最大 50 MB 的 MP3 檔案。建議使用 Bluetooth Classic 以加快傳輸；BLE 也可使用，但需要較長時間';
+      '支援最大 50 MB 的 MP3 檔案\n建議使用經典藍牙以獲得更快的傳輸速度，也可使用 BLE，但傳輸時間較長';
 
   @override
   String get deviceMusicChooseMp3 => '選擇 MP3 檔案';
@@ -7750,7 +8146,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String deviceEndpointUnavailable(String transport) {
-    return '沒有可用的 $transport 端點。請先在系統 Bluetooth 設定中配對裝置，再重新掃描';
+    return '未發現可用的 $transport 連線通道，請先完成系統藍牙配對，然後重新掃描';
   }
 
   @override
@@ -7763,14 +8159,14 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get webSerialTitle => 'Web Serial';
 
   @override
-  String get webSerialHint => '在網頁上，OronBox 透過 Web Serial 連線裝置。儲存的裝置會保留在此瀏覽器中';
+  String get webSerialHint => '在網頁上，OronBox 透過 Web Serial 連線裝置，儲存的裝置會保留在此瀏覽器中';
 
   @override
   String get webSerialConnectDialogTitle => '透過 Web Serial 連線';
 
   @override
   String get webSerialConnectDialogHint =>
-      '輸入裝置 Auth key，然後在瀏覽器提示中選擇序列埠。Auth key 會儲存在此瀏覽器中';
+      '輸入裝置 Auth key，然後在瀏覽器提示中選擇序列埠，Auth key 會儲存在此瀏覽器中';
 
   @override
   String get cancel => '取消';
@@ -7857,6 +8253,29 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get watchfaceManagementNone => '沒有已安裝的錶盤';
 
   @override
+  String get moduleManagementTitle => '模組管理';
+
+  @override
+  String get moduleManagementNone => '沒有已安裝的模組';
+
+  @override
+  String moduleUninstallConfirm(String name) {
+    return '確定要卸載模組「$name」嗎？';
+  }
+
+  @override
+  String get moduleStatusEnabled => '已啟用';
+
+  @override
+  String get moduleStatusDisabled => '已停用';
+
+  @override
+  String get moduleEnable => '啟用';
+
+  @override
+  String get moduleDisable => '停用';
+
+  @override
   String get open => '開啟';
 
   @override
@@ -7864,12 +8283,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String externalLinkDescription(String url) {
-    return '你即將前往 $url\n\n此網站由第三方營運，與 OronBox 無關，安全性未知。請謹慎操作。要繼續嗎？';
+    return '你即將前往 $url\n\n此網站由第三方營運，與 OronBox 無關，安全性未知，請謹慎操作，要繼續嗎？';
   }
 
   @override
   String get externalLinkAstroBoxResourceHint =>
-      '這看起來是 AstroBox 資源。你也可以在 OronBox 中查看並安裝';
+      '這看起來是 AstroBox 資源，你也可以在 OronBox 中查看並安裝';
 
   @override
   String get continueToWebsite => '繼續';
@@ -8109,6 +8528,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get settingsMiAccountMissingCredentials => '輸入你的 Xiaomi 帳號與密碼';
 
   @override
+  String get settingsMiAccountTwoFactorTitle => '小米帳號驗證';
+
+  @override
   String get settingsMiAccountTwoFactorPrompt => '請在驗證頁面完成 Xiaomi 帳號雙重驗證';
 
   @override
@@ -8200,7 +8622,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get settingsAutoReconnectOnDisconnectDesc => '與裝置的連線被動中斷時嘗試重新連線';
 
   @override
-  String get deviceReconnectAttempting => '裝置連線異常，正在嘗試重新連線';
+  String get deviceReconnectAttempting => '正在嘗試重新連線裝置';
 
   @override
   String get deviceReconnectSucceeded => '重新連線成功';
@@ -8541,7 +8963,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsDeviceLogsTip =>
-      '此功能會從已連線的 Xiaomi 穿戴式裝置取得日誌，可能需要一段時間。處理期間請讓應用程式保持在前景，並保持裝置畫面亮起';
+      '此功能會從已連線的 Xiaomi 穿戴式裝置取得日誌，可能需要一段時間\n處理期間請讓應用程式保持在前景，並保持裝置畫面亮起';
 
   @override
   String get settingsDeviceLogsStart => '開始';
@@ -8584,14 +9006,14 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsAboutLogsWarningMessage =>
-      '日誌可能包含 BandBBS、Xiaomi 或 Amazfit 登入憑證及其他敏感資訊。請勿與 OronBox 官方維護者以外的任何人分享！';
+      '日誌可能包含 BandBBS、Xiaomi 或 Amazfit 登入憑證及其他敏感資訊\n請勿與 OronBox 官方維護者以外的任何人分享！';
 
   @override
   String get pluginPermissionRequestTitle => '外掛程式權限請求';
 
   @override
   String pluginPermissionRequestMessage(Object plugin, Object operation) {
-    return '「$plugin」想要$operation。';
+    return '「$plugin」想要$operation';
   }
 
   @override
@@ -8614,9 +9036,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get pluginPermissionExportFile => '將檔案匯出至主機';
-
-  @override
-  String get pluginPermissionNetwork => '存取網路';
 
   @override
   String get pluginPermissionInterconnect => '與裝置應用程式通訊';
@@ -8647,11 +9066,11 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String pluginErrorMessage(Object plugin, Object error) {
-    return '「$plugin」無法正常執行，可能已損壞。\n\n錯誤：$error\n\n是否解除安裝此外掛程式？';
+    return '「$plugin」無法正常執行，可能已損壞\n\n錯誤：$error\n\n是否解除安裝此外掛程式？';
   }
 
   @override
-  String get pluginPackageCorruptedMessage => '無法讀取選取的外掛程式套件，可能已損壞。請重新取得後再匯入。';
+  String get pluginPackageCorruptedMessage => '所選外掛程式套件無法讀取，可能已損壞\n請重新取得後再匯入';
 
   @override
   String get pluginErrorClearData => '清除插件資料';
@@ -8704,7 +9123,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String resourceTypeMismatchMessage(Object detectedType, Object selectedType) {
-    return '此檔案看起來是 $detectedType 資源，但你選取了 $selectedType。請選擇安裝方式';
+    return '這似乎是一個 $detectedType 資源，而你選擇了 $selectedType\n請選擇安裝方式';
   }
 
   @override
@@ -8714,12 +9133,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
     Object deviceName,
     Object devicePlatform,
   ) {
-    return '此檔案看起來是適用於 $resourcePlatform 裝置的 $resourceType 資源，但目前連線的裝置是 $deviceName（$devicePlatform）。不支援此資源，強制安裝可能造成問題';
+    return '這似乎是適用於 $resourcePlatform 裝置的 $resourceType 資源，但目前連線的裝置是 $deviceName（$devicePlatform）\n不支援此資源，強制安裝可能造成問題';
   }
 
   @override
   String resourceTypeUnknownMessage(Object selectedType) {
-    return 'OronBox 無法辨識實際的資源類型。仍要以 $selectedType 安裝嗎？';
+    return 'OronBox 無法辨識實際的資源類型，仍要以 $selectedType 安裝嗎？';
   }
 
   @override
@@ -8756,6 +9175,9 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get resourceTypeQuickApp => '快應用';
+
+  @override
+  String get resourceTypeResPack => '資源包';
 
   @override
   String get resourceTypeWatchface => '錶盤';
@@ -8838,7 +9260,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get creatorOronBoxRequired => '必填。資源會由 OronBox 審核';
+  String get creatorOronBoxRequired => '必填，資源會由 OronBox 審核';
 
   @override
   String get creatorOpenInOronBox => '在 OronBox 中查看';
@@ -8943,7 +9365,33 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get installQueueFixWatchfaceId => '修正錶盤 ID';
 
   @override
-  String get installQueueFixWatchfaceIdHint => '輸入 12 位以內的數字';
+  String get installQueueFixWatchfaceIdHint => '輸入新的錶盤 ID';
+
+  @override
+  String get installQueueReinstallWatchface => '重新安裝錶盤';
+
+  @override
+  String get installQueueRetryDirectly => '直接重試';
+
+  @override
+  String get installLowStorageMessage => '裝置預留儲存空間不足或已達數量上限';
+
+  @override
+  String get installLowBatteryMessage => '裝置電量過低';
+
+  @override
+  String get installQuantityLimitMessage => '已達安裝數量上限';
+
+  @override
+  String get installQueueReplaceWatchface => '刪除後重裝';
+
+  @override
+  String installQueueReplaceWatchfaceMessage(String id) {
+    return '裝置上已有 ID 為 $id 的錶盤\n目前版本無法直接安裝\n可以直接重試，或刪除原錶盤後重新安裝\n刪除後若安裝失敗，原錶盤無法自動還原';
+  }
+
+  @override
+  String get watchfaceDowngradeMessage => '裝置上已有相同 ID 的錶盤\n目前版本無法直接安裝';
 
   @override
   String get authorize => '授權';
@@ -9217,7 +9665,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get messageUnknownTitle => '通知';
 
   @override
-  String get messageUnknownBody => '無法取得此通知的詳細資料。';
+  String get messageUnknownBody => '無法取得此通知的詳細資料';
 
   @override
   String get messageCommentRepliedTitle => '留言收到新回覆';
@@ -9227,10 +9675,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get messageCommentHiddenAutomatedBody =>
-      '你的留言未通過自動審核，目前暫時不可見，可從訊息中提出申訴。';
+      '你的留言未通過自動審核，目前暫時不可見，可在訊息中提出申訴';
 
   @override
-  String get messageCommentHiddenReviewedBody => '你的留言經人工複審後已隱藏。';
+  String get messageCommentHiddenReviewedBody => '你的留言經人工複審後已隱藏';
 
   @override
   String get messageReviewApprovedTitle => '資源審核已通過';
@@ -9317,10 +9765,10 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get messageRoleAdministrator => '管理員';
 
   @override
-  String get messageApprovedBody => '你的提交已通過審核。';
+  String get messageApprovedBody => '你的提交已通過審核';
 
   @override
-  String get messageNeedsChangesBody => '審核發現需要修改的問題。';
+  String get messageNeedsChangesBody => '審核發現需要修改的問題';
 
   @override
   String messageReasonBody(String reason) {
@@ -9358,7 +9806,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get messageStatusChangedBody => '此項目的狀態已變更。';
+  String get messageStatusChangedBody => '該項目的狀態已發生變化';
 
   @override
   String messageReportStatusBody(String status) {
@@ -9367,31 +9815,31 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String messageCoinAddedBody(String amount) {
-    return '你的帳號增加了 $amount 枚硬幣。';
+    return '你的帳號增加了 $amount 枚硬幣';
   }
 
   @override
   String messageCoinDeductedBody(String amount) {
-    return '你的帳號扣除了 $amount 枚硬幣。';
+    return '你的帳號扣除了 $amount 枚硬幣';
   }
 
   @override
   String messageCoinVoteRevokedBody(String amount) {
-    return '你對此資源投出的 $amount 枚硬幣已作廢。';
+    return '你對此資源投出的 $amount 枚硬幣已作廢';
   }
 
   @override
-  String get messageAppealOverturnedBody => '管理員已撤銷原處理結果。';
+  String get messageAppealOverturnedBody => '管理員已撤銷原處理結果';
 
   @override
-  String get messageAppealUpheldBody => '複審後維持原處理結果。';
+  String get messageAppealUpheldBody => '複核後維持原處理結果';
 
   @override
-  String get messageAppealDismissedBody => '此申訴未獲受理。';
+  String get messageAppealDismissedBody => '該申訴未被受理';
 
   @override
   String messageRoleChangedBody(String role) {
-    return '你的帳號角色已變更為 $role。';
+    return '你的帳號角色已變更為 $role';
   }
 
   @override
@@ -9590,7 +10038,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get oronBoxCoinsDescription => '每日簽到可獲得 1–5 枚硬幣，用來支持創作者';
+  String get oronBoxCoinsDescription => '每日簽到可獲得 1~5 枚硬幣，用來支持創作者';
 
   @override
   String resourceFromCollection(String name) {
@@ -9736,7 +10184,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get creatorImportAlreadyImported => '已匯入並繫結';
 
   @override
-  String get creatorImportReviewNotice => '匯入內容可能不完整或辨識錯誤。提交前請逐一檢查並調整所有欄位';
+  String get creatorImportReviewNotice => '匯入內容可能不完整或辨識錯誤\n提交前請逐一檢查並調整所有欄位';
 
   @override
   String get creatorImportLogTitle => '處理日誌';
@@ -9951,6 +10399,12 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get weatherAutoSyncDescription => '同步裝置資料時自動同步天氣資料';
+
+  @override
+  String get alarmManagementTitle => '鬧鐘管理';
+
+  @override
+  String get alarmManagementNone => '沒有已設定的鬧鐘';
 
   @override
   String get weatherAqiGood => '優';
@@ -10528,8 +10982,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
       '勾選的部分支援裝置暫不支援同步發佈到米壇社群，將會略過這部分裝置的發佈';
 
   @override
-  String get errorSppBondRemovalFailed =>
-      '安卓版本低於 11，系統不支援 removeBond，如果出現頻繁斷連，請先在小米運動健康中切換到其他裝置，或關閉其「發現附近的裝置」權限';
+  String get errorSppBondRemovalFailed => '無法移除裝置的藍牙配對\n請在手機藍牙設定中取消配對後再試';
 
   @override
   String get viewAllResources => '查看全部';
@@ -10723,7 +11176,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get qrScanImageFailed => '無法辨識這張圖片';
 
   @override
-  String get qrScanCameraUnavailable => '相機無法使用\n可以選擇圖片辨識 QR Code';
+  String get qrScanCameraUnavailable => '相機無法使用';
 
   @override
   String get qrScanChooseCode => '選擇 QR Code';
@@ -10977,7 +11430,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get appDataClearCacheDescription =>
-      '清理圖片、外掛、文件快取與過期暫存檔\n執行中的外掛與裝置應用會停止';
+      '清除圖片、WebAssembly 編譯、外掛和文件快取及過期暫存檔案\n需要時會重新產生或下載\n執行中的外掛和裝置應用程式將停止';
 
   @override
   String get appDataCacheCleared => '快取已清理';
@@ -11061,7 +11514,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get appDataDownloadsDescription => '下載和安裝產生的暫存檔案';
 
   @override
-  String get appDataPluginCacheDescription => '外掛快取和可回收暫存檔案';
+  String get appDataPluginCacheDescription => '外掛執行產生的快取和暫存檔案';
 
   @override
   String get appDataImagesDescription => '瀏覽資源時儲存的圖片快取';
@@ -11193,7 +11646,7 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get appDataClearHealthDescription => '將刪除已同步的活動檔案\n本機運動健康數據將清空';
 
   @override
-  String get appDataClearCachedCategoryDescription => '僅清理未使用的快取檔案\n需要時會重新下載';
+  String get appDataClearCachedCategoryDescription => '清除未使用的快取檔案\n需要時會重新產生或下載';
 
   @override
   String get appDataClearModelsDescription => '保留目前模型\n清理未使用的舊版本與過期下載';
@@ -11465,16 +11918,6 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   }
 
   @override
-  String get wasmUnsupportedTitle => '目前系統無法載入 Wasm 執行階段';
-
-  @override
-  String get wasmUnsupportedMessage =>
-      '受 Android 8 系統核心安全性原則限制\n即時語音串流辨識與創作者圖片壓縮處理不可用\n\n如需使用以上功能，請升級系統至 Android 9+\n或使用非 Android 8 系統的裝置';
-
-  @override
-  String get doNotShowAgainThisSession => '本次執行期間不再提示';
-
-  @override
   String get settingsMiAccountRegion => '伺服器區域';
 
   @override
@@ -11494,4 +11937,446 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get settingsMiAccountRegionIn => '印度 (IN)';
+
+  @override
+  String get pluginPermissionReadClipboard => '讀取剪貼簿';
+
+  @override
+  String get pluginPermissionWriteClipboard => '寫入剪貼簿';
+
+  @override
+  String get pluginPermissionHostServer => '執行本機 HTTP 服務';
+
+  @override
+  String get pluginPermissionReceiveLink => '接收應用程式連結';
+
+  @override
+  String get pluginProviderUnavailable => '此外掛程式資源來源暫時無法使用';
+
+  @override
+  String get pluginDisabled => '外掛程式已停用';
+
+  @override
+  String get pluginOpenWindow => '在獨立視窗中開啟';
+
+  @override
+  String get pluginRunSettings => '執行設定';
+
+  @override
+  String get pluginEnable => '啟用';
+
+  @override
+  String get pluginDisable => '停用';
+
+  @override
+  String get pluginEnabled => '啟用外掛程式';
+
+  @override
+  String get pluginBackground => '背景執行';
+
+  @override
+  String get pluginBackgroundDescription => '無活動 10 分鐘後停止';
+
+  @override
+  String get pluginBackgroundForbidden => '禁止';
+
+  @override
+  String get pluginBackgroundActive => '保持活躍';
+
+  @override
+  String get pluginBackgroundContinuous => '持續執行';
+
+  @override
+  String get pluginBackgroundForbiddenDescription => '離開外掛程式後停止執行';
+
+  @override
+  String get pluginBackgroundContinuousDescription => '離開外掛程式後繼續執行';
+
+  @override
+  String get pluginAutoStart => '自動啟動';
+
+  @override
+  String get pluginAutoStartDescription => '開啟 OronBox 時啟動外掛程式';
+
+  @override
+  String get pluginRunStatus => '執行狀態';
+
+  @override
+  String get pluginStopped => '已停止';
+
+  @override
+  String get pluginExistingGrant => '現有授權';
+
+  @override
+  String get pluginPermissionAsk => '詢問';
+
+  @override
+  String get pluginPermissionAllow => '允許';
+
+  @override
+  String get pluginTargetPermissions => '操作與目標授權';
+
+  @override
+  String get pluginNoTargetPermissions => '暫無裝置或應用程式授權';
+
+  @override
+  String get errorPlatformCapabilityUnavailable => '目前的平台或瀏覽器暫不支援此操作';
+
+  @override
+  String get oauthPopupBlocked => '請允許此網站開啟彈出視窗，然後重新登入';
+
+  @override
+  String get oauthBrowserCompleting => '正在原頁面完成登入';
+
+  @override
+  String get oauthBrowserCompleted => '登入成功，可以關閉此頁面';
+
+  @override
+  String get oauthBrowserOriginalClosed => '原頁面暫未回應，可以在此繼續登入';
+
+  @override
+  String get oauthBrowserContinue => '繼續登入';
+
+  @override
+  String get wasmCompatibilityTitle => '執行階段相容性測試';
+
+  @override
+  String get wasmCompatibilityMessage =>
+      'OronBox 需要測試此裝置能否執行 WebAssembly\n\n如果你看到此提示，可能有以下原因\n• 裝置執行 Android 8~9，且使用 Linux 4.x 核心\n• 上次載入執行階段或進行測試時意外退出\n\n測試期間可能閃退，這是已知的相容性風險\n這可能是由於裝置的系統安全性原則與執行階段不相容\n\n如果發生閃退，請重新開啟 OronBox\n應用程式會暫停載入執行階段以避免再次閃退\n\n屆時圖片處理、語音處理、部分外掛程式\n和華米應用程式背景指令碼等功能可能無法使用\n直到你再次使用相關功能前成功通過測試';
+
+  @override
+  String get wasmCompatibilityDefer => '暫不測試';
+
+  @override
+  String get wasmCompatibilityStart => '開始測試';
+
+  @override
+  String get wasmCompatibilityTesting => '正在測試，請稍候';
+
+  @override
+  String get wasmCompatibilityPassed => '相容性測試通過';
+
+  @override
+  String get wasmCompatibilityTestFailed => '測試未完成，請重試或暫不測試';
+
+  @override
+  String get wasmCompatibilityRequired => '使用此功能前需要完成相容性測試';
+
+  @override
+  String get pluginType => '外掛類型';
+
+  @override
+  String get pluginTypeAstroBox => 'AstroBox-NG';
+
+  @override
+  String get pluginTypeOronBox => 'OronBox';
+
+  @override
+  String get appDataCompilationCache => '編譯快取';
+
+  @override
+  String get appDataCompilationCacheDescription => 'WebAssembly 編譯快取';
+
+  @override
+  String get openExternally => '外部開啟';
+
+  @override
+  String get externalOpenFailed => '無法開啟瀏覽器';
+
+  @override
+  String get resourceAstroBoxPurchaseTitle => '此檔案需要購買或授權';
+
+  @override
+  String get resourceAstroBoxPurchaseMessage =>
+      '此資源透過 AstroBox Creator Console 加密上傳\n需購買或取得授權後才能解密\n請改用 AstroBox 開啟';
+
+  @override
+  String get resourceAstroBoxAccessCheckFailed => '無法確認此檔案的存取狀態\n請重試';
+
+  @override
+  String get resourceAstroBoxDecryptionFailed => '檔案解密失敗\n請重試';
+
+  @override
+  String get appDataClearPluginCacheDescription => '清除外掛快取和暫存檔案\n需要時會重新產生或下載';
+
+  @override
+  String get appDataClearCompilationCacheDescription =>
+      '清除 WebAssembly 編譯快取\n需要時會重新產生';
+
+  @override
+  String get resourceMoreDevicesDownload => '更多裝置下載';
+
+  @override
+  String get resourceCompatibleWithDevice => '此資源適配了您的裝置';
+
+  @override
+  String get resourceIncompatibleWithDevice => '此資源暫未適配您的裝置';
+
+  @override
+  String get resourceInstallSucceeded => '安裝成功';
+
+  @override
+  String get installStorageFullTitle => '裝置儲存空間不足';
+
+  @override
+  String get installQuantityLimitTitle => '已達到安裝數量限制';
+
+  @override
+  String get installStorageFullHelp => '裝置預留儲存空間不足或已達到資源數量上限\n請先刪除一些資源，再重試安裝';
+
+  @override
+  String get installQuantityLimitHelp => '裝置已達到資源安裝數量上限\n請先刪除一些資源，再重試安裝';
+
+  @override
+  String get installTargetDeviceChanged => '請先切換至此安裝工作對應的裝置';
+
+  @override
+  String get debugNoLogs => '暫無日誌';
+
+  @override
+  String get debugNoLayoutTree => '此來源暫無版面配置樹';
+
+  @override
+  String get debugSelectElement => '選擇元素以查看詳細資訊';
+
+  @override
+  String get debugEmptyDirectory => '目錄為空';
+
+  @override
+  String get debugNoProtocolEvents => '尚未擷取通訊協定事件';
+
+  @override
+  String get globalAiNoProvidersTitle => '尚未新增提供者';
+
+  @override
+  String get globalAiNoProvidersMessage => '在上方新增提供者';
+
+  @override
+  String get globalAiNoModelsTitle => '暫無可用模型';
+
+  @override
+  String get globalAiNoModelsMessage => '請先新增模型';
+
+  @override
+  String get debugNoMatchingLogs => '沒有符合條件的日誌';
+
+  @override
+  String get appManagementNoVisibleApps => '沒有可顯示的應用程式';
+
+  @override
+  String get zeppOsAppCompatibilityEmpty => '尚未新增應用程式相容性檔案';
+
+  @override
+  String get qrScanCameraUnavailableMessage => '可以選擇圖片辨識 QR Code';
+
+  @override
+  String get resourceFeaturesDisabledTitle => '資源功能已關閉';
+
+  @override
+  String get pairingConnectStep => '連線裝置';
+
+  @override
+  String get pairingAccountStep => '綁定帳號';
+
+  @override
+  String get pairingLocalStep => '本機綁定';
+
+  @override
+  String get pairingAuthStep => '裝置驗證';
+
+  @override
+  String get pairingUnbound => '未綁定';
+
+  @override
+  String get pairingContinue => '繼續';
+
+  @override
+  String get pairingStartPrompt => '此裝置尚未綁定\n繼續後請依提示完成綁定';
+
+  @override
+  String get pairingSuccess => '連線成功';
+
+  @override
+  String get pairingTitle => '綁定裝置';
+
+  @override
+  String get pairingConnecting => '正在連線至裝置';
+
+  @override
+  String get pairingConfirmOnDevice => '請在裝置上確認綁定';
+
+  @override
+  String get pairingCompareCode => '請核對綁定碼是否一致';
+
+  @override
+  String get pairingRebind => '裝置需要重新綁定';
+
+  @override
+  String get pairingAlreadyBound => '此裝置已綁定';
+
+  @override
+  String get pairingUseExistingKey => '使用現有金鑰連線';
+
+  @override
+  String get engineeringTitle => 'MiWear 工程模式';
+
+  @override
+  String get engineeringDescription => '裝置模式切換與韌體更新';
+
+  @override
+  String get engineeringMode => '裝置模式';
+
+  @override
+  String get engineeringUser => '使用者模式';
+
+  @override
+  String get engineeringUserDebug => '使用者偵錯模式';
+
+  @override
+  String get engineeringEng => '工程模式';
+
+  @override
+  String get engineeringModeConfirm => '裝置將重新啟動並中斷連線\n重新啟動後請重新連線';
+
+  @override
+  String get engineeringConnectDevice => '連線裝置';
+
+  @override
+  String get engineeringConnectConfirm => '將中斷目前裝置的連線\n請確認連線的是需要操作的裝置';
+
+  @override
+  String get engineeringFirmwareHint => '請選擇裝置對應的韌體檔案';
+
+  @override
+  String get engineeringOtaConfirm => '使用此韌體更新目前連線的裝置？\n請確認型號相符\n更新期間保持裝置電量充足';
+
+  @override
+  String get engineeringReturn => '重新啟動至使用者模式';
+
+  @override
+  String get engineeringIdle => '等待操作';
+
+  @override
+  String get engineeringScanning => '正在搜尋工程裝置';
+
+  @override
+  String get engineeringConnecting => '正在連線';
+
+  @override
+  String get engineeringUpdateBackBlocked => '正在更新韌體\n請等待目前操作完成';
+
+  @override
+  String get engineeringUploading => '正在上傳韌體';
+
+  @override
+  String get engineeringRestarting => '正在要求裝置重新啟動';
+
+  @override
+  String get engineeringWaiting => '正在等待裝置重新啟動\n請在裝置啟動後重新連線';
+
+  @override
+  String get engineeringFailed => '更新已中斷';
+
+  @override
+  String get engineeringEmpty => '未發現工程裝置\n請確認裝置已進入工程模式後重新搜尋';
+
+  @override
+  String get engineeringFirmwareError => '請選擇非空的韌體檔案';
+
+  @override
+  String get engineeringResponseError => '裝置拒絕了要求或傳回異常回應';
+
+  @override
+  String get engineeringTimeout => '裝置回應逾時\n請重新連線後再試';
+
+  @override
+  String get engineeringMtuError => '目前藍牙連線無法傳送控制訊息\n請重新連線或使用 SPP';
+
+  @override
+  String get engineeringBusyError => '請先完成或取消目前操作';
+
+  @override
+  String get engineeringConnectionError => '請先連線工程裝置';
+
+  @override
+  String get deviceSettingsTitle => '裝置設定';
+
+  @override
+  String get deviceSettingsDescription => '調整此裝置的使用偏好';
+
+  @override
+  String get deviceSettingsUnavailable => '目前沒有可用的裝置設定';
+
+  @override
+  String get deviceNotificationSync => '通知同步';
+
+  @override
+  String get deviceNotificationSyncDescription => '將所選應用程式的通知同步到此裝置';
+
+  @override
+  String get deviceNotificationApps => '同步的應用程式';
+
+  @override
+  String get deviceNotificationAppsEmpty => '找不到應用程式';
+
+  @override
+  String get updateReminderInbox => '訊息匣通知';
+
+  @override
+  String get inboxNotificationUnread => '您有未讀訊息';
+
+  @override
+  String get notificationPermissionsSection => '通知權限';
+
+  @override
+  String get notificationPermissionDisplay => '顯示通知';
+
+  @override
+  String get notificationPermissionRead => '讀取通知';
+
+  @override
+  String get notificationPermissionEnabled => '已開啟';
+
+  @override
+  String get notificationPermissionDisabled => '未開啟';
+
+  @override
+  String get notificationPermissionUnavailable => '無法讀取權限狀態';
+
+  @override
+  String get updateReminderFirmwareTitle => '發現韌體更新';
+
+  @override
+  String get updateReminderResourcesTitle => '發現資源更新';
+
+  @override
+  String get updateReminderPluginsTitle => '發現外掛程式更新';
+
+  @override
+  String get updateReminderFirmwareMessage => '您的裝置有可用的韌體更新';
+
+  @override
+  String get updateReminderResourcesMessage => '您裝置上的資源有可用更新';
+
+  @override
+  String updateReminderCurrentVersion(String version) {
+    return '目前版本  $version';
+  }
+
+  @override
+  String updateReminderLatestFirmware(String version) {
+    return '最新韌體  $version';
+  }
+
+  @override
+  String get updateReminderSilence => '不再提示直到下次更新';
+
+  @override
+  String get updateReminderInstall => '更新';
+
+  @override
+  String get updateReminderInstallAll => '更新全部';
+
+  @override
+  String get updateReminderChanged => '目前無法執行此更新';
 }

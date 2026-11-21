@@ -56,18 +56,8 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 pkg_check_modules(BLUEZ REQUIRED IMPORTED_TARGET bluez)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
-pkg_check_modules(WEBKIT IMPORTED_TARGET webkit2gtk-4.1)
-if (NOT WEBKIT_FOUND)
-  pkg_check_modules(WEBKIT REQUIRED IMPORTED_TARGET webkit2gtk-4.0)
-endif()
-
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
-
-# Prefer the corrected public shim when the generated plugin registrant includes
-# quickjs_engine's Linux header.
-target_include_directories(${BINARY_NAME} BEFORE PRIVATE
-  "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
@@ -85,15 +75,6 @@ set_target_properties(${BINARY_NAME}
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
-
-# quickjs_engine 0.1.7 defines FLUTTER_PLUGIN_EXPORT in its own header; a
-# command-line definition would conflict with it under -Werror. Keep default
-# visibility so the generated registrant can link against the plugin.
-if(TARGET quickjs_engine_plugin)
-  set_target_properties(quickjs_engine_plugin PROPERTIES
-    C_VISIBILITY_PRESET default
-    CXX_VISIBILITY_PRESET default)
-endif()
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build

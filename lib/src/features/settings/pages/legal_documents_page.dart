@@ -1,3 +1,4 @@
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/utils/error_localization.dart';
 import 'package:material_ui/material_ui.dart';
@@ -124,7 +125,7 @@ Future<bool> ensurePublishingAgreement(BuildContext context) async {
     );
   } catch (error) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      appScaffoldMessengerOf(context).showSnackBar(
         SnackBar(
           content: Text(AppLocalizations.of(context)!.creatorTermsLoadFailed),
         ),

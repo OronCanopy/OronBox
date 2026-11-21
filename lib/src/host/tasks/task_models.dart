@@ -8,6 +8,8 @@ class HostTaskView {
     this.params = const {},
     this.path,
     this.error,
+    this.errorCode,
+    this.errorDetails,
   });
 
   final String id;
@@ -18,6 +20,8 @@ class HostTaskView {
   final Map<String, Object?> params;
   final String? path;
   final String? error;
+  final String? errorCode;
+  final Object? errorDetails;
 
   bool get isTerminal =>
       status == 'completed' || status == 'failed' || status == 'cancelled';
@@ -38,6 +42,8 @@ class HostTaskView {
       params: params ?? const {},
       path: params?['path']?.toString(),
       error: error?['message']?.toString(),
+      errorCode: error?['code']?.toString(),
+      errorDetails: error?['details'],
     );
   }
 }

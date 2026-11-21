@@ -6,7 +6,7 @@ import 'package:oronbox/src/features/resources/services/resource_payload_analyze
 
 void main() {
   Uint8List watchfaceBytes(String id) {
-    final bytes = Uint8List(0x34);
+    final bytes = Uint8List(0xa8);
     bytes.setRange(0, 4, const [0x5a, 0xa5, 0x34, 0x12]);
     bytes.setRange(0x28, 0x28 + id.length, id.codeUnits);
     return bytes;
@@ -33,20 +33,17 @@ void main() {
   test('resource analyzer exposes the embedded watchface ID', () {
     final analysis = ResourcePayloadAnalyzer().analyze(
       fileName: 'face.bin',
-      bytes: watchfaceBytes('120912345678'),
+      bytes: watchfaceBytes('canopus_manager'),
     );
 
     expect(analysis?.type, LocalDeviceInstallType.watchface);
-    expect(analysis?.identifier, '120912345678');
+    expect(analysis?.identifier, 'canopus_manager');
   });
 
   test('reports restricted watchface message without exposing the ID', () {
     final error = WatchfaceInstallBlockedException('120912345678');
 
-    expect(
-      error.message,
-      contains('OronBox 无法安装疑似来自官方表盘商城的表盘'),
-    );
+    expect(error.message, contains('OronBox 无法安装疑似来自官方表盘商城的表盘'));
     expect(error.message, isNot(contains('1209')));
     expect(error.message, isNot(contains('禁止')));
   });

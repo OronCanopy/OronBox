@@ -24,6 +24,13 @@ class OronBoxResourceCatalog implements CommunityResourceCatalog {
 
   @override
   Future<CommunityResourcePage> getPage(CommunityResourceQuery query) async {
+    if (query.type == CommunityResourceType.resPack) {
+      return CommunityResourcePage(
+        items: const [],
+        page: query.page,
+        hasMore: false,
+      );
+    }
     final response = await _dio.get<Object?>(
       '$oronBoxServerBaseUrl/api/v1/resources',
       queryParameters: {
@@ -151,7 +158,9 @@ class OronBoxResourceCatalog implements CommunityResourceCatalog {
         return CommunityResourceFile(
           id: item['id']?.toString() ?? digest,
           fileName: item['original_name']?.toString() ?? 'resource',
-          version: item['version']?.toString() ?? '',
+          version: item['package_version']?.toString() ?? '',
+          sha256: digest,
+          size: (item['size_bytes'] as num?)?.toInt(),
           downloadUrl: _blobUri(digest),
           supportedDevices:
               (item['device_ids'] as List? ??
@@ -398,6 +407,7 @@ class OronBoxResourceCatalog implements CommunityResourceCatalog {
     CommunityResourceType.watchface => 'watchface',
     CommunityResourceType.firmware => 'firmware',
     CommunityResourceType.canopus => 'canopus',
+    CommunityResourceType.resPack => 'res_pack',
   };
 
   Map<String, Object?> _map(Object? value) => value is Map

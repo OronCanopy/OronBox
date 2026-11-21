@@ -1,39 +1,76 @@
+import 'package:oronbox/src/features/plugins/application/plugin_repository.dart'
+    show comparePluginVersions;
 import 'package:oronbox/src/features/settings/application/app_data_maintenance.dart';
 
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:math';
 
-import 'package:dio/dio.dart';
+import '../domain/plugin_host_settings.dart';
+
+import 'package:oronbox/src/core/services/background_task_guard.dart';
+
+import 'package:flutter/services.dart';
+import 'package:oronbox/src/device/xiaomi/protocol/xiaomi_plugin_protocol.dart';
+import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart'
+    as xiaomi_pb;
+import 'package:oronbox/src/device/core/event_bus.dart';
+import 'package:oronbox/src/features/plugins/application/plugin_http_servers.dart';
+import 'package:oronbox/src/features/plugins/widgets/plugin_browser_sessions.dart';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/commands/command_protocol.dart';
 import 'package:oronbox/src/core/logging/logging_service.dart';
 import 'package:oronbox/src/core/models/bt_models.dart';
-import 'package:oronbox/src/core/network/app_http_transport.dart';
+
+import 'plugin_http_client.dart';
+import 'plugin_websockets.dart';
+
+import 'package:oronbox/src/host/tasks/task_queue.dart';
+import 'package:oronbox/src/core/storage/managed_temporary_files.dart';
+
 import 'package:oronbox/src/core/services/build_info_service.dart';
 import 'package:oronbox/src/core/services/shared_prefs_service.dart';
+import 'package:oronbox/src/core/providers/theme_locale_providers.dart';
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 import 'package:oronbox/src/features/plugins/domain/plugin_execution_models.dart';
 import 'package:oronbox/src/features/plugins/domain/plugin_package.dart';
 import 'package:oronbox/src/features/plugins/domain/plugin_permission.dart';
-import 'package:oronbox/src/features/plugins/legacy/astrobox_legacy_adapter.dart';
 import 'package:oronbox/src/features/plugins/application/plugin_permission_broker.dart';
-import 'package:oronbox/src/features/plugins/application/plugin_text_file_codec.dart';
 import 'package:oronbox/src/features/plugins/application/plugin_host_environment.dart';
 import 'package:oronbox/src/features/plugins/runtime/plugin_runtime.dart';
-import 'package:oronbox/src/features/plugins/runtime/plugin_runtime_factory.dart';
-import 'package:oronbox/src/features/plugins/runtime/plugin_wasm_host.dart';
+import 'package:oronbox/src/features/plugins/runtime/plugin_runtime_wasm.dart';
+import 'package:oronbox/src/features/plugins/runtime/plugin_runtime_js.dart';
+import 'package:oronbox/src/features/plugins/runtime/plugin_wasi_sandbox.dart';
+import 'package:oronbox/src/core/wasm/wasm_runtime.dart';
+import 'package:oronbox/src/core/wasm/wasm_compatibility.dart';
+import 'package:oronbox/src/features/resources/services/resource_install_service.dart';
 import 'package:oronbox/src/features/plugins/storage/plugin_storage.dart';
 import 'package:oronbox/src/features/plugins/storage/plugin_storage_factory.dart';
-import 'package:oronbox/src/features/resources/services/resource_install_service.dart';
 
 export 'package:oronbox/src/features/plugins/domain/plugin_execution_models.dart';
+
+part 'plugin_management.dart';
+part 'plugin_background_lifecycle.dart';
+part 'plugin_host.dart';
+part 'plugin_ng_host.dart';
+part 'plugin_js_host.dart';
+part 'plugin_js_permissions.dart';
+part 'plugin_host_wasm.dart';
+part 'plugin_host_files.dart';
+part 'plugin_host_appside.dart';
+part 'plugin_host_network.dart';
+part 'plugin_host_interconnect.dart';
+part 'plugin_host_queue.dart';
 
 class PluginManager {
   PluginManager({
     required this.deviceManager,
     required this.readDeviceState,
     required this.emitEvent,
+    this.backgroundIdleTimeout = const Duration(minutes: 10),
   }) : _safeMode =
            SharedPrefsService.instance.getBool(_safeModePreference) ?? false {
     _interconnectSubscription = deviceManager.interconnectMessages.listen((
@@ -45,36 +82,77 @@ class PluginManager {
         message.payload,
       );
     });
-    _rawProtocolSubscription = deviceManager.rawProtocolFrames.listen(
-      _queueRawProtocolDispatch,
+    _backgroundExpirationSubscription = backgroundTaskExpirations.listen((ids) {
+      unawaited(
+        _backgroundExpired(ids).catchError((Object error, StackTrace stack) {
+          _log.warning(
+            'Plugin background expiration cleanup failed',
+            error,
+            stack,
+          );
+        }),
+      );
+    });
+    _deviceSubscription = deviceManager.deviceEvents.listen(
+      _dispatchDeviceEvent,
     );
   }
 
   static final _log = getLogger('PluginManager');
   static const _safeModePreference = 'plugins.safe_mode';
-  static const _operationTimeout = Duration(seconds: 15);
+  static const _operationTimeout = Duration(minutes: 5);
 
+  final Duration backgroundIdleTimeout;
   final DeviceManager deviceManager;
   final DeviceManagerState Function() readDeviceState;
   final void Function(CommandEvent event) emitEvent;
   final _plugins = <String, InstalledPlugin>{};
+  final _hostSettings = <String, Map<String, Object?>>{};
+  final _hostWrites = <String, Future<void>>{};
+  final _managementOperations = <String, Future<void>>{};
+  Future<void> _lifecycleTransition = Future<void>.value();
+  Future<void>? _automaticStartup;
+  final _views = <String, Map<String, bool>>{};
+  final _backgroundTasks = <String, BackgroundTaskHandle>{};
+  final _suspendedPlugins = <String>{};
+  final _suspendedDeadlines = <String, DateTime>{};
+  bool _foreground = true;
   final _runtimeStarts = <String, Future<PluginRuntime>>{};
+  final _runtimeStops = <String, Future<void>>{};
+  final _runtimeLifetimes = <String, Object>{};
   final _runtimes = <String, PluginRuntime>{};
-  final _wasmHosts = <String, PluginWasmHost>{};
+  final _sessions = <String, _PluginSession>{};
+  final _pendingInterconnect =
+      Queue<
+        ({String addr, String package, String payload, DateTime received})
+      >();
+  final _httpServers = <String, PluginHttpServers>{};
+  final _httpClients = <String, PluginHttpClient>{};
+  final _websockets = <String, PluginWebSockets>{};
+  final _deviceRevisions = <String, int>{};
+  HostTaskQueue? _taskQueue;
+  StreamSubscription<CommandEvent>? _taskSubscription;
+  final _browsers = <String, PluginBrowserSessions>{};
+  final _uiRevisions = <(String, String), int>{};
   final _uiNodes = <String, Object?>{};
   final _openPages = <String, Object?>{};
-  final _hostRequests = <String, Completer<Map<String, Object?>>>{};
+  final _hostRequests =
+      <
+        String,
+        ({
+          String pluginId,
+          String type,
+          Map<String, Object?> data,
+          Completer<Map<String, Object?>> result,
+        })
+      >{};
+  final _hostRequestOwners = <String, String>{};
+  final _zmlAttachments = <int, _PluginZmlAttachment>{};
+  final _zmlTransitions = <int, Future<void>>{};
+  final _installer = ResourceInstallService();
   final _providers = <String, _PluginProvider>{};
   final _failures = <String, PluginExecutionFailure>{};
-  final _interconnectObservers = <String>{};
-  final _rawProtocolObservers = <String>{};
-  final _zmlAttachments = <int, _PluginZmlAttachment>{};
-  Future<void> _interconnectDispatchTail = Future<void>.value();
-  Future<void> _rawProtocolDispatchTail = Future<void>.value();
-  Future<void> _interconnectSendTail = Future<void>.value();
   Future<void> _runtimeTransition = Future<void>.value();
-  final _dio = createAppHttpTransport();
-  final _installer = ResourceInstallService();
   late final Future<PluginStorage> _storage = createPluginStorage();
   late final PluginPermissionBroker _permissionBroker = PluginPermissionBroker(
     prompt: _promptPermission,
@@ -82,9 +160,19 @@ class PluginManager {
         (await _storage).readPermissionGrants(id),
     writePersistentGrants: (id, grants) async =>
         (await _storage).writePermissionGrants(id, grants),
+    readPolicies: (id) async =>
+        ((await _settingsFor(id))['permissionPolicies'] as Map? ?? {})
+            .cast<String, Object?>(),
+    writePolicies: (id, policies) async {
+      await _writeHostPatch(id, {'permissionPolicies': policies});
+      _emitState(id);
+    },
   );
   late final StreamSubscription _interconnectSubscription;
-  late final StreamSubscription _rawProtocolSubscription;
+  late final StreamSubscription _deviceSubscription;
+  late final StreamSubscription _backgroundExpirationSubscription;
+  final _canopusSubscriptions = <(String, String), Set<String>>{};
+  final _canopusTransitions = <(String, String), Future<void>>{};
   Future<void>? _initialization;
   var _requestSequence = 0;
   var _closed = false;
@@ -94,11 +182,20 @@ class PluginManager {
     deviceManager: deviceManager,
     initialize: initialize,
     stopRuntimes: () async {
-      await _runtimeTransition;
+      await Future.wait(_managementOperations.values.toList());
       await _closeAllRuntimes();
+      await _permissionBroker.drainWrites();
+      await Future.wait(_hostWrites.values.toList());
     },
     reload: () async {
       final installed = await (await _storage).loadInstalled();
+      _hostSettings.clear();
+      await _permissionBroker.reload();
+      _suspendedPlugins.clear();
+      _suspendedDeadlines.clear();
+      for (final plugin in installed) {
+        await _settingsFor(plugin.manifest.id);
+      }
       _plugins
         ..clear()
         ..addEntries(
@@ -115,6 +212,17 @@ class PluginManager {
       final installed = await (await _storage).loadInstalled();
       for (final plugin in installed) {
         _plugins[plugin.manifest.id] = plugin;
+        try {
+          await _settingsFor(plugin.manifest.id);
+        } catch (error, stack) {
+          _log.warning(
+            'Unable to load host settings for ${plugin.manifest.id}',
+            error,
+            stack,
+          );
+          // Corrupt settings must never implicitly activate a plugin.
+          _hostSettings[plugin.manifest.id] = {'enabled': false};
+        }
       }
     } catch (error, stackTrace) {
       _log.warning('Unable to load installed plugins', error, stackTrace);
@@ -152,10 +260,15 @@ class PluginManager {
       'running': running,
       'state': running ? 'running' : 'stopped',
       'runtimeState': _runtimes[id]?.diagnostics ?? const {},
+      if (_sessions[id] case final session?)
+        'hostState': {
+          'cards': session.cards.values.toList(),
+          'translationLocales': session.translations.keys.toList(),
+          'deeplinkRegistered': session.deeplink,
+        },
       'layout': _uiNodes[id] ?? const <Map<String, Object?>>[],
-      'pages': _openPages[id] ?? const <Map<String, Object?>>[],
       'storage': plugin.config,
-      'wasmInstances': _wasmHosts.containsKey(id) ? 1 : 0,
+      'wasmInstances': running ? 1 : 0,
       'permissions': plugin.manifest.permissions,
       if (_failures[id] case final failure?) 'failure': failure.toJson(),
     };
@@ -244,10 +357,15 @@ class PluginManager {
     _safeMode = enabled;
     await SharedPrefsService.instance.setBool(_safeModePreference, enabled);
     if (enabled) {
-      await _runtimeTransition.catchError((_) {});
+      _suspendedPlugins.clear();
+      _suspendedDeadlines.clear();
       await _closeAllRuntimes();
     }
     emitEvent(CommandEvent('plugin.safeMode', data: {'enabled': enabled}));
+    if (!enabled) {
+      _automaticStartup = null;
+      await startAutomaticPlugins();
+    }
   }
 
   Future<List<Map<String, Object?>>> list({bool includeIcons = true}) async {
@@ -262,18 +380,41 @@ class PluginManager {
   Future<Map<String, Object?>> install(
     Uint8List bytes, {
     bool includeIcon = true,
+    ({String id, String runtime, String version})? expectedUpdate,
   }) async {
     if (maintainingData) throw StateError('Data maintenance is active');
     await initialize();
     final package = const PluginPackageReader().read(bytes);
     final id = package.manifest.id;
-    final config = _plugins[id]?.config ?? const <String, Object?>{};
-    await _closeRuntime(id);
-    _failures.remove(id);
-    final plugin = await (await _storage).install(package, config: config);
-    _plugins[id] = plugin;
-    _emitState(id);
-    return _summary(plugin, includeIcon: includeIcon);
+    if (expectedUpdate != null &&
+        (id != expectedUpdate.id ||
+            package.manifest.runtime.name != expectedUpdate.runtime ||
+            package.manifest.version != expectedUpdate.version)) {
+      throw StateError('Plugin update does not match the catalog');
+    }
+    return _withManagement(id, () async {
+      final previous = _plugins[id];
+      if (expectedUpdate != null) {
+        if (previous == null ||
+            previous.manifest.runtime != package.manifest.runtime) {
+          throw StateError('Plugin is no longer installed');
+        }
+        if (comparePluginVersions(
+              package.manifest.version,
+              previous.manifest.version,
+            ) <=
+            0) {
+          return _summary(previous, includeIcon: includeIcon);
+        }
+      }
+      final config = previous?.config ?? const <String, Object?>{};
+      await _closeRuntime(id);
+      _failures.remove(id);
+      final plugin = await (await _storage).install(package, config: config);
+      _plugins[id] = plugin;
+      _emitState(id);
+      return _summary(plugin, includeIcon: includeIcon);
+    });
   }
 
   Future<Map<String, Object?>> get(String id) async {
@@ -282,13 +423,16 @@ class PluginManager {
     return {
       ...await _summary(plugin),
       'ui': _uiNodes[id] ?? const <Object?>[],
-      if (_openPages[id] != null) 'page': _openPages[id],
+      'page': _openPages[id],
+      'permissionPolicies': await _permissionBroker.policies(id),
     };
   }
 
-  Future<Object?> open(String id) async {
+  Future<Object?> open(String id, {bool interactive = false}) async {
     await initialize();
     final plugin = _requirePlugin(id);
+    _checkActivation(id);
+    await WasmCompatibility.shared.ensureAllowed(interactive: interactive);
     _failures.remove(id);
     return _runPluginOperation(plugin, 'open', () async {
       await _ensureRuntime(id);
@@ -299,67 +443,75 @@ class PluginManager {
   Future<Object?> invoke(String id, String callbackId, Object? value) async {
     await initialize();
     final plugin = _requirePlugin(id);
-    try {
+    _checkActivation(id);
+    return _runPluginOperation(plugin, 'callback', () async {
       final failure = _failures[id];
       if (failure != null) throw PluginExecutionException.fromFailure(failure);
       final runtime = await _ensureRuntime(id);
       await runtime.invokeCallback(callbackId, value);
-    } catch (error, stackTrace) {
-      if (error is PluginExecutionException) rethrow;
-      _log.warning(
-        'Plugin ${plugin.manifest.name} callback failed',
-        error,
-        stackTrace,
-      );
-    }
-    return _uiNodes[id] ?? const <Object?>[];
+      return _uiNodes[id] ?? const <Object?>[];
+    });
   }
 
   Future<void> closePlugin(String id) async {
     await initialize();
     _requirePlugin(id);
-    await _runtimeTransition.catchError((_) {});
+    _suspendedPlugins.remove(id);
+    _suspendedDeadlines.remove(id);
     await _closeRuntime(id);
-    _emitDiagnosticState(id);
+    _emitState(id);
   }
 
   Future<void> clearData(String id) async {
     if (maintainingData) throw StateError('Data maintenance is active');
     await initialize();
-    final plugin = _requirePlugin(id);
-    await _closeRuntime(id);
-    await _permissionBroker.clearPlugin(id);
-    await (await _storage).clearPluginData(id);
-    _plugins[id] = plugin.copyWith(config: const {});
-    _failures.remove(id);
-    _uiNodes.remove(id);
-    _openPages.remove(id);
-    _emitState(id);
+    await _withManagement(id, () async {
+      final plugin = _requirePlugin(id);
+      _suspendedPlugins.remove(id);
+      _suspendedDeadlines.remove(id);
+      await _closeRuntime(id);
+      await _permissionBroker.clearPlugin(id);
+      await _awaitHostWrites(id);
+      await (await _storage).clearPluginData(id);
+      _hostSettings.remove(id);
+      _plugins[id] = plugin.copyWith(config: const {});
+      _failures.remove(id);
+      _uiNodes.remove(id);
+      _openPages.remove(id);
+      _emitState(id);
+    });
   }
 
   Future<void> remove(String id) async {
     if (maintainingData) throw StateError('Data maintenance is active');
     await initialize();
-    _requirePlugin(id);
-    await _closeRuntime(id);
-    await _permissionBroker.clearPlugin(id);
-    await (await _storage).removePlugin(id);
-    _plugins.remove(id);
-    _failures.remove(id);
-    _uiNodes.remove(id);
-    _openPages.remove(id);
-    _providers.removeWhere((_, provider) => provider.pluginId == id);
-    _interconnectObservers.remove(id);
-    _rawProtocolObservers.remove(id);
-    _emitState(id);
+    await _withManagement(id, () async {
+      _requirePlugin(id);
+      await _closeRuntime(id);
+      await _permissionBroker.clearPlugin(id);
+      await _awaitHostWrites(id);
+      await (await _storage).removePlugin(id);
+      _hostSettings.remove(id);
+      _views.remove(id);
+      _suspendedPlugins.remove(id);
+      _suspendedDeadlines.remove(id);
+      _plugins.remove(id);
+      _failures.remove(id);
+      _uiNodes.remove(id);
+      _providers.removeWhere((_, provider) => provider.pluginId == id);
+      _emitState(id);
+    });
   }
 
   Future<void> respondToHostRequest(
     String requestId,
-    Map<String, Object?> response,
-  ) async {
-    final completer = _hostRequests.remove(requestId);
-    if (completer == null) {
+    Map<String, Object?> response, {
+    String? owner,
+  }) async {
+    if (owner != null && _hostRequestOwners[requestId] != owner) return;
+    _hostRequestOwners.remove(requestId);
+    final request = _hostRequests.remove(requestId);
+    if (request == null) {
       _log.warning('received response for unknown host request $requestId');
       return;
     }
@@ -367,40 +519,21 @@ class PluginManager {
       'host request $requestId completed '
       '(cancelled=${response['cancelled'] == true})',
     );
-    completer.complete(response);
-  }
-
-  Future<Object?> callProvider(
-    String providerName,
-    String operation,
-    List<Object?> arguments,
-  ) async {
-    final provider = _providers[providerName];
-    if (provider == null) throw StateError('Plugin provider not found');
-    final plugin = _requirePlugin(provider.pluginId);
-    final wasRunning = _runtimes.containsKey(provider.pluginId);
-    try {
-      return await _runPluginOperation(plugin, 'provider.$operation', () async {
-        final runtime = await _ensureRuntime(provider.pluginId);
-        final activeProvider = _providers[providerName];
-        if (activeProvider == null ||
-            activeProvider.pluginId != plugin.manifest.id) {
-          throw StateError('Plugin did not register provider $providerName');
+    request.result.complete(response);
+    if ({'pickFile', 'saveFile', 'openUrl'}.contains(request.type)) {
+      Timer.run(() {
+        if (!_closed && !_foreground) {
+          unawaited(
+            setForeground(false).catchError((Object error, StackTrace stack) {
+              _log.warning(
+                'Plugin suspension after host interaction failed',
+                error,
+                stack,
+              );
+            }),
+          );
         }
-        if (operation == 'categories' && activeProvider.categories == null) {
-          return const <Object?>[];
-        }
-        final callback = switch (operation) {
-          'categories' => activeProvider.categories!,
-          'query' => activeProvider.query,
-          'detail' => activeProvider.detail,
-          'download' => activeProvider.download,
-          _ => throw StateError('Unknown provider operation: $operation'),
-        };
-        return runtime.invokeRegistered(callback, arguments);
       });
-    } finally {
-      if (!wasRunning) await closePlugin(provider.pluginId);
     }
   }
 
@@ -411,21 +544,53 @@ class PluginManager {
         .toList(growable: false);
   }
 
-  String providerDisplayName(String id) => _providers[id]?.name ?? id;
+  bool providerAvailable(String id) =>
+      _providers[id]?.callbacks.isNotEmpty == true;
 
-  Future<Uint8List> readProviderFile(String providerName, String path) async {
-    final provider = _providers[providerName];
-    if (provider == null) throw StateError('Plugin provider not found');
+  Future<Object?> callProvider(
+    String id,
+    String operation,
+    List<Object?> args,
+  ) async {
+    await initialize();
+    final provider = _providers[id];
+    if (provider == null || provider.callbacks.isEmpty) {
+      throw StateError('plugin_provider_unavailable');
+    }
+    final plugin = _requirePlugin(provider.pluginId);
+    return _runPluginOperation(plugin, 'provider.$operation', () async {
+      final runtime = await _ensureRuntime(provider.pluginId);
+      if (runtime is! JavaScriptPluginRuntime) {
+        throw StateError('plugin_provider_unavailable');
+      }
+      final callback = provider.callbacks[operation];
+      if (callback == null && operation == 'categories') return <Object?>[];
+      if (callback == null) {
+        throw UnsupportedError('Provider operation $operation');
+      }
+      return runtime.invokeRegistered(callback, args);
+    });
+  }
+
+  Future<Uint8List> readProviderFile(String id, String path) async {
+    final provider = _providers[id];
+    if (provider == null || provider.callbacks.isEmpty) {
+      throw StateError('plugin_provider_unavailable');
+    }
     return (await _storage).readFile(
       provider.pluginId,
       PluginStoragePath.parse(path),
     );
   }
 
+  String providerDisplayName(String id) => _providers[id]?.name ?? id;
+
   Future<PluginRuntime> _ensureRuntime(String id) async {
     await initialize();
     if (_closed) throw StateError('Plugin manager is closed');
     final plugin = _requirePlugin(id);
+    await _managementOperations[id];
+    _checkActivation(id);
     if (_safeMode || maintainingData) {
       throw PluginExecutionException(
         plugin.manifest.id,
@@ -438,9 +603,14 @@ class PluginManager {
     final pending = _runtimeStarts[id];
     if (pending != null) return pending;
     if (_runtimes[id] case final runtime?) return runtime;
-    final start = _runtimeTransition
-        .catchError((_) {})
-        .then((_) => _startRuntime(id));
+    final lifetime = _runtimeLifetimes.putIfAbsent(id, Object.new);
+    late final Future<PluginRuntime> start;
+    start = _runtimeTransition.catchError((_) {}).then((_) {
+      if (_closed || !identical(_runtimeStarts[id], start)) {
+        throw StateError('Plugin startup cancelled');
+      }
+      return _startRuntime(id, lifetime);
+    });
     _runtimeTransition = start.then<void>((_) {}, onError: (_, _) {});
     _runtimeStarts[id] = start;
     try {
@@ -452,65 +622,159 @@ class PluginManager {
     }
   }
 
-  Future<PluginRuntime> _startRuntime(String id) async {
+  Future<PluginRuntime> _startRuntime(String id, Object lifetime) async {
     final plugin = _requirePlugin(id);
-    await _closeRuntime(id);
+    await _closeRuntime(id, cancelStart: false);
     _uiNodes.remove(id);
-    _openPages.remove(id);
     _providers.removeWhere((_, provider) => provider.pluginId == id);
-    final runtime = await _createRuntime(plugin.manifest.runtime);
+    final storage = await _storage;
+    if (_closed || !identical(_runtimeLifetimes[id], lifetime)) {
+      throw StateError('Plugin startup cancelled');
+    }
+    final PluginRuntime runtime =
+        plugin.manifest.runtime == PluginRuntimeType.wasm
+        ? WasmPluginRuntime(storage: storage)
+        : JavaScriptPluginRuntime(
+            entryName: plugin.manifest.entry,
+            modules: await _javaScriptSources(id),
+          );
+    if (_closed || !identical(_runtimeLifetimes[id], lifetime)) {
+      throw StateError('Plugin startup cancelled');
+    }
+    _sessions[id] = _PluginSession();
     _runtimes[id] = runtime;
     try {
+      if (!_foreground &&
+          _settings(id).background != PluginBackgroundMode.forbidden) {
+        await _beginPluginBackground(id);
+      }
+      if (_closed ||
+          !identical(_runtimes[id], runtime) ||
+          !identical(_runtimeLifetimes[id], lifetime)) {
+        throw StateError('Plugin startup cancelled');
+      }
+      if (!_foreground && !_backgroundTasks.containsKey(id)) {
+        _suspendedPlugins.add(id);
+        throw PluginExecutionException(
+          id,
+          plugin.manifest.name,
+          'Background execution unavailable',
+        );
+      }
       await runtime.start(
         pluginId: id,
         pluginName: plugin.manifest.name,
         pluginVersion: plugin.manifest.version,
         runtimeVersion: BuildInfoService.appVersion,
+        apiLevel: plugin.manifest.apiLevel,
         entryBytes: plugin.entryBytes,
-        bootstrap: plugin.manifest.runtime == PluginRuntimeType.legacy
-            ? astroBoxLegacyBootstrap
-            : oronBoxPluginBootstrap,
-        hostCall: (method, arguments) =>
-            _handleHostCall(plugin, method, arguments),
+        hostCall: (method, arguments) {
+          if (!identical(_runtimes[id], runtime)) {
+            throw StateError('Plugin instance has stopped');
+          }
+          return _handleHostCall(plugin, method, arguments);
+        },
       );
-      _emitDiagnosticState(id);
+      if (!identical(_runtimes[id], runtime)) {
+        await runtime.close();
+        throw StateError('Plugin stopped during startup');
+      }
+      await runtime.renderUi();
+      _emitState(id);
       return runtime;
     } catch (_) {
-      _runtimes.remove(id);
       _providers.removeWhere((_, provider) => provider.pluginId == id);
-      await runtime.close();
+      if (identical(_runtimes[id], runtime)) await _closeRuntime(id);
       rethrow;
     }
   }
 
-  Future<void> _closeRuntime(String id) async {
-    final attached = _zmlAttachments.entries
-        .where((entry) => entry.value.pluginId == id)
-        .map((entry) => entry.key)
-        .toList(growable: false);
-    for (final appId in attached) {
-      try {
-        await deviceManager.stopZeppOsAppSide(appId);
-      } finally {
-        _zmlAttachments.remove(appId);
-      }
+  Future<void> _closeRuntime(String id, {bool cancelStart = true}) {
+    if (cancelStart) {
+      _runtimeStarts.remove(id);
+      _runtimeLifetimes.remove(id);
     }
-    await _runtimes.remove(id)?.close();
-    await _wasmHosts.remove(id)?.dispose();
-    _permissionBroker.endSession(id);
-    _interconnectObservers.remove(id);
-    _rawProtocolObservers.remove(id);
+    if (_runtimeStops[id] case final stopping?) return stopping;
+    late final Future<void> stopping;
+    stopping = _disposeRuntime(id).whenComplete(() {
+      if (identical(_runtimeStops[id], stopping)) _runtimeStops.remove(id);
+    });
+    _runtimeStops[id] = stopping;
+    return stopping;
   }
 
-  Future<PluginRuntime> _createRuntime(PluginRuntimeType type) async {
-    if (type == PluginRuntimeType.wasm) {
-      return createPluginRuntime(type, storage: await _storage);
+  Future<void> _disposeRuntime(String id) async {
+    final runtime = _runtimes.remove(id);
+    final session = _sessions.remove(id);
+    session?.idleTimer?.cancel();
+    session?.idleClock.stop();
+    _openPages.remove(id);
+    session?.stopped.add(null);
+    session?.wasmScope?.dispose();
+    final appSides = <int>[
+      for (final appId
+          in _zmlAttachments.entries
+              .where((e) => e.value.pluginId == id)
+              .map((e) => e.key)
+              .toList())
+        appId,
+    ];
+    for (final appId in appSides) {
+      _zmlAttachments.remove(appId);
     }
-    return createJavaScriptPluginRuntime();
+    _permissionBroker.endSession(id);
+    _uiNodes.remove(id);
+    _uiRevisions.removeWhere((key, _) => key.$1 == id);
+    _providers.removeWhere((_, provider) => provider.pluginId == id);
+    for (final entry
+        in _hostRequests.entries
+            .where((entry) => entry.value.pluginId == id)
+            .toList()) {
+      _hostRequests.remove(entry.key);
+      _hostRequestOwners.remove(entry.key);
+      entry.value.result.completeError(
+        StateError('Plugin instance has stopped'),
+      );
+      emitEvent(
+        CommandEvent('plugin.hostCancelled', data: {'requestId': entry.key}),
+      );
+    }
+    final cleanup = <Future<void>>[
+      if (runtime != null) runtime.close(),
+      if (session != null) session.storageWrites,
+      if (session != null) session.fileOperations,
+      if (session != null) session.stopped.close(),
+      for (final appId in appSides)
+        _withZmlTransition(appId, () => deviceManager.stopZeppOsAppSide(appId)),
+      if (_httpServers.remove(id) case final server?) server.close(),
+      if (_httpClients.remove(id) case final client?) client.close(),
+      if (_websockets.remove(id) case final sockets?) sockets.close(),
+      if (_browsers.remove(id) case final browser?) browser.close(),
+    ];
+    cleanup.addAll([
+      for (final key in _canopusSubscriptions.keys.toList())
+        if (_canopusSubscriptions[key]!.contains(id))
+          _listenCanopus(id, key.$1, key.$2, false).catchError((Object error) {
+            _log.fine('Canopus listener cleanup failed', error);
+          }),
+    ]);
+    final background = _backgroundTasks.remove(id);
+    try {
+      await Future.wait([...cleanup, if (background != null) background.end()]);
+    } finally {
+      if (session != null) {
+        final storage = await _storage;
+        await storage.clearTemporaryFiles(id);
+      }
+    }
   }
 
   Future<void> _closeAllRuntimes() async {
-    for (final id in _runtimes.keys.toList(growable: false)) {
+    for (final id in {
+      ..._runtimes.keys,
+      ..._runtimeStarts.keys,
+      ..._runtimeStops.keys,
+    }) {
       await _closeRuntime(id);
     }
   }
@@ -519,262 +783,42 @@ class PluginManager {
     InstalledPlugin plugin,
     String method,
     List<Object?> arguments,
-  ) => dataMaintenance.hostCall(
-    () => _dispatchHostCall(plugin, method, arguments),
-  );
-
-  Future<Object?> _dispatchHostCall(
-    InstalledPlugin plugin,
-    String method,
-    List<Object?> arguments,
   ) async {
-    final id = plugin.manifest.id;
-    if (method == 'runtime.reportError') {
-      final message = arguments.firstOrNull?.toString() ?? 'Unknown error';
-      if (_isTransientHostError(message)) {
-        _log.warning(
-          'Plugin ${plugin.manifest.name} observed a transient host error: '
-          '$message',
-        );
-        return null;
-      }
-      scheduleMicrotask(() {
-        unawaited(
-          _recordFailure(
-            plugin,
-            StateError(message),
-            StackTrace.current,
-            phase: 'runtime',
-          ),
-        );
-      });
+    if (method == 'runtime.error') {
+      if (_isPermissionError(arguments.single)) return null;
+      if (_isCapabilityError(arguments.single)) return null;
+      await _recordFailure(
+        plugin,
+        StateError(arguments.single.toString()),
+        StackTrace.current,
+        phase: 'background',
+      );
       return null;
     }
-    final permission = _permissionRequest(plugin, method, arguments);
-    if (permission != null) {
-      await _permissionBroker.authorize(plugin, permission);
-    }
-
-    return switch (method) {
-      'log.debug' => _pluginLog(id, arguments, 'fine'),
-      'log.info' => _pluginLog(id, arguments, 'info'),
-      'log.warning' => _pluginLog(id, arguments, 'warning'),
-      'log.error' => _pluginLog(id, arguments, 'severe'),
-      'storage.get' => _storageGet(id, arguments),
-      'storage.set' => _storageSet(id, arguments),
-      'storage.remove' => _storageRemove(id, arguments),
-      'storage.clear' => _storageClear(id),
-      'file.read' => _readSandboxFile(id, arguments),
-      'file.write' => _writeSandboxFile(id, arguments),
-      'file.list' => _listSandboxDirectory(id, arguments),
-      'file.stat' => _statSandboxPath(id, arguments),
-      'file.mkdir' => _mkdirSandboxPath(id, arguments),
-      'file.copy' => _copySandboxPath(id, arguments),
-      'file.move' => _moveSandboxPath(id, arguments),
-      'file.remove' => _removeSandboxPath(id, arguments),
-      'file.pick' => _pickSandboxFile(id, arguments),
-      'file.unload' => _unloadSandboxFile(id, arguments),
-      'network.fetch' => _networkFetch(arguments),
-      'network.download' => _networkDownload(id, arguments),
-      'interconnect.send' => _sendInterconnect(id, arguments),
-      'interconnect.observe' => _interconnectObservers.add(id),
-      'interconnect.unobserve' => _interconnectObservers.remove(id),
-      'provider.register' => _registerProvider(id, arguments),
-      'provider.unregister' => _unregisterProvider(id, arguments),
-      'device.list' => _deviceList(),
-      'device.info' => _deviceInfo(arguments),
-      'device.connect' => _connectDevice(arguments),
-      'device.disconnect' => _disconnectDevice(arguments),
-      'device.apps.list' => _deviceApps(arguments),
-      'device.apps.launch' => _launchPluginApp(arguments),
-      'device.apps.uninstall' => _uninstallPluginApp(arguments),
-      'device.install' => _installSandboxFile(id, arguments),
-      'protocol.send' => _sendProtocol(arguments),
-      'protocol.request' => _sendProtocolRequest(arguments),
-      'protocol.observe' => _rawProtocolObservers.add(id),
-      'protocol.unobserve' => _rawProtocolObservers.remove(id),
-      'os.arch' => _osArch(),
-      'os.hostname' => _osHostname(),
-      'os.locale' => _osLocale(),
-      'os.platform' => _osPlatform(),
-      'os.version' => _osVersion(),
-      'os.language' => _osLanguage(),
-      'os.appearance' => _osAppearance(),
-      'os.timezone' => _osTimezone(),
-      'watchface.list' => _watchfaceList(arguments),
-      'watchface.set' => _setWatchface(arguments),
-      'appside.list' => _appSideList(),
-      'appside.start' => _appSideStart(arguments),
-      'appside.stop' => _appSideStop(arguments),
-      'appside.send' => _appSideSend(arguments),
-      'appside.inject' => _appSideInject(arguments),
-      'appside.sessions' => _appSideSessions(),
-      'appside.events' => _appSideEvents(arguments),
-      'appside.clearEvents' => _appSideClearEvents(arguments),
-      'appside.zml.attach' => _appSideZmlAttach(plugin, arguments),
-      'appside.zml.request' => _appSideZmlInvoke(plugin, arguments, 'request'),
-      'appside.zml.call' => _appSideZmlInvoke(plugin, arguments, 'call'),
-      'appside.zml.detach' => _appSideZmlDetach(plugin, arguments),
-      'wasm.load' => _wasmLoad(plugin, arguments),
-      'wasm.call' => _wasmCall(plugin, arguments),
-      'wasm.memory.read' => _wasmMemoryRead(plugin, arguments),
-      'wasm.memory.write' => _wasmMemoryWrite(plugin, arguments),
-      'wasm.dispose' => _wasmDispose(plugin, arguments),
-      'ui.render' => _renderUi(id, arguments),
-      'ui.update' => _renderUi(id, arguments), // legacy alias
-      'ui.openPage' => _openPageWithNodes(id, arguments),
-      'ui.openExternal' => _openUrl(id, arguments),
-      'ui.getRenderSize' => _getRenderSize(id),
-      'ui.dialog' => _showDialog(id, arguments),
-      _ => throw UnsupportedError('Unsupported OronBox Host API: $method'),
-    };
-  }
-
-  PluginPermissionRequest? _permissionRequest(
-    InstalledPlugin plugin,
-    String method,
-    List<Object?> arguments,
-  ) {
-    final policy = switch (method) {
-      'ui.render' ||
-      'ui.update' ||
-      'ui.openPage' ||
-      'ui.getRenderSize' => ('ui', PluginPermissionRisk.low),
-      'ui.dialog' || 'ui.openExternal' => ('ui', PluginPermissionRisk.medium),
-      'file.read' ||
-      'file.write' ||
-      'file.list' ||
-      'file.stat' ||
-      'file.mkdir' ||
-      'file.copy' ||
-      'file.move' ||
-      'file.remove' => ('file', PluginPermissionRisk.low),
-      'file.pick' || 'file.unload' => ('file', PluginPermissionRisk.medium),
-      'network.fetch' ||
-      'network.download' => ('network', PluginPermissionRisk.medium),
-      'interconnect.send' ||
-      'interconnect.observe' => ('interconnect', PluginPermissionRisk.medium),
-      'provider.register' ||
-      'provider.unregister' => ('provider', PluginPermissionRisk.medium),
-      'device.list' ||
-      'device.info' ||
-      'device.apps.list' ||
-      'watchface.list' => ('device', PluginPermissionRisk.medium),
-      'device.connect' ||
-      'device.disconnect' ||
-      'device.apps.launch' ||
-      'device.apps.uninstall' ||
-      'device.install' ||
-      'watchface.set' => ('device', PluginPermissionRisk.high),
-      'protocol.observe' => ('protocol', PluginPermissionRisk.medium),
-      'protocol.send' ||
-      'protocol.request' => ('protocol', PluginPermissionRisk.high),
-      'appside.list' ||
-      'appside.sessions' ||
-      'appside.events' => ('appside', PluginPermissionRisk.medium),
-      'appside.start' ||
-      'appside.stop' ||
-      'appside.send' ||
-      'appside.inject' ||
-      'appside.clearEvents' ||
-      'appside.zml.attach' ||
-      'appside.zml.request' ||
-      'appside.zml.call' ||
-      'appside.zml.detach' => ('appside', PluginPermissionRisk.high),
-      _ => null,
-    };
-    if (policy == null) return null;
-    final resource = _permissionResource(method, arguments);
-    final scoped =
-        method.startsWith('network.') ||
-        method == 'ui.openExternal' ||
-        method.startsWith('interconnect.') ||
-        method.startsWith('device.') ||
-        method.startsWith('protocol.') ||
-        method.startsWith('watchface.') ||
-        method.startsWith('appside.');
-    return PluginPermissionRequest(
-      pluginId: plugin.manifest.id,
-      pluginName: plugin.manifest.name,
-      capability: policy.$1,
-      operation: method,
-      risk: policy.$2,
-      description: _permissionDescription(method, resource),
-      resource: resource,
-      scope: scoped ? resource : null,
+    Future<Object?> dispatch() => dataMaintenance.hostCall(
+      () => plugin.manifest.runtime == PluginRuntimeType.wasm
+          ? _dispatchNgHostCall(plugin, method, arguments)
+          : _dispatchJsHostCall(plugin, method, arguments),
     );
-  }
-
-  String? _permissionResource(String method, List<Object?> arguments) {
-    if (method == 'network.fetch' ||
-        method == 'network.download' ||
-        method == 'ui.openExternal') {
-      return Uri.tryParse(arguments.firstOrNull?.toString() ?? '')?.host;
+    try {
+      if (!_PluginBackgroundLifecycle._activityMethods.contains(method)) {
+        return await dispatch();
+      }
+      return await _withActivity(plugin.manifest.id, dispatch);
+    } catch (error) {
+      if (_isCapabilityError(error)) {
+        emitEvent(
+          CommandEvent(
+            'plugin.notice',
+            data: {
+              'pluginId': plugin.manifest.id,
+              'code': 'platform_capability_unavailable',
+            },
+          ),
+        );
+      }
+      rethrow;
     }
-    if (method == 'interconnect.send' ||
-        method.startsWith('device.apps.') ||
-        method == 'watchface.set') {
-      return arguments.firstOrNull?.toString();
-    }
-    if (method == 'device.connect' || method == 'device.disconnect') {
-      return arguments.firstOrNull?.toString();
-    }
-    if (method.startsWith('device.') ||
-        method.startsWith('protocol.') ||
-        method.startsWith('watchface.')) {
-      return readDeviceState().currentDevice?.name;
-    }
-    if (method.startsWith('appside.')) {
-      return arguments.firstOrNull?.toString();
-    }
-    if (method == 'file.unload') return arguments.firstOrNull?.toString();
-    return null;
-  }
-
-  bool _isTransientHostError(String message) {
-    final normalized = message.toLowerCase();
-    return normalized.contains('device not ready') ||
-        normalized.contains('device disconnected') ||
-        normalized.contains('transport disconnected') ||
-        normalized.contains('has not established an interconnect session') ||
-        normalized.contains('did not establish an interconnect session') ||
-        normalized.contains('timed out');
-  }
-
-  String _permissionDescription(String method, String? resource) {
-    final target = resource?.isNotEmpty == true ? ' $resource' : '';
-    return switch (method) {
-      'file.pick' => 'select files from the host',
-      'file.unload' => 'export a file$target',
-      'network.fetch' => 'access$target',
-      'network.download' => 'download from$target',
-      'interconnect.send' => 'communicate with$target',
-      'interconnect.observe' => 'receive interconnect messages',
-      'provider.register' => 'register a resource provider',
-      'provider.unregister' => 'remove a resource provider',
-      'device.list' => 'access paired devices',
-      'device.info' => 'read information from$target',
-      'device.connect' => 'connect to$target',
-      'device.disconnect' => 'disconnect$target',
-      'device.apps.list' => 'read applications from$target',
-      'device.apps.launch' => 'launch$target',
-      'device.apps.uninstall' => 'uninstall$target',
-      'device.install' => 'install a file on$target',
-      'protocol.observe' => 'observe the protocol of$target',
-      'protocol.send' => 'send raw protocol data to$target',
-      'protocol.request' => 'send a protocol request to$target',
-      'watchface.list' => 'read watchface list from$target',
-      'watchface.set' => 'switch the watchface on$target',
-      'appside.list' => 'list cached app-side scripts',
-      'appside.sessions' => 'view app-side sessions',
-      'appside.events' => 'read app-side debug events',
-      'appside.start' => "start app-side$target",
-      'appside.stop' => "stop app-side$target",
-      'appside.send' => "send app-side message to watch$target",
-      'appside.inject' => "inject a simulated message into app-side$target",
-      'appside.clearEvents' => "clear app-side debug events$target",
-      _ => method,
-    };
   }
 
   Future<PluginPermissionDecision> _promptPermission(
@@ -793,736 +837,23 @@ class PluginManager {
     };
   }
 
-  Object? _pluginLog(String id, List<Object?> values, String level) {
-    final runtime = _plugins[id]?.manifest.runtime.name ?? 'unknown';
-    final message = values.join(' ');
-    logPluginDiagnostic(
-      pluginId: id,
-      runtime: runtime,
-      level: switch (level) {
-        'fine' => Level.FINE,
-        'warning' => Level.WARNING,
-        'severe' => Level.SEVERE,
-        _ => Level.INFO,
-      },
-      message: message,
-    );
-    return null;
-  }
-
-  Object? _storageGet(String id, List<Object?> arguments) {
-    final key = arguments.firstOrNull?.toString() ?? '';
-    if (key.isEmpty) throw const FormatException('Storage key is required');
-    return _requirePlugin(id).config[key];
-  }
-
-  Future<void> _storageSet(String id, List<Object?> arguments) async {
-    final key = arguments.firstOrNull?.toString() ?? '';
-    if (key.isEmpty) throw const FormatException('Storage key is required');
-    final current = _requirePlugin(id);
-    final config = Map<String, Object?>.of(current.config)
-      ..[key] = arguments.elementAtOrNull(1);
-    await (await _storage).writeConfig(id, config);
-    _plugins[id] = current.copyWith(config: config);
-    _emitDiagnosticState(id);
-  }
-
-  Future<void> _storageRemove(String id, List<Object?> arguments) async {
-    final key = arguments.firstOrNull?.toString() ?? '';
-    if (key.isEmpty) throw const FormatException('Storage key is required');
-    final current = _requirePlugin(id);
-    final config = Map<String, Object?>.of(current.config)..remove(key);
-    await (await _storage).writeConfig(id, config);
-    _plugins[id] = current.copyWith(config: config);
-    _emitDiagnosticState(id);
-  }
-
-  Future<void> _storageClear(String id) async {
-    final current = _requirePlugin(id);
-    await (await _storage).writeConfig(id, const {});
-    _plugins[id] = current.copyWith(config: const {});
-    _emitDiagnosticState(id);
-  }
-
-  Future<Map<String, Object?>?> _pickSandboxFile(
+  Future<void> _enqueueSandboxFile(
     String pluginId,
     List<Object?> arguments,
   ) async {
-    final options = _jsonMap(arguments.firstOrNull);
-    final response = await _requestHost(pluginId, 'pickFile', {
-      'options': options,
-    });
-    if (response['cancelled'] == true) return null;
-    final bytes = _bytes(response['bytes']);
-    final rawName = response['name']?.toString() ?? 'plugin-file';
-    final name = rawName.replaceAll(RegExp(r'[/\\\x00]'), '_');
-    final path = PluginStoragePath.parse(
-      '/temp/picker/${DateTime.now().microsecondsSinceEpoch}/$name',
-    );
-    await (await _storage).writeFile(pluginId, path, bytes);
-    return {
-      'name': name,
-      'path': path.virtualPath,
-      'size': bytes.length,
-      if (options['_legacyText'] == true)
-        'textLength': PluginTextFileCodec.length(bytes),
-    };
-  }
-
-  Future<Map<String, Object?>> _unloadSandboxFile(
-    String pluginId,
-    List<Object?> arguments,
-  ) async {
-    final path = PluginStoragePath.parse(
-      arguments.firstOrNull?.toString() ?? '',
-    );
+    final session = _sessions[pluginId];
+    if (session == null) throw StateError('Plugin session ended');
+    final path = _dataPath(arguments.firstOrNull?.toString() ?? '');
+    final options = _jsonMap(arguments.elementAtOrNull(1));
     final bytes = await (await _storage).readFile(pluginId, path);
-    final options = _jsonMap(arguments.elementAtOrNull(1));
-    final name = options['suggestedName']?.toString().trim();
-    return _requestHost(pluginId, 'saveFile', {
-      'name': name?.isNotEmpty == true
-          ? name
-          : path.relativePath.split('/').last,
-      'bytes': bytes.toList(growable: false),
-    });
-  }
-
-  Future<String> _readSandboxFile(
-    String pluginId,
-    List<Object?> arguments,
-  ) async {
-    final path = PluginStoragePath.parse(
-      arguments.firstOrNull?.toString() ?? '',
-    );
-    final options = _jsonMap(arguments.elementAtOrNull(1));
-    final allBytes = await (await _storage).readFile(pluginId, path);
-    final offset = (options['offset'] as num?)?.toInt() ?? 0;
-    final requestedLength = (options['length'] as num?)?.toInt();
-    if (options['encoding']?.toString().toLowerCase() == 'text' &&
-        options['_legacyText'] == true) {
-      return PluginTextFileCodec.slice(
-        allBytes,
-        offset: offset,
-        length: requestedLength,
-      );
+    final response = await _requestHost(pluginId, 'enqueueFile', {
+      'resourceType': options['type'],
+      'name': path.relativePath.split('/').last,
+      'bytes': bytes,
+    }, session: session);
+    if (response['queued'] != true) {
+      throw StateError('Unable to enqueue plugin resource');
     }
-    if (offset < 0 || offset > allBytes.length) {
-      throw RangeError('Invalid file offset: $offset');
-    }
-    final end = requestedLength == null
-        ? allBytes.length
-        : (offset + requestedLength).clamp(offset, allBytes.length);
-    final bytes = Uint8List.sublistView(allBytes, offset, end);
-    return switch (options['encoding']?.toString().toLowerCase()) {
-      'utf8' || 'utf-8' || 'text' => utf8.decode(bytes),
-      null || '' || 'base64' => base64Encode(bytes),
-      final encoding => throw FormatException(
-        'Unsupported plugin file encoding: $encoding',
-      ),
-    };
-  }
-
-  Future<void> _writeSandboxFile(
-    String pluginId,
-    List<Object?> arguments,
-  ) async {
-    final path = PluginStoragePath.parse(
-      arguments.firstOrNull?.toString() ?? '',
-    );
-    final value = arguments.elementAtOrNull(1);
-    final options = _jsonMap(arguments.elementAtOrNull(2));
-    final bytes = switch (options['encoding']?.toString().toLowerCase()) {
-      'utf8' ||
-      'utf-8' ||
-      'text' => Uint8List.fromList(utf8.encode(value?.toString() ?? '')),
-      null || '' || 'base64' => _bytes(value),
-      final encoding => throw FormatException(
-        'Unsupported plugin file encoding: $encoding',
-      ),
-    };
-    final storage = await _storage;
-    if (options['append'] == true) {
-      await storage.writeFileStream(
-        pluginId,
-        path,
-        Stream.value(bytes),
-        append: true,
-      );
-    } else {
-      await storage.writeFile(pluginId, path, bytes);
-    }
-  }
-
-  Future<List<Map<String, Object?>>> _listSandboxDirectory(
-    String pluginId,
-    List<Object?> arguments,
-  ) async {
-    final path = PluginStoragePath.parse(
-      arguments.firstOrNull?.toString() ?? '',
-    );
-    final entries = await (await _storage).listDirectory(pluginId, path);
-    return entries.map((entry) => entry.toJson()).toList(growable: false);
-  }
-
-  Future<Map<String, Object?>?> _statSandboxPath(
-    String pluginId,
-    List<Object?> arguments,
-  ) async {
-    final path = PluginStoragePath.parse(
-      arguments.firstOrNull?.toString() ?? '',
-    );
-    final stat = await (await _storage).stat(pluginId, path);
-    return stat?.toJson();
-  }
-
-  Future<void> _mkdirSandboxPath(
-    String pluginId,
-    List<Object?> arguments,
-  ) async {
-    final path = PluginStoragePath.parse(
-      arguments.firstOrNull?.toString() ?? '',
-    );
-    await (await _storage).createDirectory(pluginId, path);
-  }
-
-  Future<void> _copySandboxPath(
-    String pluginId,
-    List<Object?> arguments,
-  ) async {
-    final source = PluginStoragePath.parse(
-      arguments.firstOrNull?.toString() ?? '',
-    );
-    final destination = PluginStoragePath.parse(
-      arguments.elementAtOrNull(1)?.toString() ?? '',
-    );
-    await _copyStorageEntry(pluginId, source, destination);
-  }
-
-  Future<void> _moveSandboxPath(
-    String pluginId,
-    List<Object?> arguments,
-  ) async {
-    final source = PluginStoragePath.parse(
-      arguments.firstOrNull?.toString() ?? '',
-    );
-    final destination = PluginStoragePath.parse(
-      arguments.elementAtOrNull(1)?.toString() ?? '',
-    );
-    if (source.area == PluginStorageArea.package) {
-      throw UnsupportedError('/plugin is read-only');
-    }
-    await _copyStorageEntry(pluginId, source, destination);
-    await (await _storage).removeFile(pluginId, source);
-  }
-
-  Future<void> _copyStorageEntry(
-    String pluginId,
-    PluginStoragePath source,
-    PluginStoragePath destination,
-  ) async {
-    final storage = await _storage;
-    final stat = await storage.stat(pluginId, source);
-    if (stat == null) {
-      throw StateError('Plugin file does not exist: ${source.virtualPath}');
-    }
-    if (!stat.isDirectory) {
-      await storage.writeFile(
-        pluginId,
-        destination,
-        await storage.readFile(pluginId, source),
-      );
-      return;
-    }
-    if (destination.area == source.area &&
-        (source.relativePath.isEmpty ||
-            destination.relativePath == source.relativePath ||
-            destination.relativePath.startsWith('${source.relativePath}/'))) {
-      throw const FormatException('A directory cannot be copied into itself');
-    }
-    await storage.createDirectory(pluginId, destination);
-    for (final child in await storage.listDirectory(pluginId, source)) {
-      final name = child.path.split('/').last;
-      await _copyStorageEntry(
-        pluginId,
-        PluginStoragePath.parse(child.path),
-        PluginStoragePath.parse('${destination.virtualPath}/$name'),
-      );
-    }
-  }
-
-  Future<void> _removeSandboxPath(
-    String pluginId,
-    List<Object?> arguments,
-  ) async {
-    final path = PluginStoragePath.parse(
-      arguments.firstOrNull?.toString() ?? '',
-    );
-    await (await _storage).removeFile(pluginId, path);
-  }
-
-  Future<void> _sendInterconnect(
-    String pluginId,
-    List<Object?> arguments,
-  ) async {
-    final packageName = arguments.firstOrNull?.toString() ?? '';
-    final data = arguments.elementAtOrNull(1)?.toString() ?? '';
-    final deviceId = arguments.elementAtOrNull(2)?.toString();
-    if (packageName.isEmpty) {
-      throw const FormatException('Package name is required');
-    }
-    if (deviceId != null && deviceId.isNotEmpty) {
-      _validateDevice(deviceId);
-      if (readDeviceState().currentDevice?.addr != deviceId) {
-        throw StateError(
-          'Interconnect messages can only be sent to the current device',
-        );
-      }
-    }
-    final payload = Uint8List.fromList(utf8.encode(data));
-    _log.info(
-      'plugin $pluginId sending interconnect message to $packageName '
-      '(${payload.length} bytes)',
-    );
-    final send = _interconnectSendTail.catchError((_) {}).then((_) async {
-      try {
-        await deviceManager.sendInterconnectMessage(packageName, payload);
-        _log.info(
-          'plugin $pluginId interconnect message queued for $packageName',
-        );
-      } catch (error, stackTrace) {
-        _log.warning(
-          'plugin $pluginId failed to send interconnect message to '
-          '$packageName',
-          error,
-          stackTrace,
-        );
-        rethrow;
-      }
-    });
-    _interconnectSendTail = send;
-    await send;
-  }
-
-  String? _deviceArg(List<Object?> arguments) {
-    final raw = arguments.firstOrNull?.toString() ?? '';
-    return raw.isEmpty ? null : raw;
-  }
-
-  void _validateDevice(String deviceId) {
-    final addresses = deviceManager.connectedAddresses;
-    if (!addresses.contains(deviceId)) {
-      throw StateError('Device $deviceId is not connected');
-    }
-  }
-
-  List<Map<String, Object?>> _deviceList() {
-    final state = readDeviceState();
-    final connected = deviceManager.connectedAddresses;
-    return state.pairedDevices
-        .map(
-          (device) => {
-            'id': device.addr,
-            'name': device.name,
-            'connectType': device.connectType,
-            if (device.codename != null) 'codename': device.codename,
-            'connected': connected.contains(device.addr),
-            'current': state.currentDevice?.addr == device.addr,
-          },
-        )
-        .toList(growable: false);
-  }
-
-  Map<String, Object?> _deviceInfo(List<Object?> arguments) {
-    final id = _deviceArg(arguments);
-    final state = readDeviceState();
-    final device = state.currentDevice;
-    if (device == null) throw StateError('No device is connected');
-    if (id != null && id != device.addr) {
-      throw StateError('Device $id is not the active device');
-    }
-    return {
-      'id': device.addr,
-      'name': device.name,
-      if (device.codename != null) 'codename': device.codename,
-      if (state.battery != null) 'battery': state.battery!.capacity,
-      if (state.systemInfo != null) ...{
-        'model': state.systemInfo!.model,
-        'firmwareVersion': state.systemInfo!.firmwareVersion,
-      },
-    };
-  }
-
-  Future<void> _disconnectDevice(List<Object?> arguments) async {
-    await deviceManager.disconnect(_deviceArg(arguments));
-  }
-
-  Future<Map<String, Object?>> _connectDevice(List<Object?> arguments) async {
-    final requested = arguments.firstOrNull?.toString() ?? '';
-    final state = readDeviceState();
-    final target = state.pairedDevices
-        .where((device) => requested.isEmpty || device.addr == requested)
-        .firstOrNull;
-    if (target == null) throw StateError('Paired device not found: $requested');
-    final authKey = target.authkey ?? '';
-    if (authKey.isEmpty) throw StateError('Device has no authentication key');
-    await deviceManager.connect(
-      target.addr,
-      target.name,
-      authKey,
-      connectType: target.connectType,
-    );
-    return _deviceInfo(const []);
-  }
-
-  Future<List<Map<String, Object?>>> _deviceApps(
-    List<Object?> arguments,
-  ) async {
-    await deviceManager.fetchApps();
-    return readDeviceState().apps
-        .map(
-          (app) => {
-            'packageName': app.packageName,
-            'name': app.appName,
-            'versionCode': app.versionCode,
-            'canRemove': app.canRemove,
-          },
-        )
-        .toList(growable: false);
-  }
-
-  Future<void> _launchPluginApp(List<Object?> arguments) async {
-    final app = await _pluginApp(arguments.firstOrNull?.toString() ?? '');
-    final options = _jsonMap(arguments.elementAtOrNull(1));
-    await deviceManager.openApp(app, page: options['page']?.toString() ?? '');
-  }
-
-  Future<void> _uninstallPluginApp(List<Object?> arguments) async {
-    final app = await _pluginApp(arguments.firstOrNull?.toString() ?? '');
-    await deviceManager.uninstallApp(app);
-  }
-
-  Future<AppInfo> _pluginApp(String packageName) async {
-    await deviceManager.fetchApps();
-    final app = readDeviceState().apps
-        .where((candidate) => candidate.packageName == packageName)
-        .firstOrNull;
-    if (app == null) throw StateError('Application not found: $packageName');
-    return app;
-  }
-
-  Future<void> _installSandboxFile(
-    String pluginId,
-    List<Object?> arguments,
-  ) async {
-    final path = PluginStoragePath.parse(
-      arguments.firstOrNull?.toString() ?? '',
-    );
-    final options = _jsonMap(arguments.elementAtOrNull(1));
-    final type = switch (options['type']?.toString()) {
-      'app' => LocalDeviceInstallType.app,
-      'watchface' => LocalDeviceInstallType.watchface,
-      'firmware' => LocalDeviceInstallType.firmware,
-      final value => throw FormatException('Unsupported install type: $value'),
-    };
-    final bytes = await (await _storage).readFile(pluginId, path);
-    await _installer.installLocalPayload(
-      type: type,
-      fileName:
-          options['fileName']?.toString() ?? path.relativePath.split('/').last,
-      bytes: bytes,
-      deviceManager: deviceManager,
-      onProgress: (progress) => emitEvent(
-        CommandEvent(
-          'plugin.installProgress',
-          data: {'pluginId': pluginId, 'progress': progress},
-        ),
-      ),
-    );
-  }
-
-  Future<void> _sendProtocol(List<Object?> arguments) async {
-    final data = _bytes(arguments.firstOrNull);
-    final options = _jsonMap(arguments.elementAtOrNull(1));
-    _deviceArg([options['id']]);
-    await deviceManager.sendRaw(data);
-  }
-
-  Future<Map<String, Object?>> _sendProtocolRequest(
-    List<Object?> arguments,
-  ) async {
-    final data = _bytes(arguments.firstOrNull);
-    final options = _jsonMap(arguments.elementAtOrNull(1));
-    _deviceArg([options['id']]);
-    final timeoutMs = (options['timeout'] as num?)?.toInt() ?? 5000;
-    final response = await deviceManager.requestRaw(
-      data,
-      timeout: Duration(milliseconds: timeoutMs),
-    );
-    return {'data': base64Encode(response)};
-  }
-
-  String _osArch() => pluginHostArchitecture();
-  String _osHostname() => pluginHostHostname();
-  String _osLocale() => pluginHostLocale();
-  String _osPlatform() => pluginHostPlatform();
-  String _osVersion() => pluginHostVersion();
-  String _osLanguage() => pluginHostLocale().split(RegExp('[-_]')).first;
-  String _osAppearance() {
-    final b = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    return b == Brightness.dark ? 'dark' : 'light';
-  }
-
-  int _osTimezone() => DateTime.now().timeZoneOffset.inMinutes;
-  Future<List<Map<String, Object?>>> _watchfaceList(
-    List<Object?> arguments,
-  ) async {
-    _deviceArg(arguments);
-    await deviceManager.fetchWatchfaces();
-    return readDeviceState().watchfaces
-        .map((wf) => {'id': wf.id, 'name': wf.name, 'current': wf.isCurrent})
-        .toList();
-  }
-
-  Future<void> _setWatchface(List<Object?> arguments) async {
-    final id = arguments.firstOrNull?.toString() ?? '';
-    if (id.isEmpty) throw const FormatException('watchface id required');
-    _deviceArg(arguments.skip(1).toList());
-    final state = readDeviceState();
-    final target = state.watchfaces.where((wf) => wf.id == id).firstOrNull;
-    if (target == null) throw StateError('Watchface not found: $id');
-    await deviceManager.setWatchface(target);
-  }
-
-  Future<List<int>> _appSideList() => deviceManager.listZeppOsAppSides();
-
-  Future<void> _appSideStart(List<Object?> arguments) async {
-    final appId = _parseAppSideId(arguments);
-    await deviceManager.startZeppOsAppSide(appId);
-  }
-
-  Future<void> _appSideStop(List<Object?> arguments) async {
-    final appId = _parseAppSideId(arguments);
-    await deviceManager.stopZeppOsAppSide(appId);
-  }
-
-  Future<void> _appSideSend(List<Object?> arguments) async {
-    final appId = _parseAppSideId(arguments);
-    final data = _decodeHex(arguments.elementAtOrNull(1)?.toString() ?? '');
-    await deviceManager.sendZeppOsAppSideMessage(appId, data);
-  }
-
-  Future<void> _appSideInject(List<Object?> arguments) async {
-    final appId = _parseAppSideId(arguments);
-    final data = _decodeHex(arguments.elementAtOrNull(1)?.toString() ?? '');
-    await deviceManager.injectZeppOsAppSideMessage(appId, data);
-  }
-
-  Future<List<Map<String, Object?>>> _appSideSessions() async {
-    final sessions = await deviceManager.zeppOsAppSideSessions();
-    return sessions
-        .map(
-          (s) => {
-            'appId': s.appId,
-            'version': s.version,
-            'port1': s.port1,
-            'port2': s.port2,
-            'extra': s.extra,
-            'watchSessionOpen': s.watchSessionOpen,
-          },
-        )
-        .toList(growable: false);
-  }
-
-  Future<List<Map<String, Object?>>> _appSideEvents(
-    List<Object?> arguments,
-  ) async {
-    final appId = _parseAppSideId(arguments);
-    final events = await deviceManager.zeppOsAppSideEvents(appId);
-    return events
-        .map(
-          (e) => {
-            'timestamp': e.timestamp.toIso8601String(),
-            'type': e.type,
-            'message': e.message,
-            if (e.direction != null) 'direction': e.direction,
-            if (e.source != null) 'source': e.source,
-            if (e.payload != null) 'payload': base64Encode(e.payload!),
-          },
-        )
-        .toList(growable: false);
-  }
-
-  Future<void> _appSideClearEvents(List<Object?> arguments) async {
-    final appId = _parseAppSideId(arguments);
-    await deviceManager.clearZeppOsAppSideEvents(appId);
-  }
-
-  Future<void> _appSideZmlAttach(
-    InstalledPlugin plugin,
-    List<Object?> arguments,
-  ) async {
-    final appId = _parseAppSideId(arguments);
-    final hooks =
-        (arguments.elementAtOrNull(1) as Map?)?.cast<String, Object?>() ??
-        const {};
-    final existing = _zmlAttachments[appId];
-    if (existing != null && existing.pluginId != plugin.manifest.id) {
-      throw StateError(
-        'ZML App-side $appId is already attached by another plugin',
-      );
-    }
-    final attachment = _PluginZmlAttachment(
-      pluginId: plugin.manifest.id,
-      hooks: hooks.map((name, callback) => MapEntry(name, callback.toString())),
-    );
-    _zmlAttachments[appId] = attachment;
-    Future<Object?> invokeHook(String hook, Object? payload) async {
-      final current = _zmlAttachments[appId];
-      if (!identical(current, attachment)) return null;
-      if (!attachment.ready) {
-        attachment.pending.add((hook: hook, payload: payload));
-        return null;
-      }
-      final callbackId = current?.hooks[hook];
-      if (callbackId == null || callbackId.isEmpty) return null;
-      final runtime = _runtimes[plugin.manifest.id];
-      if (runtime == null) return null;
-      return runtime.invokeRegistered(
-        callbackId,
-        payload == null ? const [] : [payload],
-      );
-    }
-
-    try {
-      await deviceManager.attachZeppOsZml(appId, invokeHook);
-      attachment.ready = true;
-      final pending = List.of(attachment.pending);
-      attachment.pending.clear();
-      Timer.run(() {
-        for (final event in pending) {
-          unawaited(invokeHook(event.hook, event.payload));
-        }
-      });
-    } catch (_) {
-      if (identical(_zmlAttachments[appId], attachment)) {
-        _zmlAttachments.remove(appId);
-      }
-      rethrow;
-    }
-  }
-
-  Future<Object?> _appSideZmlInvoke(
-    InstalledPlugin plugin,
-    List<Object?> arguments,
-    String method,
-  ) {
-    final appId = _parseAppSideId(arguments);
-    final attachment = _zmlAttachments[appId];
-    if (attachment?.pluginId != plugin.manifest.id) {
-      throw StateError('Plugin is not attached to ZML App-side $appId');
-    }
-    return deviceManager.invokeZeppOsZml(
-      appId,
-      method,
-      arguments.skip(1).toList(growable: false),
-    );
-  }
-
-  Future<void> _appSideZmlDetach(
-    InstalledPlugin plugin,
-    List<Object?> arguments,
-  ) async {
-    final appId = _parseAppSideId(arguments);
-    final attachment = _zmlAttachments[appId];
-    if (attachment?.pluginId != plugin.manifest.id) return;
-    try {
-      await deviceManager.stopZeppOsAppSide(appId);
-    } finally {
-      _zmlAttachments.remove(appId);
-    }
-  }
-
-  int _parseAppSideId(List<Object?> arguments) {
-    final value = arguments.firstOrNull;
-    final parsed = value is num
-        ? value.toInt()
-        : int.tryParse(value?.toString() ?? '');
-    if (parsed == null || parsed <= 0) {
-      throw const FormatException('appId must be a positive integer');
-    }
-    return parsed;
-  }
-
-  static Uint8List _decodeHex(String value) {
-    if (value.length.isOdd || !RegExp(r'^[0-9a-fA-F]*$').hasMatch(value)) {
-      throw const FormatException('Invalid hex');
-    }
-    return Uint8List.fromList([
-      for (var i = 0; i < value.length; i += 2)
-        int.parse(value.substring(i, i + 2), radix: 16),
-    ]);
-  }
-
-  Future<String> _wasmLoad(
-    InstalledPlugin plugin,
-    List<Object?> arguments,
-  ) async {
-    final path = arguments.firstOrNull?.toString() ?? '';
-    return (await _wasmHost(plugin))
-        .load(path, _jsonMap(arguments.elementAtOrNull(1)));
-  }
-
-  Future<List<Object?>> _wasmCall(
-    InstalledPlugin plugin,
-    List<Object?> arguments,
-  ) async {
-    final id = arguments.firstOrNull?.toString() ?? '';
-    final function = arguments.elementAtOrNull(1)?.toString() ?? '';
-    final values =
-        (arguments.elementAtOrNull(2) as List?)?.cast<Object?>() ?? const [];
-    return (await _wasmHost(plugin)).call(id, function, values);
-  }
-
-  Future<String> _wasmMemoryRead(
-    InstalledPlugin plugin,
-    List<Object?> arguments,
-  ) async {
-    return (await _wasmHost(plugin)).readMemory(
-      arguments.firstOrNull?.toString() ?? '',
-      arguments.elementAtOrNull(1)?.toString() ?? 'memory',
-      (arguments.elementAtOrNull(2) as num?)?.toInt() ?? 0,
-      (arguments.elementAtOrNull(3) as num?)?.toInt() ?? 0,
-    );
-  }
-
-  Future<void> _wasmMemoryWrite(
-    InstalledPlugin plugin,
-    List<Object?> arguments,
-  ) async {
-    (await _wasmHost(plugin)).writeMemory(
-      arguments.firstOrNull?.toString() ?? '',
-      arguments.elementAtOrNull(1)?.toString() ?? 'memory',
-      (arguments.elementAtOrNull(2) as num?)?.toInt() ?? 0,
-      _bytes(arguments.elementAtOrNull(3)),
-    );
-  }
-
-  Future<void> _wasmDispose(
-    InstalledPlugin plugin,
-    List<Object?> arguments,
-  ) async {
-    (await _wasmHost(plugin))
-        .disposeInstance(arguments.firstOrNull?.toString() ?? '');
-  }
-
-  Future<PluginWasmHost> _wasmHost(InstalledPlugin plugin) async {
-    if (plugin.manifest.runtime != PluginRuntimeType.hybrid) {
-      throw UnsupportedError('WASM is only available to hybrid plugins');
-    }
-    return _wasmHosts[plugin.manifest.id] ??= PluginWasmHost(
-      pluginId: plugin.manifest.id,
-      storage: await _storage,
-    );
   }
 
   Uint8List _bytes(Object? value) {
@@ -1537,216 +868,295 @@ class PluginManager {
   }
 
   void _queueInterconnectDispatch(
-    String deviceId,
+    String addr,
     String packageName,
     Uint8List bytes,
   ) {
     final payload = utf8.decode(bytes, allowMalformed: true);
-    _interconnectDispatchTail = _interconnectDispatchTail
+    for (final entry in _sessions.entries.toList()) {
+      if (entry.value.observeInterconnect) {
+        _deliverEvent(
+          entry.key,
+          'interconnect',
+          jsonEncode({
+            'deviceId': addr,
+            'packageName': packageName,
+            'data': payload,
+          }),
+        );
+      }
+      if (_matchesInterconnect(entry.value, addr, packageName)) {
+        _deliverInterconnect(
+          entry.key,
+          entry.value,
+          addr,
+          packageName,
+          payload,
+        );
+      }
+    }
+    if (!_sessions.values.any(
+      (session) => _matchesInterconnect(session, addr, packageName),
+    )) {
+      _pendingInterconnect.removeWhere(
+        (message) =>
+            DateTime.now().difference(message.received) >=
+            const Duration(seconds: 15),
+      );
+      if (_pendingInterconnect.length >= 64) _pendingInterconnect.removeFirst();
+      _pendingInterconnect.add((
+        addr: addr,
+        package: packageName,
+        payload: payload,
+        received: DateTime.now(),
+      ));
+    }
+  }
+
+  void _deliverEvent(String id, String type, String payload) {
+    final runtime = _runtimes[id];
+    if (runtime == null) return;
+    _recordActivity(_sessions[id]!);
+    unawaited(
+      _withActivity(id, () => runtime.dispatchEvent(type, payload)).catchError((
+        Object error,
+        StackTrace stack,
+      ) {
+        _log.warning('Plugin event failed', error, stack);
+      }),
+    );
+  }
+
+  void _dispatchDeviceEvent(DeviceEvent event) {
+    if (event is DeviceAuthenticated || event is TransportDisconnected) {
+      final connected = event is DeviceAuthenticated;
+      final address = _pluginAddress(event.deviceId);
+      _deviceRevisions[address] = (_deviceRevisions[address] ?? 0) + 1;
+      for (final session in _sessions.values) {
+        session.apps.removeWhere((key, _) => key.$1 == address);
+        session.interconnectSync.removeWhere((key, _) => key.$1 == address);
+      }
+      if (connected) {
+        _taskQueue?.resumeWaiting();
+        for (final key in _canopusSubscriptions.keys.toList()) {
+          final owner = _canopusSubscriptions[key]?.firstOrNull;
+          if (_samePluginAddress(key.$1, event.deviceId) && owner != null) {
+            unawaited(
+              _listenCanopus(
+                owner,
+                key.$1,
+                key.$2,
+                true,
+                resubscribe: true,
+              ).catchError((Object error) {
+                _log.warning('Canopus resubscription failed', error);
+              }),
+            );
+          }
+        }
+      }
+      final device = readDeviceState().pairedDevices
+          .where((item) => _samePluginAddress(item.addr, event.deviceId))
+          .firstOrNull;
+      final payload = jsonEncode({
+        'action': connected ? 'connected' : 'disconnected',
+        'addr': event.deviceId,
+        'name': device?.name,
+      });
+      for (final entry in _runtimes.entries.toList()) {
+        unawaited(
+          entry.value.dispatchEvent('device-action', payload).catchError((
+            Object error,
+          ) {
+            _log.warning('Plugin device event failed', error);
+          }),
+        );
+      }
+      if (connected) {
+        for (final entry in _sessions.entries.toList()) {
+          for (final registration in entry.value.interconnect) {
+            if (registration.$1.isEmpty ||
+                _samePluginAddress(registration.$1, event.deviceId)) {
+              _syncInterconnect(
+                entry.key,
+                entry.value,
+                event.deviceId,
+                registration.$2,
+              );
+            }
+          }
+        }
+      }
+    }
+    if (event is ProtocolPacketReceived) {
+      final payload = jsonEncode({
+        'deviceId': event.deviceId,
+        'protocol': event.protocol,
+        'channel': event.channel,
+        'data': base64Encode(event.payload),
+      });
+      for (final entry in _sessions.entries.toList()) {
+        if (entry.value.observeProtocol) {
+          _deliverEvent(entry.key, 'protocol.data', payload);
+        }
+      }
+    }
+    if (event is XiaomiProtocolPacketReceived) {
+      int? type;
+      if (event.channel == 1) {
+        try {
+          type = xiaomi_pb.WearPacket.fromBuffer(event.payload).type.value;
+        } catch (_) {
+          return;
+        }
+      }
+      for (final entry in _sessions.entries.toList()) {
+        if (entry.value.transport.any(
+          (filter) =>
+              filter.$1.toLowerCase() == event.deviceId.toLowerCase() &&
+              filter.$2 == event.channel &&
+              (event.channel != 1 || filter.$3 == type),
+        )) {
+          _deliverEvent(
+            entry.key,
+            'transport-packet',
+            base64Encode(event.payload),
+          );
+        }
+      }
+    } else if (event is CanopusConnectMessage) {
+      for (final id
+          in _canopusSubscriptions[(event.deviceId, event.module)]?.toList() ??
+              <String>[]) {
+        final runtime = _runtimes[id];
+        if (runtime == null) continue;
+        _recordActivity(_sessions[id]!);
+        unawaited(
+          _withActivity(
+            id,
+            () => runtime.callExport('on-message', [
+              event.deviceId,
+              event.module,
+              {
+                'case': event.isText ? 'text' : 'binary',
+                'value': event.isText
+                    ? utf8.decode(event.payload)
+                    : event.payload.toList(),
+              },
+            ]),
+          ).then<void>(
+            (_) {},
+            onError: (Object error) {
+              _log.warning('Canopus event failed', error);
+            },
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _listenCanopus(
+    String id,
+    String addr,
+    String module,
+    bool enabled, {
+    bool resubscribe = false,
+  }) {
+    final key = (addr, module);
+    final runtime = _runtimes[id];
+    final permissionRevision = _permissionBroker.revision(id);
+    final address = _pluginAddress(addr);
+    final deviceRevision = _deviceRevisions[address];
+    final previous = _canopusTransitions[key] ?? Future<void>.value();
+    late final Future<void> operation;
+    operation = previous
         .catchError((_) {})
         .then((_) async {
-          _log.info(
-            'dispatching interconnect message from $packageName '
-            '(${bytes.length} bytes)',
-          );
-          for (final id in _interconnectObservers.toList(growable: false)) {
-            final runtime = _runtimes[id];
-            final plugin = _plugins[id];
-            if (runtime == null ||
-                plugin == null ||
-                _failures.containsKey(id)) {
-              continue;
-            }
-            try {
-              await runtime.dispatchEvent(
-                plugin.manifest.runtime == PluginRuntimeType.legacy
-                    ? 'onQAICMessage_$packageName'
-                    : 'interconnect',
-                plugin.manifest.runtime == PluginRuntimeType.legacy
-                    ? payload
-                    : jsonEncode({
-                        'deviceId': deviceId,
-                        'packageName': packageName,
-                        'data': payload,
-                      }),
-              );
-            } catch (error, stackTrace) {
-              await _recordFailure(
-                plugin,
-                error,
-                stackTrace,
-                phase: 'interconnect',
+          final owners = _canopusSubscriptions[key] ?? <String>{};
+          if (resubscribe) {
+            if (owners.isNotEmpty &&
+                _deviceRevisions[address] == deviceRevision) {
+              await deviceManager.listenPluginCanopus(
+                addr,
+                module,
+                true,
+                restoring: true,
               );
             }
+            return;
+          }
+          if (enabled) {
+            _permissionBroker.requireRevision(id, permissionRevision);
+            if (runtime == null || !identical(_runtimes[id], runtime)) {
+              throw StateError('Plugin instance has stopped');
+            }
+            if (owners.contains(id)) return;
+            if (await runtime.callExport('has-export', ['on-message']) !=
+                'true') {
+              throw StateError('Plugin does not export Canopus on-message');
+            }
+            if (!identical(_runtimes[id], runtime)) {
+              throw StateError('Plugin instance has stopped');
+            }
+            if (owners.isEmpty) {
+              await deviceManager.listenPluginCanopus(addr, module, true);
+            }
+            if (!identical(_runtimes[id], runtime) ||
+                permissionRevision != _permissionBroker.revision(id)) {
+              if (owners.isEmpty) {
+                await deviceManager.listenPluginCanopus(addr, module, false);
+              }
+              _permissionBroker.requireRevision(id, permissionRevision);
+              throw StateError('Plugin instance has stopped');
+            }
+            owners.add(id);
+            _canopusSubscriptions[key] = owners;
+          } else {
+            if (!owners.remove(id)) return;
+            if (owners.isEmpty) {
+              _canopusSubscriptions.remove(key);
+              await deviceManager.listenPluginCanopus(addr, module, false);
+            }
+          }
+        })
+        .whenComplete(() {
+          if (identical(_canopusTransitions[key], operation)) {
+            _canopusTransitions.remove(key);
           }
         });
-  }
-
-  void _queueRawProtocolDispatch(Uint8List bytes) {
-    final payload = jsonEncode({'data': base64Encode(bytes)});
-    _rawProtocolDispatchTail = _rawProtocolDispatchTail.catchError((_) {}).then(
-      (_) async {
-        for (final id in _rawProtocolObservers.toList(growable: false)) {
-          final runtime = _runtimes[id];
-          final plugin = _plugins[id];
-          if (runtime == null || plugin == null || _failures.containsKey(id)) {
-            continue;
-          }
-          try {
-            await runtime.dispatchEvent('protocol.data', payload);
-          } catch (error, stackTrace) {
-            await _recordFailure(plugin, error, stackTrace, phase: 'protocol');
-          }
-        }
-      },
-    );
-  }
-
-  Future<Map<String, Object?>> _networkDownload(
-    String pluginId,
-    List<Object?> arguments,
-  ) async {
-    final url = arguments.firstOrNull?.toString() ?? '';
-    _requireNetworkUri(url);
-    final path = PluginStoragePath.parse(
-      arguments.elementAtOrNull(1)?.toString() ?? '',
-    );
-    final options = _jsonMap(arguments.elementAtOrNull(2));
-    final response = await _dio.request<ResponseBody>(
-      url,
-      options: Options(
-        method: options['method']?.toString() ?? 'GET',
-        headers: (options['headers'] as Map?)?.cast<String, Object?>(),
-        responseType: ResponseType.stream,
-        validateStatus: (status) =>
-            status != null && status >= 200 && status < 300,
-      ),
-    );
-    final body = response.data;
-    if (body == null) throw StateError('Network response has no body');
-    final written = await (await _storage).writeFileStream(
-      pluginId,
-      path,
-      body.stream,
-      append: options['append'] == true,
-    );
-    return {
-      'path': path.virtualPath,
-      'bytesWritten': written,
-      'status': response.statusCode ?? 0,
-    };
-  }
-
-  Future<Map<String, Object?>> _networkFetch(List<Object?> arguments) async {
-    final url = arguments.firstOrNull?.toString() ?? '';
-    _requireNetworkUri(url);
-    final options = _jsonMap(arguments.elementAtOrNull(1));
-    final body = options['body']?.toString() ?? '';
-    Uint8List? requestBody;
-    if (body.isNotEmpty) {
-      try {
-        requestBody = base64Decode(body);
-      } on FormatException {
-        requestBody = Uint8List.fromList(utf8.encode(body));
-      }
-    }
-    try {
-      final response = await _dio.request<ResponseBody>(
-        url,
-        data: requestBody,
-        options: Options(
-          method: options['method']?.toString() ?? 'GET',
-          headers: (options['headers'] as Map?)?.cast<String, Object?>(),
-          responseType: ResponseType.stream,
-          validateStatus: (_) => true,
-        ),
-      );
-      final builder = BytesBuilder(copy: false);
-      var length = 0;
-      await for (final chunk
-          in response.data?.stream ?? const Stream<Uint8List>.empty()) {
-        length += chunk.length;
-        if (length > 16 * 1024 * 1024) {
-          throw StateError(
-            'Network response exceeds 16 MiB; use network.download',
-          );
-        }
-        builder.add(chunk);
-      }
-      final bytes = builder.takeBytes();
-      return {
-        'status': response.statusCode ?? 0,
-        'headers': response.headers.map.map(
-          (key, values) => MapEntry(key, values.join(',')),
-        ),
-        'contentType': response.headers.value(Headers.contentTypeHeader) ?? '',
-        'body': base64Encode(bytes),
-      };
-    } on DioException catch (error) {
-      return {'error': error.message ?? error.toString()};
-    }
-  }
-
-  Object? _registerProvider(String pluginId, List<Object?> arguments) {
-    final json = _jsonMap(arguments.firstOrNull);
-    final provider = _PluginProvider.fromJson(pluginId, json);
-    final existing = _providers[provider.id];
-    if (existing != null && existing.pluginId != pluginId) {
-      throw StateError(
-        'Provider ID is already registered by another plugin: ${provider.id}',
-      );
-    }
-    _providers[provider.id] = provider;
-    emitEvent(CommandEvent('plugin.provider', data: provider.toJson()));
-    return null;
-  }
-
-  Uri _requireNetworkUri(String value) {
-    final uri = Uri.tryParse(value);
-    if (uri == null ||
-        !uri.hasAuthority ||
-        (uri.scheme != 'https' && uri.scheme != 'http')) {
-      throw FormatException('Only HTTP and HTTPS URLs are supported: $value');
-    }
-    return uri;
-  }
-
-  Object? _unregisterProvider(String pluginId, List<Object?> arguments) {
-    final id = arguments.firstOrNull?.toString() ?? '';
-    final provider = _providers[id];
-    if (provider != null && provider.pluginId != pluginId) {
-      throw StateError('Provider belongs to another plugin: $id');
-    }
-    _providers.remove(id);
-    emitEvent(
-      CommandEvent(
-        'plugin.provider',
-        data: {'pluginId': pluginId, 'id': id, 'removed': true},
-      ),
-    );
-    return null;
-  }
-
-  Future<void> _openPageWithNodes(String id, List<Object?> arguments) async {
-    final tree = await _resolveUiAssets(
-      id,
-      _parseUiTree(arguments.firstOrNull),
-    );
-    _openPages[id] = tree;
-    emitEvent(
-      CommandEvent('plugin.ui', data: {'id': id, 'nodes': tree, 'page': true}),
-    );
-    _emitDiagnosticState(id);
+    _canopusTransitions[key] = operation;
+    return operation;
   }
 
   Future<void> _renderUi(String id, List<Object?> arguments) async {
-    final tree = await _resolveUiAssets(
-      id,
-      _parseUiTree(arguments.firstOrNull),
-    );
+    final raw = _jsonMap(arguments.firstOrNull);
+    final target = raw['target_id']?.toString() ?? '';
+    final key = (id, target);
+    final generation = _sessions[id];
+    if (generation == null) throw StateError('Plugin session ended');
+    final revision = (_uiRevisions[key] ?? 0) + 1;
+    _uiRevisions[key] = revision;
+    final tree = await _resolveUiAssets(id, _parseUiTree(raw));
+    if (!identical(generation, _sessions[id]) ||
+        _uiRevisions[key] != revision) {
+      return;
+    }
+    if (generation.cards.containsKey(target) == true) {
+      emitEvent(
+        CommandEvent(
+          'plugin.cardUi',
+          data: {'id': id, 'targetId': target, 'nodes': tree},
+        ),
+      );
+      return;
+    }
     _uiNodes[id] = tree;
-    _openPages.remove(id);
-    emitEvent(CommandEvent('plugin.ui', data: {'id': id, 'nodes': tree}));
+    emitEvent(
+      CommandEvent(
+        'plugin.ui',
+        data: {'id': id, 'targetId': target, 'nodes': tree},
+      ),
+    );
     _emitDiagnosticState(id);
   }
 
@@ -1757,16 +1167,13 @@ class PluginManager {
     final props = Map<String, Object?>.of(
       (node['props'] as Map?)?.cast<String, Object?>() ?? const {},
     );
-    if (node['type'] == 'Image') {
+    if (node['type']?.toString().toUpperCase() == 'IMAGE') {
       final source = props['src']?.toString() ?? '';
-      if (source.isNotEmpty) {
+      if (source.startsWith('/')) {
         final bytes = await (await _storage).readFile(
           pluginId,
           PluginStoragePath.parse(source),
         );
-        if (bytes.length > 4 * 1024 * 1024) {
-          throw const FormatException('Plugin UI images must not exceed 4 MiB');
-        }
         props['data'] = base64Encode(bytes);
       }
     }
@@ -1779,41 +1186,22 @@ class PluginManager {
         );
       }
     }
-    return {'type': node['type'], 'props': props, 'children': children};
+    return {
+      ...node,
+      'type': node['type'],
+      'props': props,
+      'children': children,
+    };
   }
 
   Future<Map<String, Object?>> _getRenderSize(String id) =>
       _requestHost(id, 'renderSize', const {});
 
-  Future<Map<String, Object?>> _showDialog(String id, List<Object?> arguments) {
-    final opts = _jsonMap(arguments.firstOrNull);
-    return _requestHost(id, 'dialog', {
-      'title': opts['title']?.toString() ?? '',
-      'message': opts['message']?.toString() ?? '',
-      'buttons': opts['buttons'] ?? const <Object?>[],
-    });
-  }
-
-  /// Parses a UI tree. Accepts new tree format `{type, props, children}`
-  /// or legacy flat list `[{node_id, content, ...}]` (auto-wrapped in Column).
-  /// Both `ui.render` and `ui.update` (legacy) go through this parser.
   Map<String, Object?> _parseUiTree(Object? value) {
     final raw = value is String ? jsonDecode(value) : value;
-    if (raw is List) {
-      // Legacy flat list → wrap in Column with default padding + centering
-      final nodes = _parseLegacyNodes(raw);
-      return {
-        'type': 'Column',
-        'props': const <String, Object?>{
-          'padding': 16,
-          'gap': 12,
-          'align': 'center',
-        },
-        'children': nodes,
-      };
-    }
     if (raw is! Map) throw const FormatException('Plugin UI must be an object');
-    return _parseTreeNode(raw.cast<String, Object?>());
+    final node = raw['root'] is Map ? raw['root'] as Map : raw;
+    return _parseTreeNode(node.cast<String, Object?>());
   }
 
   Map<String, Object?> _parseTreeNode(Map<String, Object?> node) {
@@ -1829,111 +1217,28 @@ class PluginManager {
               .map((c) => _parseTreeNode(c.cast<String, Object?>()))
               .toList(growable: false)
         : const <Map<String, Object?>>[];
-    if (children.length > 256) {
-      throw const FormatException('Plugin UI contains too many nodes');
-    }
-    return {'type': type, 'props': props, 'children': children};
-  }
-
-  List<Map<String, Object?>> _parseLegacyNodes(List raw) {
-    if (raw.length > 256) {
-      throw const FormatException('Plugin UI contains too many nodes');
-    }
-    final ids = <String>{};
-    return raw
-        .whereType<Map>()
-        .map((value) {
-          final node = value.cast<String, Object?>();
-          final id = node['node_id']?.toString() ?? '';
-          if (id.isEmpty || !ids.add(id)) {
-            throw FormatException(
-              'Invalid or duplicate plugin UI node ID: $id',
-            );
-          }
-          final content =
-              (node['content'] as Map?)?.cast<String, Object?>() ?? const {};
-          final legacyType = content['type']?.toString();
-          final legacyValue = content['value'];
-          final disabled = node['disabled'] == true;
-          switch (legacyType) {
-            case 'Text':
-              return {
-                'type': 'Text',
-                'props': {'value': legacyValue?.toString() ?? ''},
-                'children': const <Map<String, Object?>>[],
-              };
-            case 'HtmlDocument':
-              return {
-                'type': 'HtmlDocument',
-                'props': {'value': legacyValue?.toString() ?? ''},
-                'children': const <Map<String, Object?>>[],
-              };
-            case 'Button':
-              final button =
-                  (legacyValue as Map?)?.cast<String, Object?>() ?? const {};
-              return {
-                'type': 'Button',
-                'props': {
-                  'text': button['text']?.toString() ?? '',
-                  'primary': button['primary'] == true,
-                  'onClick': button['callback_fun_id']?.toString() ?? '',
-                  if (disabled) 'disabled': true,
-                },
-                'children': const <Map<String, Object?>>[],
-              };
-            case 'Input':
-              final input =
-                  (legacyValue as Map?)?.cast<String, Object?>() ?? const {};
-              return {
-                'type': 'TextField',
-                'props': {
-                  'value': input['text']?.toString() ?? '',
-                  'onChange': input['callback_fun_id']?.toString() ?? '',
-                  if (disabled) 'disabled': true,
-                },
-                'children': const <Map<String, Object?>>[],
-              };
-            case 'Dropdown':
-              final dropdown =
-                  (legacyValue as Map?)?.cast<String, Object?>() ?? const {};
-              final options =
-                  (dropdown['options'] as List?)
-                      ?.map((o) => o.toString())
-                      .toList(growable: false) ??
-                  const <String>[];
-              return {
-                'type': 'Dropdown',
-                'props': {
-                  'options': options,
-                  'onChange': dropdown['callback_fun_id']?.toString() ?? '',
-                  if (disabled) 'disabled': true,
-                },
-                'children': const <Map<String, Object?>>[],
-              };
-            default:
-              throw FormatException(
-                'Unsupported plugin UI node type: $legacyType',
-              );
-          }
-        })
-        .toList(growable: false);
-  }
-
-  Future<Map<String, Object?>> _openUrl(String id, List<Object?> arguments) {
-    final url = arguments.firstOrNull?.toString() ?? '';
-    _requireNetworkUri(url);
-    return _requestHost(id, 'openUrl', {'url': url});
+    return {...node, 'type': type, 'props': props, 'children': children};
   }
 
   Future<Map<String, Object?>> _requestHost(
     String pluginId,
     String type,
-    Map<String, Object?> data,
-  ) {
+    Map<String, Object?> data, {
+    _PluginSession? session,
+  }) {
+    if (!_sessions.containsKey(pluginId) ||
+        (session != null && !identical(_sessions[pluginId], session))) {
+      return Future.error(StateError('Plugin session ended'));
+    }
     final requestId =
         '${DateTime.now().microsecondsSinceEpoch}-${++_requestSequence}';
     final completer = Completer<Map<String, Object?>>();
-    _hostRequests[requestId] = completer;
+    _hostRequests[requestId] = (
+      pluginId: pluginId,
+      type: type,
+      data: data,
+      result: completer,
+    );
     _log.info(
       'dispatching host request $requestId type=$type for plugin $pluginId',
     );
@@ -1952,6 +1257,10 @@ class PluginManager {
       const Duration(minutes: 5),
       onTimeout: () {
         _hostRequests.remove(requestId);
+        _hostRequestOwners.remove(requestId);
+        emitEvent(
+          CommandEvent('plugin.hostCancelled', data: {'requestId': requestId}),
+        );
         _log.warning(
           'host request $requestId type=$type timed out for plugin $pluginId',
         );
@@ -2003,6 +1312,8 @@ class PluginManager {
     }
     json['safeMode'] = _safeMode;
     json['running'] = _runtimes.containsKey(plugin.manifest.id);
+    json['backgroundActive'] = _backgroundTasks.containsKey(plugin.manifest.id);
+    json.addAll(_settings(plugin.manifest.id).toJson());
     return json;
   }
 
@@ -2011,30 +1322,48 @@ class PluginManager {
     String phase,
     Future<T> Function() operation,
   ) async {
+    final id = plugin.manifest.id;
+    final lifetime = _runtimeLifetimes.putIfAbsent(id, Object.new);
+    final session = _sessions[id];
+    if (session != null) {
+      session.activeOperations++;
+      session.idleTimer?.cancel();
+    }
     try {
-      return await operation().timeout(
+      final result = await operation().timeout(
         _operationTimeout,
         onTimeout: () => throw TimeoutException(
           'Plugin operation $phase timed out',
           _operationTimeout,
         ),
       );
+      if (!identical(_runtimeLifetimes[id], lifetime)) {
+        throw StateError('Plugin instance has stopped');
+      }
+      if (phase.startsWith('provider.')) {
+        if (_sessions[id] case final current?) {
+          _recordActivity(current);
+        }
+      }
+      return result;
     } on PluginExecutionException {
       rethrow;
     } catch (error, stackTrace) {
-      if (_isTransientHostError(error.toString())) {
-        throw PluginExecutionException(
-          plugin.manifest.id,
-          plugin.manifest.name,
-          error.toString(),
-        );
+      if (identical(_runtimeLifetimes[id], lifetime) &&
+          !_isPermissionError(error) &&
+          !_isCapabilityError(error)) {
+        await _recordFailure(plugin, error, stackTrace, phase: phase);
       }
-      await _recordFailure(plugin, error, stackTrace, phase: phase);
       throw PluginExecutionException(
         plugin.manifest.id,
         plugin.manifest.name,
         error.toString(),
       );
+    } finally {
+      if (session != null) session.activeOperations--;
+      if (identical(_runtimeLifetimes[id], lifetime)) {
+        await _applyBackgroundPolicy(id);
+      }
     }
   }
 
@@ -2044,6 +1373,7 @@ class PluginManager {
     StackTrace stackTrace, {
     required String phase,
   }) async {
+    if (_isCapabilityError(error)) return;
     final id = plugin.manifest.id;
     if (_closed || _failures.containsKey(id)) return;
     final failure = PluginExecutionFailure(
@@ -2061,42 +1391,36 @@ class PluginManager {
     );
     emitEvent(CommandEvent('plugin.error', data: failure.toJson()));
     _emitState(id);
-    // This method can run inside a QuickJS/WASM host callback. Disposing that
-    // runtime before its current dispatch unwinds can deadlock the command bus.
-    // Mark it failed and stop feeding it events; a later close/remove/clear
-    // command owns runtime disposal from outside the callback stack.
-    _interconnectObservers.remove(id);
-    _rawProtocolObservers.remove(id);
+    unawaited(
+      _closeRuntime(id).catchError((Object cleanupError) {
+        _log.warning('Plugin failure cleanup failed', cleanupError);
+      }),
+    );
   }
 
   Future<void> close() async {
     _closed = true;
+    await dataMaintenance.dispose();
     await _interconnectSubscription.cancel();
-    await _rawProtocolSubscription.cancel();
+    await _deviceSubscription.cancel();
+    await _backgroundExpirationSubscription.cancel();
+    await _taskSubscription?.cancel();
+    await Future.wait(_managementOperations.values.toList());
     await _closeAllRuntimes();
+    _pendingInterconnect.clear();
     _runtimeStarts.clear();
-    for (final host in _wasmHosts.values) {
-      await host.dispose();
-    }
-    _wasmHosts.clear();
-    for (final completer in _hostRequests.values) {
-      if (!completer.isCompleted) {
-        completer.completeError(StateError('Plugin host is closing'));
+    _runtimeLifetimes.clear();
+    for (final request in _hostRequests.values) {
+      if (!request.result.isCompleted) {
+        request.result.completeError(StateError('Plugin host is closing'));
       }
     }
     _hostRequests.clear();
-    _dio.close(force: true);
+    _hostRequestOwners.clear();
+    await _permissionBroker.drainWrites();
+    await Future.wait(_hostWrites.values.toList());
     await (await _storage).close();
   }
-}
-
-class _PluginZmlAttachment {
-  _PluginZmlAttachment({required this.pluginId, required this.hooks});
-
-  final String pluginId;
-  final Map<String, String> hooks;
-  final pending = <({String hook, Object? payload})>[];
-  bool ready = false;
 }
 
 class _PluginProvider {
@@ -2104,49 +1428,19 @@ class _PluginProvider {
     required this.pluginId,
     required this.id,
     required this.name,
-    this.categories,
-    required this.query,
-    required this.detail,
-    required this.download,
+    this.type = 'resource',
+    this.callbacks = const {},
   });
-
   final String pluginId;
   final String id;
   final String name;
-  final String? categories;
-  final String query;
-  final String detail;
-  final String download;
-
-  factory _PluginProvider.fromJson(String pluginId, Map<String, Object?> json) {
-    String required(String key) {
-      final value = json[key]?.toString() ?? '';
-      if (value.isEmpty) throw FormatException('Provider $key is required');
-      return value;
-    }
-
-    final id = required('id');
-    if (!RegExp(r'^[a-z][a-z0-9]*(?:[.-][a-z0-9][a-z0-9-]*)+$').hasMatch(id)) {
-      throw FormatException('Invalid provider ID: $id');
-    }
-    return _PluginProvider(
-      pluginId: pluginId,
-      id: id,
-      name: required('name'),
-      categories: json['categories']?.toString(),
-      query: required('query'),
-      detail: required('detail'),
-      download: required('download'),
-    );
-  }
-
+  final String type;
+  final Map<String, String> callbacks;
   Map<String, Object?> toJson() => {
     'pluginId': pluginId,
     'id': id,
     'name': name,
-    if (categories != null) 'categories': categories,
-    'query': query,
-    'detail': detail,
-    'download': download,
+    'type': type,
+    'available': callbacks.isNotEmpty,
   };
 }

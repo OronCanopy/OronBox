@@ -11,6 +11,10 @@ import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
 /// Keep this list in sync with the server's `errorBody` codes. It is also
 /// used when a code is embedded in a plain exception string.
 const oronBoxKnownErrorCodes = <String>{
+  'astrobox_access_check_failed',
+  'astrobox_decryption_failed',
+  'astrobox_purchase_required',
+  'wasm_compatibility_required',
   'private_state_read_failed',
   'private_state_write_failed',
   'admin_coin_failed',
@@ -117,6 +121,7 @@ const oronBoxKnownErrorCodes = <String>{
   'plugin_invalid',
   'plugin_error',
   'plugin_not_found',
+  'plugin_provider_unavailable',
   'plugin_not_owned',
   'plugin_save_failed',
   'plugins_failed',
@@ -141,6 +146,17 @@ const oronBoxKnownErrorCodes = <String>{
   'unsupported',
   'validation',
   'watchface_install_blocked',
+  'watchface_downgrade',
+  'install_low_storage',
+  'install_low_battery',
+  'install_quantity_limit',
+  'certificate_error',
+};
+
+const _browserErrorCodes = <String>{
+  'platform_capability_unavailable',
+  'oauth_popup_blocked',
+  'oauth_callback_failed',
 };
 
 String localizedErrorMessage(AppLocalizations l10n, Object? error) {
@@ -156,6 +172,47 @@ String localizedErrorMessage(AppLocalizations l10n, Object? error) {
   final raw = _flattenError(error);
   final normalized = raw.toLowerCase();
   final code = _errorCode(error, normalized);
+  if (code == 'platform_capability_unavailable') {
+    return l10n.errorPlatformCapabilityUnavailable;
+  }
+  if (code == 'oauth_popup_blocked') return l10n.oauthPopupBlocked;
+  if (code == 'oauth_callback_failed') {
+    return l10n.settingsAccountBandBbsLoginFailed;
+  }
+  if (code == 'wasm_compatibility_required') {
+    return l10n.wasmCompatibilityRequired;
+  }
+  switch (code) {
+    case 'engineering_firmware':
+      return l10n.engineeringFirmwareError;
+    case 'engineering_response':
+      return l10n.engineeringResponseError;
+    case 'engineering_timeout':
+      return l10n.engineeringTimeout;
+    case 'engineering_mtu':
+      return l10n.engineeringMtuError;
+    case 'engineering_busy':
+      return l10n.engineeringBusyError;
+    case 'engineering_device':
+    case 'engineering_disconnected':
+      return l10n.engineeringConnectionError;
+    case 'astrobox_access_check_failed':
+      return l10n.resourceAstroBoxAccessCheckFailed;
+    case 'astrobox_decryption_failed':
+      return l10n.resourceAstroBoxDecryptionFailed;
+    case 'astrobox_purchase_required':
+      return l10n.resourceAstroBoxPurchaseMessage;
+    case 'watchface_downgrade':
+      return l10n.watchfaceDowngradeMessage;
+    case 'install_low_storage':
+      return l10n.installLowStorageMessage;
+    case 'install_low_battery':
+      return l10n.installLowBatteryMessage;
+    case 'install_quantity_limit':
+      return l10n.installQuantityLimitMessage;
+    case 'certificate_error':
+      return l10n.errorCertificateVerificationFailed;
+  }
   final backendMessage = _backendMessage(error);
   if (code == 'comment_blocked') return l10n.commentBlocked;
   if (backendMessage != null) return backendMessage;
@@ -199,6 +256,8 @@ String localizedErrorMessage(AppLocalizations l10n, Object? error) {
     case 'banned':
     case 'creator_frozen':
     case 'bandbbs_scope_forbidden':
+    case 'plugin_provider_unavailable':
+      return l10n.pluginProviderUnavailable;
     case 'plugin_not_owned':
     case 'http_403':
       return l10n.errorPermissionDenied;
@@ -553,6 +612,9 @@ String localizedErrorMessage(AppLocalizations l10n, Object? error) {
 
 String _errorCode(Object? error, String normalized) {
   if (error is CodedError) return error.code.trim().toLowerCase();
+  if (normalized.contains('wasm_compatibility_required')) {
+    return 'wasm_compatibility_required';
+  }
   if (error is DioException) {
     final data = error.response?.data;
     if (data is Map) {
@@ -579,10 +641,11 @@ String _errorCode(Object? error, String normalized) {
   }
   final tokenMatch = RegExp(r'^[a-z0-9_]+').firstMatch(text);
   if (tokenMatch != null &&
-      oronBoxKnownErrorCodes.contains(tokenMatch.group(0))) {
+      (oronBoxKnownErrorCodes.contains(tokenMatch.group(0)) ||
+          _browserErrorCodes.contains(tokenMatch.group(0)))) {
     return tokenMatch.group(0)!;
   }
-  for (final known in oronBoxKnownErrorCodes) {
+  for (final known in [..._browserErrorCodes, ...oronBoxKnownErrorCodes]) {
     if (text.startsWith(known)) return known;
   }
   final http = RegExp(

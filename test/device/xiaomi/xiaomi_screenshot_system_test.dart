@@ -11,6 +11,38 @@ import 'package:oronbox/src/device/xiaomi/protocol/packet/l2_packet.dart';
 import 'package:oronbox/src/device/xiaomi/protocol/packet/spp_v1_packet.dart';
 
 void main() {
+  test(
+    'reset during capability negotiation cancels its remaining sends',
+    () async {
+      final transport = _FakeTransport();
+      final eventBus = DeviceEventBus();
+      final entity = DeviceEntity(
+        id: 'test-device',
+        kind: 'xiaomi',
+        transport: transport,
+        eventBus: eventBus,
+      );
+      final component = _NegotiatingComponent(transport);
+      final system = XiaomiScreenshotSystem();
+      entity.set<XiaomiDeviceComponent>(component);
+      entity.registerSystem(system);
+      try {
+        final previous = system.negotiateAfterAuthentication();
+        expect(component.sent, hasLength(1));
+        system.abortPending(StateError('L1 session reset'));
+        component.gate.complete();
+        await previous;
+        expect(component.sent, hasLength(1));
+        await system.negotiateAfterAuthentication();
+        expect(component.sent, hasLength(3));
+      } finally {
+        if (!component.gate.isCompleted) component.gate.complete();
+        await entity.dispose();
+        eventBus.dispose();
+      }
+    },
+  );
+
   test('registers the screenshot capability before wearable capture', () async {
     final transport = _FakeTransport();
     final entity = DeviceEntity(
@@ -320,6 +352,20 @@ void main() {
       eventBus.dispose();
     },
   );
+}
+
+class _NegotiatingComponent extends XiaomiDeviceComponent {
+  _NegotiatingComponent(Transport transport)
+    : super(transport: transport, sppV1: true);
+
+  final gate = Completer<void>();
+  final sent = <Uint8List>[];
+
+  @override
+  Future<void> sendProtobufBytes(Uint8List payload, {bool waitForAck = false}) {
+    sent.add(Uint8List.fromList(payload));
+    return sent.length == 1 ? gate.future : Future.value();
+  }
 }
 
 Uint8List _segment(int total, int sequence, Uint8List payload) =>

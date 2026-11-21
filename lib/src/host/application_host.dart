@@ -16,7 +16,13 @@ class ApplicationHost implements OronBoxCommandBus {
           : null,
       beginExecution: beginTaskExecution,
       shouldRemoveCompleted: _shouldRemoveCompleted,
+      canRun: core is TaskQueueClient
+          ? (core as TaskQueueClient).canRunTask
+          : null,
     );
+    if (core is TaskQueueClient) {
+      (core as TaskQueueClient).attachTaskQueue(tasks);
+    }
     _coreSubscription = core.events.listen(_events.add);
     _taskSubscription = tasks.events.listen(_events.add);
   }

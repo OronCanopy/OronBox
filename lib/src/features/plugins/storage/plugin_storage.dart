@@ -56,13 +56,9 @@ class PluginStoragePath {
       _ => throw FormatException('Unknown plugin path root: $value'),
     };
     final tail = parts.skip(1).toList(growable: false);
-    if (tail.any(
-      (part) =>
-          part.isEmpty ||
-          part == '.' ||
-          part == '..' ||
-          part.startsWith('.oronbox'),
-    )) {
+    if (tail.any((part) => part.isEmpty || part == '.' || part == '..') ||
+        (area == PluginStorageArea.data &&
+            {'.meta', '.oronbox'}.contains(tail.firstOrNull))) {
       throw FormatException('Unsafe plugin path: $value');
     }
     return PluginStoragePath(area: area, relativePath: tail.join('/'));
@@ -79,6 +75,13 @@ abstract interface class PluginStorage {
 
   Future<void> writeConfig(String pluginId, Map<String, Object?> config);
 
+  Future<Map<String, Object?>> readHostSettings(String pluginId);
+
+  Future<void> writeHostSettings(
+    String pluginId,
+    Map<String, Object?> settings,
+  );
+
   Future<Set<String>> readPermissionGrants(String pluginId);
 
   Future<void> writePermissionGrants(String pluginId, Set<String> grants);
@@ -87,13 +90,19 @@ abstract interface class PluginStorage {
 
   Future<void> clearPluginData(String pluginId);
 
-  Future<Uint8List> readFile(String pluginId, PluginStoragePath path);
+  Future<Uint8List> readFile(
+    String pluginId,
+    PluginStoragePath path, {
+    int offset = 0,
+    int? length,
+  });
 
   Future<void> writeFile(
     String pluginId,
     PluginStoragePath path,
-    Uint8List bytes,
-  );
+    Uint8List bytes, {
+    bool allowPackageWrite = false,
+  });
 
   Future<int> writeFileStream(
     String pluginId,
@@ -115,5 +124,39 @@ abstract interface class PluginStorage {
 
   String? nativePath(String pluginId, PluginStoragePath path);
 
+  Future<void> moveToHost(
+    String pluginId,
+    PluginStoragePath path,
+    String destination,
+  );
+
+  Future<void> restoreFromHost(
+    String pluginId,
+    PluginStoragePath path,
+    String source,
+  );
+
   Future<void> close();
+}
+
+extension PluginTemporaryStorage on PluginStorage {
+  Future<void> clearTemporaryFiles(String pluginId) async {
+    for (final file in await listDirectory(
+      pluginId,
+      PluginStoragePath.parse('/temp'),
+    )) {
+      await removeFile(pluginId, PluginStoragePath.parse(file.path));
+    }
+  }
+}
+
+int pluginFileReadLength(int size, int offset, int? length) {
+  if (offset < 0 || offset > size) {
+    throw RangeError('Invalid file offset: $offset');
+  }
+  if (length != null && length < 0) {
+    throw RangeError('Invalid file length');
+  }
+  final available = size - offset;
+  return length == null || length > available ? available : length;
 }

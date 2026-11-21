@@ -57,6 +57,7 @@ class XiaomiSarController {
     required this.onSend,
     required this.onData,
     this.onSendError,
+    this.onSessionReset,
     this.sendTimeout = const Duration(seconds: 10),
     this.txWinOverrunAllowance = 0,
   }) : _log = getLogger('XiaomiSarController') {
@@ -66,6 +67,7 @@ class XiaomiSarController {
   final Future<void> Function(Uint8List data) onSend;
   final void Function(Uint8List l2Payload) onData;
   final void Function(Object error, StackTrace stackTrace)? onSendError;
+  final void Function(Object error)? onSessionReset;
   final Duration sendTimeout;
   final int txWinOverrunAllowance;
   final Logger _log;
@@ -108,6 +110,13 @@ class XiaomiSarController {
 
   void start() {
     _log.fine('SAR start, sending L1 start request');
+    _resetSession();
+    final startReq = _localConfig(CmdCode.cmdL1startReq);
+    _commandPool.pushCmdFront(startReq.toPayloadBytes());
+    _tryRunNext();
+  }
+
+  void _resetSession() {
     _sendGeneration++;
     _cmdExchanged = false;
     _txNextSeq = 0;
@@ -131,17 +140,18 @@ class XiaomiSarController {
     }
     _ackWaiters.clear();
     _commandPool.clear();
-    final startReq = L1CmdBuilder()
-        .cmd(CmdCode.cmdL1startReq)
-        .version(1, 0, 0)
-        .mps(64512)
-        .txWin(_localTxWin)
-        .sendTimeout(sendTimeout.inMilliseconds)
-        .build();
-    _commandPool.pushCmdFront(startReq.toPayloadBytes());
+    _effectiveSendTimeout = sendTimeout;
+    _ackNotify.add(null);
     _startTimeoutChecker();
-    _tryRunNext();
   }
+
+  L1CmdPacket _localConfig(CmdCode code) => L1CmdBuilder()
+      .cmd(code)
+      .version(1, 0, 0)
+      .mps(64512)
+      .txWin(_localTxWin)
+      .sendTimeout(sendTimeout.inMilliseconds)
+      .build();
 
   int enqueue(Uint8List data) {
     final seq = _allocSeq();
@@ -356,21 +366,35 @@ class XiaomiSarController {
   void _handleCmd(Uint8List payload) {
     final cmd = L1CmdPacket.fromPayloadBytes(payload);
     if (cmd == null) return;
+    if (cmd.cmd == CmdCode.cmdL1startReq) {
+      _resetSession();
+      _applyConfig(cmd);
+      _cmdExchanged = true;
+      _commandPool.pushCmdFront(
+        _localConfig(CmdCode.cmdL1startRsp).toPayloadBytes(),
+      );
+      _tryRunNext();
+      onSessionReset?.call(StateError('Device restarted L1 session'));
+    }
     if (cmd.cmd == CmdCode.cmdL1startRsp) {
       _cmdExchanged = true;
-      final win = cmd.getTxWin();
-      if (win != null) {
-        _txWin = win.clamp(1, 255);
-      }
-      final to = cmd.getSendTimeout();
-      if (to != null && to > 0) {
-        // 设备返回的 timeout 经常偏保守；我们自己的重传/等待逻辑用这个值即可。
-        _effectiveSendTimeout = Duration(milliseconds: to.clamp(1000, 60000));
-      }
-      _log.info(
-        'SAR started: local_tx_win=$_localTxWin remote_tx_win=$_txWin send_timeout_ms=${_effectiveSendTimeout.inMilliseconds}',
-      );
+      _applyConfig(cmd);
     }
+  }
+
+  void _applyConfig(L1CmdPacket cmd) {
+    final win = cmd.getTxWin();
+    if (win != null) {
+      _txWin = win.clamp(1, 255);
+    }
+    final to = cmd.getSendTimeout();
+    if (to != null && to > 0) {
+      // 设备返回的 timeout 经常偏保守；我们自己的重传/等待逻辑用这个值即可。
+      _effectiveSendTimeout = Duration(milliseconds: to.clamp(1000, 60000));
+    }
+    _log.info(
+      'SAR started: local_tx_win=$_localTxWin remote_tx_win=$_txWin send_timeout_ms=${_effectiveSendTimeout.inMilliseconds}',
+    );
   }
 
   bool _handleData(L1Packet packet) {

@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
@@ -30,7 +31,11 @@ class ResourcesPage extends ConsumerWidget {
     if (!showHome && !showExplore) {
       return Scaffold(
         appBar: SysAppBar(title: Text(l10n.exploreTab)),
-        body: Center(child: Text(l10n.cleanModeDescription)),
+        body: EmptyStateView(
+          icon: Icons.hide_source_outlined,
+          title: l10n.resourceFeaturesDisabledTitle,
+          message: l10n.cleanModeDescription,
+        ),
       );
     }
     final displayMode = switch (mode) {

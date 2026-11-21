@@ -1,3 +1,5 @@
+import 'systems/zeppos_notification_system.dart';
+
 import 'dart:async';
 
 import 'package:oronbox/src/device/core/entity.dart';
@@ -53,6 +55,7 @@ class ZeppOsDeviceFactory implements DeviceEntityFactory {
     final batterySystem = ZeppOsBatterySystem();
     final deviceInfoSystem = ZeppOsDeviceInfoSystem();
     final servicesSystem = ZeppOsServicesSystem();
+    final notificationSystem = ZeppOsNotificationSystem();
     final findDeviceSystem = ZeppOsFindDeviceSystem();
     final xiaoAiSystem = ZeppOsXiaoAiSystem();
     final mapUploadSystem = ZeppOsMapUploadSystem();
@@ -62,6 +65,14 @@ class ZeppOsDeviceFactory implements DeviceEntityFactory {
     final voiceMemosSystem = ZeppOsVoiceMemosSystem();
     final watchfaceSystem = ZeppOsWatchfaceSystem();
     component.onPayload = (payload) {
+      entity.emit(
+        ProtocolPacketReceived(
+          deviceId: id,
+          protocol: 'zeppos',
+          channel: payload.endpoint,
+          payload: payload.payload,
+        ),
+      );
       if (payload.endpoint == ZeppOsDeviceComponent.endpointAuthentication) {
         authSystem.handlePayload(payload.payload);
       } else if (payload.endpoint == ZeppOsAppsSystem.endpoint) {
@@ -84,6 +95,8 @@ class ZeppOsDeviceFactory implements DeviceEntityFactory {
         unawaited(
           screenshotSystem.initialize().catchError((Object _, StackTrace _) {}),
         );
+      } else if (payload.endpoint == ZeppOsNotificationSystem.endpoint) {
+        notificationSystem.handlePayload(payload.payload);
       } else if (payload.endpoint == ZeppOsTimeSystem.endpoint) {
         timeSystem.handlePayload(payload.payload);
       } else if (payload.endpoint == ZeppOsXiaoAiSystem.xiaoAiEndpoint ||
@@ -111,6 +124,7 @@ class ZeppOsDeviceFactory implements DeviceEntityFactory {
     entity.registerSystem(deviceInfoSystem);
     entity.registerSystem(servicesSystem);
     entity.registerSystem(findDeviceSystem);
+    entity.registerSystem(notificationSystem);
     entity.registerSystem(xiaoAiSystem);
     entity.registerSystem(mapUploadSystem);
     entity.registerSystem(musicUploadSystem);

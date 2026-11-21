@@ -1,15 +1,41 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
+import 'package:oronbox/src/app/widgets/app_state_view.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
+import 'package:oronbox/src/app/widgets/app_checkbox_tile.dart';
 import 'package:oronbox/src/app/widgets/page_container.dart';
 import 'package:oronbox/src/features/resources/widgets/community_html_content.dart';
 
-/// Recursively renders a OronBox plugin UI tree.
-///
-/// Accepts either the new tree format `{type, props, children}`
-/// or a legacy flat list (auto-wrapped in Column by the backend).
+part 'plugin_ui_layout.dart';
+part 'plugin_ui_controls.dart';
+part 'plugin_ui_overlays.dart';
+part 'plugin_ui_content.dart';
+
+final pluginViewportKeyProvider = Provider.autoDispose
+    .family<GlobalKey, String>((ref, pluginId) => GlobalKey());
+
+class PluginViewport extends ConsumerWidget {
+  const PluginViewport({
+    super.key,
+    required this.pluginId,
+    required this.child,
+  });
+
+  final String pluginId;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => SizedBox.expand(
+    key: ref.watch(pluginViewportKeyProvider(pluginId)),
+    child: child,
+  );
+}
+
+/// Renders AstroBox component UI using the application theme.
 class PluginUITree extends StatelessWidget {
   const PluginUITree({
     super.key,
@@ -26,8 +52,9 @@ class PluginUITree extends StatelessWidget {
   Widget build(BuildContext context) {
     final tree = _unwrap(root);
     if (tree == null) {
-      return Center(
-        child: Text(AppLocalizations.of(context)!.pluginNoFeatures),
+      return EmptyStateView(
+        icon: Icons.extension_outlined,
+        title: AppLocalizations.of(context)!.pluginNoFeatures,
       );
     }
     final content = _buildNode(context, tree);
@@ -40,83 +67,731 @@ class PluginUITree extends StatelessWidget {
 
   Map<String, Object?>? _unwrap(Object? value) {
     if (value is List) {
-      // Legacy flat list — backend already wrapped in Column, so first is tree
       if (value.isEmpty) return null;
       final first = value.firstOrNull;
-      if (first is Map) return first.cast<String, Object?>();
+      if (first is Map) return _unwrap(first);
       return null;
     }
-    if (value is Map) return value.cast<String, Object?>();
+    if (value is Map) {
+      final map = value.cast<String, Object?>();
+      if (map['root'] is Map) {
+        return _unwrap(map['root']);
+      }
+      return map;
+    }
     return null;
   }
 
   Widget _buildNode(BuildContext context, Map<String, Object?> node) {
-    final type = node['type']?.toString() ?? 'SizedBox';
-    final props = (node['props'] as Map?)?.cast<String, Object?>() ?? const {};
-    final raw = node['children'];
-    final children = raw is List
-        ? raw
-              .whereType<Map>()
-              .map((c) => _buildNode(context, c.cast<String, Object?>()))
-              .toList(growable: false)
-        : <Widget>[];
+    final props = (node['props'] as Map?) ?? const {};
+    final semanticKey = node['key'] ?? props['key'] ?? props['id'];
+    final child = _buildNodeContent(context, node);
+    return semanticKey == null
+        ? child
+        : KeyedSubtree(key: ValueKey(semanticKey), child: child);
+  }
 
-    final visible = props['visible'] != false;
-    if (!visible) return const SizedBox.shrink();
+  Widget _buildNodeContent(BuildContext context, Map<String, Object?> node) {
+    final rawType = node['type']?.toString() ?? 'SizedBox';
+    final typeUpper = rawType.toUpperCase().replaceAll('_', '-');
+    final rawProps =
+        (node['props'] as Map?)?.cast<String, Object?>() ?? const {};
+    final rawStyles = <String, Object?>{
+      for (final entry in ((node['styles'] as Map?) ?? {}).entries)
+        entry.key.toString().replaceAll('-', '_'): entry.value,
+    };
+    final rawEvents =
+        (node['events'] as Map?)?.cast<String, Object?>() ?? const {};
+    final content = node['content']?.toString();
 
-    Widget child = switch (type) {
-      'Column' => _Column(props: props, children: children),
-      'Row' => _Row(props: props, children: children),
-      'LazyColumn' => _LazyColumn(props: props, children: children),
-      'Spacer' => const _PluginSpacer(),
-      'Text' => _Text(props: props),
-      'HtmlDocument' => _Html(props: props),
-      'Button' => _Button(props: props, onInvoke: onInvoke),
-      'TextField' => _TextField(props: props, onInvoke: onInvoke),
-      'Switch' => _Switch(props: props, onInvoke: onInvoke),
-      'Checkbox' => _Checkbox(props: props, onInvoke: onInvoke),
-      'Slider' => _Slider(props: props, onInvoke: onInvoke),
-      'Dropdown' => _Dropdown(props: props, onInvoke: onInvoke),
-      'Image' => _Image(props: props),
-      'Card' => _Card(
-        props: props,
-        child: children.isNotEmpty ? children.first : const SizedBox.shrink(),
-      ),
-      'Divider' => _Divider(props: props),
-      'Badge' => _Badge(
-        props: props,
-        child: children.isNotEmpty ? children.first : const SizedBox.shrink(),
-      ),
-      'CircularProgress' => _CircularProgress(props: props),
-      'LinearProgress' => _LinearProgress(props: props),
-      'Modal' => _Modal(
-        props: props,
-        onInvoke: onInvoke,
-        child: children.isNotEmpty ? children.first : const SizedBox.shrink(),
-      ),
-      'Tooltip' => _Tooltip(
-        props: props,
-        child: children.isNotEmpty ? children.first : const SizedBox.shrink(),
-      ),
-      'Tabs' => _Tabs(props: props, onInvoke: onInvoke, children: children),
-      'TabContent' => _TabContent(
-        props: props,
-        child: children.isNotEmpty ? children.first : const SizedBox.shrink(),
-      ),
-      _ => const SizedBox.shrink(),
+    final props = <String, Object?>{
+      ...rawProps,
+      for (final key in [
+        'checked',
+        'default-checked',
+        'disabled',
+        'visible',
+        'multiline',
+        'primary',
+      ])
+        if (rawProps[key] == 'true' || rawProps[key] == 'false')
+          key: rawProps[key] == 'true',
+      if (content != null &&
+          !rawProps.containsKey('value') &&
+          !rawProps.containsKey('text') &&
+          !rawProps.containsKey('label'))
+        'value': content,
     };
 
-    if (props['disabled'] == true) {
-      child = AbsorbPointer(child: child);
+    if (_isHidden(node)) {
+      return const SizedBox.shrink();
     }
-    if (props['opacity'] != null) {
-      child = Opacity(
-        opacity: (_num(props, 'opacity') ?? 1.0).clamp(0, 1),
+
+    final rawChildren = node['children'];
+    final childNodes = rawChildren is List
+        ? rawChildren
+              .whereType<Map>()
+              .map((c) => c.cast<String, Object?>())
+              .where((child) => !_isHidden(child))
+              .toList()
+        : <Map<String, Object?>>[];
+    if (typeUpper == 'TABS-ROOT') {
+      final list = childNodes
+          .where(
+            (n) => n['type'].toString().replaceAll('_', '-') == 'TABS-LIST',
+          )
+          .firstOrNull;
+      final triggers =
+          (list?['children'] as List?)?.whereType<Map>().toList() ?? [];
+      final panels = childNodes
+          .where(
+            (n) => n['type'].toString().replaceAll('_', '-') == 'TABS-CONTENT',
+          )
+          .toList();
+      if (triggers.isEmpty) return const SizedBox.shrink();
+      final selectedIndex = triggers
+          .indexWhere(
+            (trigger) => (trigger['props'] as Map?)?['value'] == props['value'],
+          )
+          .clamp(0, triggers.length - 1);
+      return DefaultTabController(
+        length: triggers.length,
+        initialIndex: selectedIndex,
+        child: _TabSelection(
+          index: selectedIndex,
+          child: Builder(
+            builder: (tabContext) {
+              final controller = DefaultTabController.of(tabContext);
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TabBar(
+                    isScrollable: true,
+                    tabs: [
+                      for (final trigger in triggers)
+                        Tab(
+                          child: _buildNode(tabContext, {
+                            ...trigger.cast<String, Object?>(),
+                            'events': const <String, Object?>{},
+                          }),
+                        ),
+                    ],
+                    onTap: (index) {
+                      final disabled =
+                          (triggers[index]['props'] as Map?)?['disabled'];
+                      if (disabled == true || disabled == 'true') {
+                        controller.index = controller.previousIndex;
+                        return;
+                      }
+                      final callback =
+                          (triggers[index]['events'] as Map?)?['CLICK']
+                              ?.toString();
+                      if (callback != null) {
+                        onInvoke(callback, _uiEvent('CLICK'));
+                      }
+                    },
+                  ),
+                  AnimatedBuilder(
+                    animation: controller,
+                    builder: (context, _) {
+                      final value =
+                          props['value'] ??
+                          (triggers[controller.index]['props']
+                              as Map?)?['value'];
+                      final panel = panels
+                          .where((n) => (n['props'] as Map?)?['value'] == value)
+                          .firstOrNull;
+                      return panel == null
+                          ? const SizedBox.shrink()
+                          : _PluginGroup(
+                              children: [
+                                for (final node
+                                    in (panel['children'] as List?)
+                                            ?.whereType<Map>() ??
+                                        const <Map>[])
+                                  _buildNode(
+                                    context,
+                                    node.cast<String, Object?>(),
+                                  ),
+                              ],
+                            );
+                    },
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      );
+    }
+    if (typeUpper == 'SELECT') {
+      final select = _Dropdown(
+        props: {
+          ...props,
+          if (childNodes.isNotEmpty)
+            'options': [
+              for (final option in childNodes)
+                {
+                  'value':
+                      (option['props'] as Map?)?['value'] ??
+                      option['content'] ??
+                      '',
+                  'label':
+                      (option['props'] as Map?)?['label'] ??
+                      option['content'] ??
+                      (option['props'] as Map?)?['value'] ??
+                      '',
+                },
+            ],
+          if (rawEvents['CHANGE'] != null) 'onChange': rawEvents['CHANGE'],
+        },
+        onInvoke: onInvoke,
+      );
+      return _wrapStyles(context, select, props, rawStyles, rawEvents);
+    }
+    if (typeUpper == 'DIALOG-ROOT' ||
+        typeUpper == 'DROPDOWN-MENU-ROOT' ||
+        typeUpper == 'CONTEXT-MENU-ROOT') {
+      return _buildOverlay(context, typeUpper, childNodes);
+    }
+
+    final direction = rawStyles['flex_direction']?.toString().toLowerCase();
+    final horizontal = switch (typeUpper) {
+      'ROW' => true,
+      'DIV' =>
+        direction == 'row' ||
+            direction == 'row-reverse' ||
+            (direction == null && rawStyles['display'] == 'flex'),
+      _ => false,
+    };
+    final hasGrowingChild =
+        horizontal &&
+        childNodes.any((node) {
+          final styles = node['styles'] as Map?;
+          return (_toDouble(styles?['flex_grow'] ?? styles?['flex-grow']) ??
+                  0) >
+              0;
+        });
+    final wrapStyle = rawStyles['flex_wrap'];
+    final wraps =
+        horizontal &&
+        (wrapStyle == 'wrap' ||
+            wrapStyle == 'wrap-reverse' ||
+            (wrapStyle == null &&
+                !hasGrowingChild &&
+                childNodes.length > 1 &&
+                childNodes.every(
+                  (node) => node['type']?.toString().toUpperCase() == 'BUTTON',
+                )));
+    final hasTextChild =
+        horizontal &&
+        childNodes.any((node) {
+          final type = node['type']?.toString().toUpperCase();
+          return type == 'TEXT' || type == 'SPAN' || type == 'P';
+        });
+    final children = <Widget>[
+      for (final node in childNodes)
+        if (horizontal && !wraps)
+          _buildRowChild(
+            context,
+            node,
+            reserveIntrinsicWidth: hasGrowingChild,
+            hasTextSibling: hasTextChild,
+          )
+        else
+          _buildNode(context, node),
+    ];
+
+    Widget child = switch (typeUpper) {
+      'COLUMN' => _Column(props: props, styles: rawStyles, children: children),
+      'ROW' => _Row(
+        props: props,
+        styles: rawStyles,
+        wraps: wraps,
+        children: children,
+      ),
+      'LAZYCOLUMN' => _LazyColumn(props: props, children: children),
+      'SCROLL-AREA' => _ScrollArea(
+        props: props,
+        styles: rawStyles,
+        children: children,
+      ),
+      'GRID' => _Grid(props: props, styles: rawStyles, children: children),
+      'SPACER' => const _PluginSpacer(),
+      'TEXT' ||
+      'SPAN' ||
+      'P' => _Text(props: {...props, if (content != null) 'value': content}),
+      'CODE' => _Code(props: props, content: content, styles: rawStyles),
+      'HTMLDOCUMENT' => _Html(props: props),
+      'BUTTON' => _Button(
+        props: {
+          ...props,
+          if (content != null) 'text': content,
+          'iconOnly':
+              content == null &&
+              childNodes.length == 1 &&
+              childNodes.single['type']?.toString().toUpperCase() == 'SVG',
+          if (rawEvents['CLICK'] != null) 'onClick': rawEvents['CLICK'],
+        },
+        onInvoke: onInvoke,
+        padding: _controlPadding({...props, ...rawStyles}),
+        children: children,
+      ),
+      'TEXTFIELD' || 'INPUT' || 'TEXTAREA' => _TextField(
+        props: {
+          ...props,
+          if (content != null) 'value': content,
+          if (rawEvents['CHANGE'] != null) 'onChange': rawEvents['CHANGE'],
+          if (rawEvents['INPUT'] != null) 'onInput': rawEvents['INPUT'],
+          if (rawEvents['KEY-DOWN'] != null) 'onKeyDown': rawEvents['KEY-DOWN'],
+          if (typeUpper == 'TEXTAREA') 'multiline': true,
+        },
+        onInvoke: onInvoke,
+      ),
+      'SWITCH' => _Switch(
+        props: {
+          ...props,
+          if (rawEvents['CHANGE'] != null) 'onChange': rawEvents['CHANGE'],
+        },
+        onInvoke: onInvoke,
+      ),
+      'CHECKBOX' => _Checkbox(
+        props: {
+          ...props,
+          if (content != null) 'label': content,
+          if (rawEvents['CHANGE'] != null) 'onChange': rawEvents['CHANGE'],
+        },
+        onInvoke: onInvoke,
+      ),
+      'SLIDER' => _Slider(
+        props: {
+          ...props,
+          if (rawEvents['CHANGE'] != null) 'onChange': rawEvents['CHANGE'],
+        },
+        onInvoke: onInvoke,
+      ),
+      'DROPDOWN' => _Dropdown(props: props, onInvoke: onInvoke),
+      'IMAGE' => _Image(props: props, styles: rawStyles),
+      'SVG' => _Svg(props: props, content: content),
+      'VIDEO' || 'AUDIO' => _MediaPlaceholder(type: typeUpper),
+      'OPTION' => _Option(props: props, content: content),
+      'CONTEXT-MENU-TRIGGER' ||
+      'CONTEXT-MENU-CONTENT' ||
+      'CONTEXT-MENU-ITEM' ||
+      'CONTEXT-MENU-SEPARATOR' ||
+      'DIALOG-TRIGGER' ||
+      'DIALOG-CONTENT' ||
+      'DIALOG-DESCRIPTION' ||
+      'DROPDOWN-MENU-TRIGGER' ||
+      'DROPDOWN-MENU-CONTENT' ||
+      'DROPDOWN-MENU-SEPARATOR' => _PluginGroup(
+        content: content,
+        children: children,
+      ),
+      'TABS-TRIGGER' => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [if (content != null) Text(content), ...children],
+      ),
+      'DIALOG-TITLE' => _Text(
+        props: {...props, if (content != null) 'value': content},
+      ),
+      'DIALOG-CLOSE' => TextButton(
+        onPressed: () {
+          Navigator.of(context).pop();
+          final callback = rawEvents['CLICK']?.toString();
+          if (callback != null) onInvoke(callback, _uiEvent('CLICK'));
+        },
+        child: Text(content ?? AppLocalizations.of(context)!.close),
+      ),
+      'DROPDOWN-MENU-ITEM' => _Text(
+        props: {...props, if (content != null) 'value': content},
+      ),
+      'CARD' => _Card(
+        padding:
+            _controlPadding({...props, ...rawStyles}) ??
+            const EdgeInsets.all(12),
+        child: children.isNotEmpty
+            ? (children.length == 1
+                  ? children.first
+                  : Column(mainAxisSize: MainAxisSize.min, children: children))
+            : (content != null ? Text(content) : const SizedBox.shrink()),
+      ),
+      'DIVIDER' || 'SEPARATOR' => _Divider(props: props),
+      'BADGE' => _Badge(
+        props: {...props, if (content != null) 'text': content},
+        child: children.firstOrNull ?? const SizedBox.shrink(),
+      ),
+      'CIRCULARPROGRESS' => _CircularProgress(props: props),
+      'LINEARPROGRESS' || 'PROGRESS' => _LinearProgress(props: props),
+      'MODAL' => _Modal(
+        props: props,
+        onInvoke: onInvoke,
+        child: children.isNotEmpty
+            ? (children.length == 1
+                  ? children.first
+                  : Column(mainAxisSize: MainAxisSize.min, children: children))
+            : (content != null ? Text(content) : const SizedBox.shrink()),
+      ),
+      'TOOLTIP' => _Tooltip(
+        props: {...props, if (content != null) 'message': content},
+        child: children.firstOrNull ?? const SizedBox.shrink(),
+      ),
+      'TABS' || 'TABS-ROOT' => _Tabs(
+        props: props,
+        onInvoke: onInvoke,
+        children: children,
+      ),
+      'TABCONTENT' || 'TABS-CONTENT' => _TabContent(
+        props: props,
+        child: children.isNotEmpty
+            ? (children.length == 1
+                  ? children.first
+                  : Column(mainAxisSize: MainAxisSize.min, children: children))
+            : const SizedBox.shrink(),
+      ),
+      'DIV' =>
+        horizontal
+            ? _Row(
+                props: props,
+                styles: {'justify_content': 'start', ...rawStyles},
+                wraps: wraps,
+                children: children,
+              )
+            : children.isEmpty && content != null
+            ? Text(content)
+            : _Column(props: props, styles: rawStyles, children: children),
+      _ =>
+        children.isNotEmpty
+            ? (children.length == 1
+                  ? children.first
+                  : Column(mainAxisSize: MainAxisSize.min, children: children))
+            : (content != null ? Text(content) : const SizedBox.shrink()),
+    };
+
+    final layoutStyles = {...rawStyles};
+    if (typeUpper == 'BUTTON' || typeUpper == 'CARD') {
+      layoutStyles.removeWhere(
+        (key, _) => key == 'padding' || key.startsWith('padding_'),
+      );
+    }
+    if ([
+      'BUTTON',
+      'INPUT',
+      'TEXTAREA',
+      'P',
+      'SPAN',
+      'TEXT',
+    ].contains(typeUpper)) {
+      layoutStyles.remove('height');
+    }
+    return _wrapStyles(context, child, props, layoutStyles, {
+      ...rawEvents,
+      if (typeUpper == 'BUTTON' || typeUpper == 'DIALOG-CLOSE') 'CLICK': null,
+    });
+  }
+
+  Widget _buildRowChild(
+    BuildContext context,
+    Map<String, Object?> node, {
+    required bool reserveIntrinsicWidth,
+    required bool hasTextSibling,
+  }) {
+    final child = _buildNode(context, node);
+    final key = child.key;
+    final type = node['type']?.toString().toUpperCase();
+    if (type == 'SPACER') {
+      return Expanded(key: key, child: child);
+    }
+    final styles = <String, Object?>{
+      for (final entry in ((node['styles'] as Map?) ?? {}).entries)
+        entry.key.toString().replaceAll('-', '_'): entry.value,
+    };
+    final grow = _toDouble(styles['flex_grow']) ?? 0;
+    if (grow > 0) {
+      return Expanded(
+        key: key,
+        flex: (grow * 1000).round().clamp(1, 1000000),
         child: child,
       );
     }
-    return child;
+    if (_toDouble(styles['flex_shrink']) == 0 ||
+        _toDouble(styles['width']) != null) {
+      return child;
+    }
+    final isInlineBadge =
+        type == 'BADGE' &&
+        (node['children'] as List?)?.isNotEmpty != true &&
+        styles['width'] == null &&
+        styles['flex_shrink'] == null;
+    final canMeasureContent =
+        isInlineBadge ||
+        switch (type) {
+          'TEXT' ||
+          'SPAN' ||
+          'P' ||
+          'BUTTON' ||
+          'IMAGE' ||
+          'IMG' ||
+          'SVG' => true,
+          _ => false,
+        };
+    if ((reserveIntrinsicWidth && canMeasureContent) ||
+        (hasTextSibling && isInlineBadge)) {
+      return IntrinsicWidth(key: key, child: child);
+    }
+    return Flexible(
+      key: key,
+      flex: reserveIntrinsicWidth ? 1000 : 1,
+      child: child,
+    );
   }
+
+  Widget _buildOverlay(
+    BuildContext context,
+    String type,
+    List<Map<String, Object?>> nodes,
+  ) {
+    final trigger = nodes
+        .where(
+          (n) => n['type'].toString().replaceAll('_', '-').endsWith('TRIGGER'),
+        )
+        .firstOrNull;
+    final content = nodes
+        .where(
+          (n) => n['type'].toString().replaceAll('_', '-').endsWith('CONTENT'),
+        )
+        .firstOrNull;
+    final label = trigger == null
+        ? Text(AppLocalizations.of(context)!.open)
+        : _buildNode(context, trigger);
+    if (type == 'DIALOG-ROOT') {
+      return TextButton(
+        onPressed: () => showDialog<void>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            content: SingleChildScrollView(
+              child: content == null
+                  ? const SizedBox.shrink()
+                  : _buildNode(dialogContext, content),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: Text(AppLocalizations.of(context)!.close),
+              ),
+            ],
+          ),
+        ),
+        child: IgnorePointer(child: label),
+      );
+    }
+    final items =
+        (content?['children'] as List?)?.whereType<Map>().toList() ?? [];
+    final menuKey = GlobalKey<PopupMenuButtonState<int>>();
+    final menu = PopupMenuButton<int>(
+      key: menuKey,
+      onSelected: (index) {
+        final events = items[index]['events'] as Map?;
+        final callback = events?['CLICK']?.toString();
+        if (callback != null && callback.isNotEmpty) {
+          onInvoke(callback, _uiEvent('CLICK'));
+        }
+      },
+      itemBuilder: (_) => [
+        for (var i = 0; i < items.length; i++)
+          if (items[i]['type'].toString().endsWith('SEPARATOR'))
+            const PopupMenuDivider()
+          else
+            PopupMenuItem(
+              value: i,
+              enabled:
+                  (items[i]['props'] as Map?)?['disabled'] != true &&
+                  (items[i]['props'] as Map?)?['disabled'] != 'true',
+              child: IgnorePointer(
+                child: _buildNode(context, items[i].cast<String, Object?>()),
+              ),
+            ),
+      ],
+      child: IgnorePointer(child: label),
+    );
+    return GestureDetector(
+      onSecondaryTap: type == 'CONTEXT-MENU-ROOT'
+          ? () => menuKey.currentState?.showButtonMenu()
+          : null,
+      onLongPress: type == 'CONTEXT-MENU-ROOT'
+          ? () => menuKey.currentState?.showButtonMenu()
+          : null,
+      child: menu,
+    );
+  }
+
+  Widget _wrapStyles(
+    BuildContext context,
+    Widget child,
+    Map<String, Object?> props,
+    Map<String, Object?> styles,
+    Map<String, Object?> events,
+  ) {
+    var result = child;
+
+    // 1. Padding 内部留白
+    final padding = _parseEdgeInsets(styles);
+    if (padding != EdgeInsets.zero) {
+      result = Padding(padding: padding, child: result);
+    }
+
+    // 2. Margin 外部间距
+    final mgAll = _toDouble(styles['margin']);
+    final mgTop = _toDouble(styles['margin_top']) ?? mgAll ?? 0;
+    final mgBottom = _toDouble(styles['margin_bottom']) ?? mgAll ?? 0;
+    final mgLeft = _toDouble(styles['margin_left']) ?? mgAll ?? 0;
+    final mgRight = _toDouble(styles['margin_right']) ?? mgAll ?? 0;
+    if (mgTop > 0 || mgBottom > 0 || mgLeft > 0 || mgRight > 0) {
+      result = Padding(
+        padding: EdgeInsets.only(
+          top: mgTop,
+          bottom: mgBottom,
+          left: mgLeft,
+          right: mgRight,
+        ),
+        child: result,
+      );
+    }
+
+    // 3. 尺寸约束 (Width, Height)
+    final wVal = styles['width'];
+    final hVal = styles['height'];
+    final width = wVal == '100%' ? double.infinity : _toDouble(wVal);
+    final height = hVal == '100%' ? null : _toDouble(hVal);
+    if (width != null || height != null) {
+      result = SizedBox(width: width, height: height, child: result);
+    }
+
+    final minWidth = (_toDouble(styles['min_width']) ?? 0).clamp(
+      0.0,
+      double.infinity,
+    );
+    final minHeight = (_toDouble(styles['min_height']) ?? 0).clamp(
+      0.0,
+      double.infinity,
+    );
+    final maxWidth = (_toDouble(styles['max_width']) ?? double.infinity).clamp(
+      minWidth,
+      double.infinity,
+    );
+    final maxHeight = (_toDouble(styles['max_height']) ?? double.infinity)
+        .clamp(minHeight, double.infinity);
+    if (minWidth > 0 ||
+        minHeight > 0 ||
+        maxWidth.isFinite ||
+        maxHeight.isFinite) {
+      result = ConstrainedBox(
+        constraints: BoxConstraints(
+          minWidth: minWidth,
+          minHeight: minHeight,
+          maxWidth: maxWidth,
+          maxHeight: maxHeight,
+        ),
+        child: result,
+      );
+    }
+
+    // 4. 点击交互事件（若元素自身未消费点击且绑定了 CLICK 事件）
+    final clickCallback = events['CLICK']?.toString();
+    if (clickCallback != null && clickCallback.isNotEmpty) {
+      result = InkWell(
+        onTap: () => onInvoke(clickCallback, _uiEvent('CLICK')),
+        child: result,
+      );
+    }
+
+    void emit(String event, [Object? payload]) {
+      final callback = events[event]?.toString();
+      if (callback != null && callback.isNotEmpty) {
+        onInvoke(callback, {'eventType': event, 'payload': payload ?? {}});
+      }
+    }
+
+    if (events.containsKey('KEY-DOWN') ||
+        events.containsKey('KEY-UP') ||
+        events.containsKey('FOCUS') ||
+        events.containsKey('BLUR')) {
+      result = Focus(
+        canRequestFocus: props['disabled'] != true,
+        onFocusChange: (focused) => emit(focused ? 'FOCUS' : 'BLUR'),
+        onKeyEvent: (_, event) {
+          final type = event is KeyUpEvent ? 'KEY-UP' : 'KEY-DOWN';
+          final key = event.logicalKey;
+          emit(type, {
+            'key':
+                key == LogicalKeyboardKey.enter ||
+                    key == LogicalKeyboardKey.numpadEnter
+                ? 'Enter'
+                : key.keyLabel,
+            'repeat': event is KeyRepeatEvent,
+            'altKey': HardwareKeyboard.instance.isAltPressed,
+            'ctrlKey': HardwareKeyboard.instance.isControlPressed,
+            'shiftKey': HardwareKeyboard.instance.isShiftPressed,
+            'metaKey': HardwareKeyboard.instance.isMetaPressed,
+          });
+          return KeyEventResult.ignored;
+        },
+        child: result,
+      );
+    }
+    if (events.containsKey('MOUSE-ENTER') ||
+        events.containsKey('MOUSE-LEAVE') ||
+        events.containsKey('HOVER')) {
+      result = MouseRegion(
+        onEnter: (_) => emit('MOUSE-ENTER'),
+        onExit: (_) => emit('MOUSE-LEAVE'),
+        onHover: (_) => emit('HOVER'),
+        child: result,
+      );
+    }
+    if (events.containsKey('POINTER-DOWN') ||
+        events.containsKey('POINTER-UP') ||
+        events.containsKey('POINTER-MOVE')) {
+      result = Listener(
+        onPointerDown: (event) => emit('POINTER-DOWN', {
+          'clientX': event.localPosition.dx,
+          'clientY': event.localPosition.dy,
+          'buttons': event.buttons,
+        }),
+        onPointerUp: (event) => emit('POINTER-UP', {
+          'clientX': event.localPosition.dx,
+          'clientY': event.localPosition.dy,
+          'buttons': event.buttons,
+        }),
+        onPointerMove: (event) => emit('POINTER-MOVE', {
+          'clientX': event.localPosition.dx,
+          'clientY': event.localPosition.dy,
+          'buttons': event.buttons,
+        }),
+        child: result,
+      );
+    }
+    if (events.containsKey('LONG-PRESS')) {
+      result = GestureDetector(
+        onLongPress: () => emit('LONG-PRESS'),
+        child: result,
+      );
+    }
+
+    // 5. 禁用
+    if (props['disabled'] == true || props['disabled'] == 'true') {
+      result = AbsorbPointer(child: result);
+    }
+
+    return result;
+  }
+}
+
+double? _toDouble(Object? val) {
+  if (val == null) return null;
+  if (val is num) return val.toDouble();
+  final s = val.toString().replaceAll('px', '').trim();
+  return double.tryParse(s);
 }
 
 double? _num(Map<String, Object?> props, String key) {
@@ -133,642 +808,35 @@ int? _int(Map<String, Object?> props, String key) {
   return null;
 }
 
-EdgeInsetsGeometry _parseEdgeInsets(Map<String, Object?> props) {
-  final p = double.tryParse(props['padding']?.toString() ?? '');
-  if (p != null && p > 0) return EdgeInsets.all(p);
-  return EdgeInsets.zero;
+bool _isHidden(Map<String, Object?> node) {
+  final visible = (node['props'] as Map?)?['visible'];
+  return visible == false ||
+      visible == 'false' ||
+      (node['styles'] as Map?)?['display'] == 'none';
 }
 
-class _Column extends StatelessWidget {
-  const _Column({required this.props, required this.children});
-  final Map<String, Object?> props;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final gap = _num(props, 'gap') ?? 0;
-    final cross = switch (props['align']?.toString()) {
-      'start' => CrossAxisAlignment.start,
-      'end' => CrossAxisAlignment.end,
-      'center' => CrossAxisAlignment.center,
-      _ => CrossAxisAlignment.center,
-    };
-    var separated = gap > 0
-        ? children
-              .expand((widget) => [widget, SizedBox(width: gap, height: gap)])
-              .toList()
-        : children.toList();
-    if (separated.isNotEmpty && gap > 0) separated.removeLast();
-    separated = separated
-        .map(
-          (widget) =>
-              widget is _PluginSpacer ? SizedBox(height: widget.size) : widget,
-        )
-        .toList(growable: false);
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: Column(
-        crossAxisAlignment: cross,
-        mainAxisSize: MainAxisSize.min,
-        children: separated,
-      ),
-    );
-  }
+EdgeInsets _parseEdgeInsets(Map<String, Object?> props) {
+  final all = _toDouble(props['padding']) ?? 0;
+  return EdgeInsets.only(
+    top: (_toDouble(props['padding_top']) ?? all).clamp(0, double.infinity),
+    bottom: (_toDouble(props['padding_bottom']) ?? all).clamp(
+      0,
+      double.infinity,
+    ),
+    left: (_toDouble(props['padding_left']) ?? all).clamp(0, double.infinity),
+    right: (_toDouble(props['padding_right']) ?? all).clamp(0, double.infinity),
+  );
 }
 
-class _Row extends StatelessWidget {
-  const _Row({required this.props, required this.children});
-  final Map<String, Object?> props;
-  final List<Widget> children;
+EdgeInsets? _controlPadding(Map<String, Object?> values) =>
+    values.keys.any((key) => key == 'padding' || key.startsWith('padding_'))
+    ? _parseEdgeInsets(values)
+    : null;
 
-  @override
-  Widget build(BuildContext context) {
-    final gap = _num(props, 'gap') ?? 0;
-    var separated = gap > 0
-        ? children
-              .expand((widget) => [widget, SizedBox(width: gap, height: gap)])
-              .toList()
-        : children.toList();
-    if (separated.isNotEmpty && gap > 0) separated.removeLast();
-    separated = separated
-        .map(
-          (widget) => widget is _PluginSpacer
-              ? Expanded(child: SizedBox(width: widget.size))
-              : widget,
-        )
-        .toList(growable: false);
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: separated,
-      ),
-    );
-  }
-}
-
-class _PluginSpacer extends StatelessWidget {
-  const _PluginSpacer();
-
-  double get size => 16;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(width: size, height: size);
-}
-
-class _LazyColumn extends StatelessWidget {
-  const _LazyColumn({required this.props, required this.children});
-  final Map<String, Object?> props;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final gap = _num(props, 'gap') ?? 0;
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: _parseEdgeInsets(props),
-      itemCount: children.length,
-      itemBuilder: (_, i) => children[i],
-      separatorBuilder: gap > 0
-          ? (_, _) => SizedBox(width: gap, height: gap)
-          : (_, _) => const SizedBox.shrink(),
-    );
-  }
-}
-
-class _Text extends StatelessWidget {
-  const _Text({required this.props});
-  final Map<String, Object?> props;
-
-  @override
-  Widget build(BuildContext context) {
-    final value = props['value']?.toString() ?? '';
-    final size = _num(props, 'size');
-    final color =
-        _parseColor(props['color']?.toString()) ??
-        _parseColor(props['text-color']?.toString());
-    final weight = switch (props['weight']?.toString()) {
-      'bold' => FontWeight.w700,
-      'medium' => FontWeight.w500,
-      _ => FontWeight.w400,
-    };
-    final align = switch (props['align']?.toString()) {
-      'center' => TextAlign.center,
-      'end' => TextAlign.end,
-      _ => TextAlign.start,
-    };
-    final maxLines = _int(props, 'maxLines');
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: Text(
-        value,
-        style: TextStyle(fontSize: size, color: color, fontWeight: weight),
-        textAlign: align,
-        maxLines: maxLines,
-        overflow: maxLines != null ? TextOverflow.ellipsis : null,
-      ),
-    );
-  }
-}
-
-class _Html extends StatelessWidget {
-  const _Html({required this.props});
-  final Map<String, Object?> props;
-
-  @override
-  Widget build(BuildContext context) {
-    final html = props['value']?.toString() ?? '';
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: CommunityHtmlContent(html: html),
-    );
-  }
-}
-
-class _Button extends StatelessWidget {
-  const _Button({required this.props, required this.onInvoke});
-  final Map<String, Object?> props;
-  final Future<void> Function(String, [Object?]) onInvoke;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = props['text']?.toString() ?? '';
-    final onClick = props['onClick']?.toString() ?? '';
-    final primary = props['primary'] == true;
-    final child = primary
-        ? FilledButton(
-            onPressed: onClick.isEmpty ? null : () => onInvoke(onClick),
-            child: Text(label),
-          )
-        : FilledButton.tonal(
-            onPressed: onClick.isEmpty ? null : () => onInvoke(onClick),
-            child: Text(label),
-          );
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: Center(child: child),
-    );
-  }
-}
-
-class _TextField extends StatefulWidget {
-  const _TextField({required this.props, required this.onInvoke});
-  final Map<String, Object?> props;
-  final Future<void> Function(String, [Object?]) onInvoke;
-
-  @override
-  State<_TextField> createState() => _TextFieldState();
-}
-
-class _TextFieldState extends State<_TextField> {
-  late final TextEditingController _ctrl;
-  late final FocusNode _focus;
-  late String _lastEmittedValue;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = TextEditingController(
-      text: widget.props['value']?.toString() ?? '',
-    );
-    _lastEmittedValue = _ctrl.text;
-    _focus = FocusNode()..addListener(_onBlur);
-  }
-
-  @override
-  void didUpdateWidget(covariant _TextField old) {
-    super.didUpdateWidget(old);
-    if (!_focus.hasFocus) {
-      final newValue = widget.props['value']?.toString() ?? '';
-      if (_ctrl.text != newValue) _ctrl.text = newValue;
-      _lastEmittedValue = newValue;
-    }
-  }
-
-  void _emitChange(String value) {
-    if (value == _lastEmittedValue) return;
-    _lastEmittedValue = value;
-    final cb = widget.props['onChange']?.toString() ?? '';
-    if (cb.isNotEmpty) widget.onInvoke(cb, value);
-  }
-
-  void _onBlur() {
-    if (!_focus.hasFocus) {
-      _emitChange(_ctrl.text);
-    }
-  }
-
-  @override
-  void dispose() {
-    _focus.removeListener(_onBlur);
-    _focus.dispose();
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final placeholder = widget.props['placeholder']?.toString();
-    final multiline = widget.props['multiline'] == true;
-    return Padding(
-      padding: _parseEdgeInsets(widget.props),
-      child: TextField(
-        controller: _ctrl,
-        focusNode: _focus,
-        onChanged: _emitChange,
-        maxLines: multiline ? null : 1,
-        decoration: placeholder != null
-            ? InputDecoration(
-                hintText: placeholder,
-                border: const OutlineInputBorder(),
-              )
-            : null,
-      ),
-    );
-  }
-}
-
-class _Switch extends StatelessWidget {
-  const _Switch({required this.props, required this.onInvoke});
-  final Map<String, Object?> props;
-  final Future<void> Function(String, [Object?]) onInvoke;
-
-  @override
-  Widget build(BuildContext context) {
-    final checked = props['checked'] == true;
-    final onChange = props['onChange']?.toString() ?? '';
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: Switch(
-        value: checked,
-        onChanged: onChange.isEmpty ? null : (v) => onInvoke(onChange, v),
-      ),
-    );
-  }
-}
-
-class _Checkbox extends StatelessWidget {
-  const _Checkbox({required this.props, required this.onInvoke});
-  final Map<String, Object?> props;
-  final Future<void> Function(String, [Object?]) onInvoke;
-
-  @override
-  Widget build(BuildContext context) {
-    final checked = props['checked'] == true;
-    final label = props['label']?.toString();
-    final onChange = props['onChange']?.toString() ?? '';
-    final cb = Checkbox(
-      value: checked,
-      onChanged: onChange.isEmpty ? null : (v) => onInvoke(onChange, v),
-    );
-    if (label == null) {
-      return Padding(padding: _parseEdgeInsets(props), child: cb);
-    }
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: MouseRegion(
-        cursor: onChange.isEmpty
-            ? SystemMouseCursors.basic
-            : SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onChange.isEmpty ? null : () => onInvoke(onChange, !checked),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [cb, Text(label)],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Slider extends StatelessWidget {
-  const _Slider({required this.props, required this.onInvoke});
-  final Map<String, Object?> props;
-  final Future<void> Function(String, [Object?]) onInvoke;
-
-  @override
-  Widget build(BuildContext context) {
-    final value = double.tryParse(props['value']?.toString() ?? '') ?? 0;
-    final min = double.tryParse(props['min']?.toString() ?? '') ?? 0;
-    final max = double.tryParse(props['max']?.toString() ?? '') ?? 1;
-    final onChange = props['onChange']?.toString() ?? '';
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: Slider(
-        value: value.clamp(min, max),
-        min: min,
-        max: max,
-        onChanged: onChange.isEmpty ? null : (v) => onInvoke(onChange, v),
-      ),
-    );
-  }
-}
-
-class _Dropdown extends StatelessWidget {
-  const _Dropdown({required this.props, required this.onInvoke});
-  final Map<String, Object?> props;
-  final Future<void> Function(String, [Object?]) onInvoke;
-
-  @override
-  Widget build(BuildContext context) {
-    final value = props['value']?.toString();
-    final options =
-        (props['options'] as List?)?.map((o) => o.toString()).toList() ??
-        const <String>[];
-    final onChange = props['onChange']?.toString() ?? '';
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: DropdownMenu<String>(
-        initialSelection: value != null && options.contains(value)
-            ? value
-            : null,
-        dropdownMenuEntries: options
-            .map((o) => DropdownMenuEntry(value: o, label: o))
-            .toList(),
-        onSelected: onChange.isEmpty ? null : (v) => onInvoke(onChange, v),
-      ),
-    );
-  }
-}
-
-class _Image extends StatelessWidget {
-  const _Image({required this.props});
-  final Map<String, Object?> props;
-
-  @override
-  Widget build(BuildContext context) {
-    final encoded = props['data']?.toString() ?? '';
-    final width = _num(props, 'width');
-    final height = _num(props, 'height');
-    final radius = _num(props, 'radius') ?? 0;
-    if (encoded.isEmpty) return const SizedBox.shrink();
-    Uint8List bytes;
-    try {
-      bytes = base64Decode(encoded);
-    } on FormatException {
-      return const SizedBox.shrink();
-    }
-    final fit = switch (props['fit']?.toString()) {
-      'contain' => BoxFit.contain,
-      'fill' => BoxFit.fill,
-      'fitWidth' => BoxFit.fitWidth,
-      'fitHeight' => BoxFit.fitHeight,
-      'none' => BoxFit.none,
-      'scaleDown' => BoxFit.scaleDown,
-      _ => BoxFit.cover,
-    };
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: Image.memory(
-          bytes,
-          width: width,
-          height: height ?? width ?? 64,
-          fit: fit,
-          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-        ),
-      ),
-    );
-  }
-}
-
-class _Card extends StatelessWidget {
-  const _Card({required this.props, required this.child});
-  final Map<String, Object?> props;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: Card(
-        elevation: 0,
-        color: Theme.of(context).colorScheme.surfaceContainerHighest
-            .withValues(alpha: .5),
-        child: Padding(padding: const EdgeInsets.all(16), child: child),
-      ),
-    );
-  }
-}
-
-class _Divider extends StatelessWidget {
-  const _Divider({required this.props});
-  final Map<String, Object?> props;
-
-  @override
-  Widget build(BuildContext context) {
-    final thickness = _num(props, 'thickness');
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: Divider(thickness: thickness),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.props, required this.child});
-  final Map<String, Object?> props;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final count = _int(props, 'count');
-    return Badge(
-      label: count != null ? Text(count > 99 ? '99+' : count.toString()) : null,
-      child: child,
-    );
-  }
-}
-
-class _CircularProgress extends StatelessWidget {
-  const _CircularProgress({required this.props});
-  final Map<String, Object?> props;
-
-  @override
-  Widget build(BuildContext context) {
-    final size = _num(props, 'size');
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: Center(
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: const CircularProgressIndicator(),
-        ),
-      ),
-    );
-  }
-}
-
-class _LinearProgress extends StatelessWidget {
-  const _LinearProgress({required this.props});
-  final Map<String, Object?> props;
-
-  @override
-  Widget build(BuildContext context) {
-    final value = double.tryParse(props['value']?.toString() ?? '') ?? 0;
-    final max = double.tryParse(props['max']?.toString() ?? '') ?? 1;
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: LinearProgressIndicator(value: max > 0 ? value / max : 0),
-    );
-  }
-}
-
-class _Modal extends StatelessWidget {
-  const _Modal({
-    required this.props,
-    required this.onInvoke,
-    required this.child,
-  });
-  final Map<String, Object?> props;
-  final Future<void> Function(String, [Object?]) onInvoke;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final title = props['title']?.toString();
-    final onDismiss = props['onDismiss']?.toString() ?? '';
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: Center(
-        child: OutlinedButton(
-          onPressed: () async {
-            await showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: title != null ? Text(title) : null,
-                content: child,
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      if (onDismiss.isNotEmpty) onInvoke(onDismiss);
-                    },
-                    child: Text(AppLocalizations.of(context)!.close),
-                  ),
-                ],
-              ),
-            );
-          },
-          child: Text(title ?? AppLocalizations.of(context)!.open),
-        ),
-      ),
-    );
-  }
-}
-
-class _Tooltip extends StatelessWidget {
-  const _Tooltip({required this.props, required this.child});
-  final Map<String, Object?> props;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = props['text']?.toString() ?? '';
-    return Padding(
-      padding: _parseEdgeInsets(props),
-      child: Tooltip(message: text, child: child),
-    );
-  }
-}
-
-class _Tabs extends StatefulWidget {
-  const _Tabs({
-    required this.props,
-    required this.onInvoke,
-    required this.children,
-  });
-  final Map<String, Object?> props;
-  final Future<void> Function(String, [Object?]) onInvoke;
-  final List<Widget> children;
-
-  @override
-  State<_Tabs> createState() => _TabsState();
-}
-
-class _TabsState extends State<_Tabs> with SingleTickerProviderStateMixin {
-  late TabController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    final tabs =
-        (widget.props['tabs'] as List?)
-            ?.whereType<Map>()
-            .map((t) => t.cast<String, Object?>())
-            .toList() ??
-        const [];
-    _controller = TabController(length: tabs.length, vsync: this);
-  }
-
-  @override
-  void didUpdateWidget(covariant _Tabs oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final oldLength = (oldWidget.props['tabs'] as List?)?.length ?? 0;
-    final newLength = (widget.props['tabs'] as List?)?.length ?? 0;
-    if (oldLength == newLength) return;
-    _controller.dispose();
-    _controller = TabController(length: newLength, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tabs =
-        (widget.props['tabs'] as List?)
-            ?.whereType<Map>()
-            .map((t) => t.cast<String, Object?>())
-            .toList() ??
-        const [];
-    final onChange = widget.props['onChange']?.toString() ?? '';
-    return TabBar(
-      controller: _controller,
-      isScrollable: widget.props['scrollable'] == true,
-      tabAlignment: widget.props['scrollable'] == true
-          ? TabAlignment.start
-          : TabAlignment.fill,
-      onTap: (i) {
-        final id = tabs[i]['id']?.toString() ?? '';
-        if (onChange.isNotEmpty) widget.onInvoke(onChange, id);
-      },
-      tabs: tabs.map((t) => Tab(text: t['label']?.toString() ?? '')).toList(),
-    );
-  }
-}
-
-class _TabContent extends StatelessWidget {
-  const _TabContent({required this.props, required this.child});
-  final Map<String, Object?> props;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final tabId = props['tabId']?.toString() ?? '';
-    final activeId = props['activeId']?.toString() ?? '';
-    return tabId == activeId ? child : const SizedBox.shrink();
-  }
-}
-
-Color? _parseColor(String? value) {
-  if (value == null || value.isEmpty) return null;
-  try {
-    var hex = value.replaceFirst('#', '');
-    // Expand 3-char shorthand: #abc → aabbcc
-    if (hex.length == 3) {
-      hex = hex.split('').map((c) => '$c$c').join();
-    }
-    return Color(int.parse('FF$hex', radix: 16));
-  } catch (_) {
-    return null;
-  }
-}
+Map<String, Object?> _uiEvent(String type, [Object? value]) => {
+  'eventType': type,
+  'payload': {
+    if (value != null) 'value': value,
+    if (value is bool) 'checked': value,
+  },
+};

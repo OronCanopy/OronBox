@@ -1,0 +1,10 @@
+{
+  "repository": "OrPudding/oronbox_wasm_modules",
+  "tag": "v0.1.0",
+  "archiveSha256": "7a9a6feafd4c98e49e393ecd6fc239307c90b203225b6abd59e16fc41d7b6a26",
+  "modules": {
+    "quickjs.wasm": "42437ba4dcf5550daca2c6d06bec482fd7f0d5216dfb6badb57bf09897a61a89",
+    "opus_frame_decoder.wasm": "68699d3c32f4e8739979460afe3fc4bd9deb3ecab33dece97e0bc6141eaea59e",
+    "webp_encoder.wasm": "c0aeaedfc441af9a9a251a90e66bb0c77661fa3b1872617371f3e75bec02de54"
+  }
+}

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-const _channel = MethodChannel('oronbox/status_surfaces');
+const _channel = MethodChannel('org.oroncanopy.oronbox/status_surfaces');
 
 Future<void> _invoke(String method, [Object? arguments]) async {
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;

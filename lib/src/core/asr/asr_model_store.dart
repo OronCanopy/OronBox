@@ -6,9 +6,9 @@ import 'package:dio/dio.dart';
 import 'package:oronbox/src/core/network/app_http_transport.dart';
 import 'package:oronbox/src/core/storage/app_data_directory.dart';
 
-
 import 'asr.dart';
 import 'asr_model_download.dart';
+import 'asr_runtime_version.dart';
 import 'local_asr.dart' show validateLocalAsr, modelUsedByCurrentProcess;
 
 class AsrModelFile {
@@ -140,7 +140,7 @@ class AsrModelStore {
                 'id': id,
                 'revision': revision,
                 'license': 'Apache-2.0',
-                'runtime': 'sherpa-onnx-1.13.8',
+                'runtime': 'sherpa-onnx-$asrRuntimeVersion',
                 'source': 'https://huggingface.co/csukuangfj/k2fsa-zipformer-bilingual-zh-en-t',
                 'files': [
                   for (final file in files)
@@ -181,6 +181,15 @@ class AsrModelStore {
         throw const AsrFailure('model_checksum');
       }
     }
+  }
+
+  static Future<void> deleteAll() async {
+    final root = await openAppDataDirectory('ai/models');
+    await root.exclusive(() async {
+      for (final file in await root.files(includeTemporary: true)) {
+        await root.remove(file.path);
+      }
+    });
   }
 
   static Future<void> cleanupUnused() async {

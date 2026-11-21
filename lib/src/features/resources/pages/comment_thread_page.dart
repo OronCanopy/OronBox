@@ -193,27 +193,33 @@ class CommentThreadPageState extends ConsumerState<CommentThreadPage> {
             Expanded(
               child: _replies.isEmpty
                   ? (_loading
-                      ? const Center(child: CircularProgressIndicator())
-                      : !_loading && thread != null && _error == null
-                      ? Center(child: Text(l10n.commentEmpty))
-                      : _error != null
-                      ? Center(
-                          child: TextButton(
-                            onPressed: _loading ? null : () => _load(),
-                            child: Text(l10n.retry),
-                          ),
-                        )
-                      : const SizedBox.shrink())
+                        ? const Center(child: CircularProgressIndicator())
+                        : !_loading && thread != null && _error == null
+                        ? EmptyStateView(
+                            icon: Icons.chat_bubble_outline,
+                            title: l10n.commentEmpty,
+                          )
+                        : _error != null
+                        ? Center(
+                            child: TextButton(
+                              onPressed: _loading ? null : () => _load(),
+                              child: Text(l10n.retry),
+                            ),
+                          )
+                        : const SizedBox.shrink())
                   : SingleChildScrollView(
                       padding: const EdgeInsets.all(12),
                       child: Column(
                         children: [
                           if (_previous.isNotEmpty)
                             TextButton(
-                              onPressed: _loading ? null : () => _load(earlier: true),
+                              onPressed: _loading
+                                  ? null
+                                  : () => _load(earlier: true),
                               child: Text(l10n.commentLoadEarlier),
                             ),
-                          for (final reply in _replies) tile(reply, reply: true),
+                          for (final reply in _replies)
+                            tile(reply, reply: true),
                           if (_loading)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 12),
@@ -221,7 +227,9 @@ class CommentThreadPageState extends ConsumerState<CommentThreadPage> {
                             ),
                           if (_next.isNotEmpty)
                             TextButton(
-                              onPressed: _loading ? null : () => _load(more: true),
+                              onPressed: _loading
+                                  ? null
+                                  : () => _load(more: true),
                               child: Text(l10n.loadMore),
                             ),
                           if (_error != null)
