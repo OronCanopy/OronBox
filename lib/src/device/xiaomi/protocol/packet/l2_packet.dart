@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart' as pb;
+import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart'
+    as pb;
 
 enum L2Channel {
   pb(1),
@@ -12,7 +13,8 @@ enum L2Channel {
   network(7),
   lyra(8),
   research(9),
-  multiModal(10);
+  multiModal(10),
+  canopus(0x43);
 
   const L2Channel(this.value);
   final int value;
@@ -29,6 +31,7 @@ enum L2Channel {
       8 => L2Channel.lyra,
       9 => L2Channel.research,
       10 => L2Channel.multiModal,
+      0x43 => L2Channel.canopus,
       _ => throw L2PacketException('Invalid L2 channel: $value'),
     };
   }

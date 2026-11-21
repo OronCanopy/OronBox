@@ -65,7 +65,10 @@ class XiaomiHealthSyncService {
       }
     }
 
-    final mapped = _mapFiles(files, previous: previous);
+    final mapped = _mapFiles(
+      files,
+      previous: HealthStore.getCached(_deviceId) ?? previous,
+    );
     final daily = mapped.daily;
     final samples = mapped.samples;
     final activitySamples = mapped.activitySamples;

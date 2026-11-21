@@ -11,6 +11,52 @@ sealed class DeviceEvent {
   final String deviceId;
 }
 
+/// A complete decrypted payload, after transport framing has been removed.
+class ProtocolPacketReceived extends DeviceEvent {
+  const ProtocolPacketReceived({
+    required super.deviceId,
+    required this.protocol,
+    required this.channel,
+    required this.payload,
+  });
+  final String protocol;
+  final int channel;
+  final Uint8List payload;
+}
+
+final class XiaomiProtocolPacketReceived extends ProtocolPacketReceived {
+  const XiaomiProtocolPacketReceived({
+    required super.deviceId,
+    required super.channel,
+    required super.payload,
+  }) : super(protocol: 'xiaomi');
+}
+
+final class CanopusConnectMessage extends DeviceEvent {
+  const CanopusConnectMessage({
+    required super.deviceId,
+    required this.module,
+    required this.payload,
+    required this.isText,
+  });
+  final String module;
+  final Uint8List payload;
+  final bool isText;
+}
+
+final class CanopusCommandResponse extends DeviceEvent {
+  const CanopusCommandResponse({
+    required super.deviceId,
+    required this.opcode,
+    required this.requestId,
+    required this.result,
+  });
+
+  final int opcode;
+  final int requestId;
+  final int result;
+}
+
 final class TransportConnected extends DeviceEvent {
   const TransportConnected({required super.deviceId});
 }

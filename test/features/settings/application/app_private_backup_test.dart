@@ -70,6 +70,8 @@ void main() {
           'addr': 'AA:BB:CC:DD:EE:FF',
           'connectType': 'BLE',
           'authkey': 'device-secret',
+          'appDeviceId': 'local-companion',
+          'bindingOob': 'local-binding-code',
           'disconnected': false,
         }),
       ],
@@ -109,6 +111,8 @@ void main() {
       (backup.privateData['devices'] as List).single as String,
     );
     expect(device['authkey'], 'device-secret');
+    expect(device['appDeviceId'], 'local-companion');
+    expect(device['bindingOob'], 'local-binding-code');
     expect(device['disconnected'], true);
     final raw = utf8.decode(readDataArchive(bytes)['private.json']!);
     expect(raw, isNot(contains('oronbox-secret')));
@@ -120,8 +124,13 @@ void main() {
       1,
     );
     await state.update({PrivateAppState.miToken: null});
+    await state.update({PrivateAppState.pairedDevices: <String>[]});
     await service.restore(backup);
     expect(state.readString(PrivateAppState.miToken), contains('old-secret'));
+    expect(
+      jsonDecode(state.readStringList(PrivateAppState.pairedDevices)!.single),
+      device,
+    );
     expect(await state.readBackupRecovery(), isNull);
   });
   test(

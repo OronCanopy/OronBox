@@ -35,7 +35,8 @@ class AppPrivateBackupStore {
     }
     if (includeAccounts) {
       await state.reload(key: PrivateAppState.miToken);
-      result['xiaomi'] = state.readString(PrivateAppState.miToken);
+      final mi = state.readString(PrivateAppState.miToken);
+      if (mi != null) result['xiaomi'] = mi;
       await state.reload(key: PrivateAppState.huamiToken);
       final huami = state.readString(PrivateAppState.huamiToken);
       if (huami != null) result['huami'] = huami;
@@ -117,6 +118,8 @@ void _validatePrivateBackup(Map<String, Object?> data) {
           'addr',
           'connectType',
           'authkey',
+          'appDeviceId',
+          'bindingOob',
           'codename',
           'disconnected',
           'deviceCapability',

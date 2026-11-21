@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -96,4 +97,62 @@ void main() {
       freshHeartRate.heartRate!.toDouble(),
     );
   });
+
+  test(
+    'sync preserves cache updates made while waiting for device files',
+    () async {
+      const deviceId = 'sync-cache-update';
+      final store = HealthStore();
+      await store.markStorageMigrationComplete();
+      final today = DateTime.now();
+      await store.write(
+        deviceId,
+        XiaomiHealthData(daily: [HealthDailySummary(date: today, steps: 10)]),
+      );
+      final system = _PendingHealthSystem();
+      addTearDown(system.dispose);
+      final pending = XiaomiHealthSyncService(
+        system: system,
+        deviceId: deviceId,
+        store: store,
+      ).sync();
+      await system.started.future;
+      await store.write(
+        deviceId,
+        XiaomiHealthData(daily: [HealthDailySummary(date: today, steps: 20)]),
+      );
+      system.result.complete(
+        XiaomiActivityFileSyncResult(
+          daily: [
+            XiaomiActivityDailyRecord(
+              date: today.subtract(const Duration(days: 1)),
+              steps: 55,
+            ),
+          ],
+          samples: const [],
+          sleep: const [],
+          workouts: const [],
+          filesReceived: 1,
+        ),
+      );
+
+      final saved = (await pending).data;
+      expect(saved.daily.map((day) => day.steps), [20, 55]);
+      expect(HealthStore.getCached(deviceId)!.daily.map((day) => day.steps), [
+        20,
+        55,
+      ]);
+    },
+  );
+}
+
+class _PendingHealthSystem extends XiaomiHealthSystem {
+  final started = Completer<void>();
+  final result = Completer<XiaomiActivityFileSyncResult>();
+
+  @override
+  Future<XiaomiActivityFileSyncResult> syncActivityFiles() {
+    started.complete();
+    return result.future;
+  }
 }

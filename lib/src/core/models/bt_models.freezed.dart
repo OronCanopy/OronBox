@@ -16,7 +16,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$BTDeviceInfo {
 
- String get name; String get addr; String get connectType;
+ String get name; String get addr; String get connectType; bool? get xiaomiRegistered;
 /// Create a copy of BTDeviceInfo
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -30,20 +30,20 @@ $BTDeviceInfoCopyWith<BTDeviceInfo> get copyWith => _$BTDeviceInfoCopyWithImpl<B
 @override
 bool operator ==(Object other) {
   final _this = this as BTDeviceInfo;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is BTDeviceInfo&&(identical(other.name, _this.name) || other.name == _this.name)&&(identical(other.addr, _this.addr) || other.addr == _this.addr)&&(identical(other.connectType, _this.connectType) || other.connectType == _this.connectType));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is BTDeviceInfo&&(identical(other.name, _this.name) || other.name == _this.name)&&(identical(other.addr, _this.addr) || other.addr == _this.addr)&&(identical(other.connectType, _this.connectType) || other.connectType == _this.connectType)&&(identical(other.xiaomiRegistered, _this.xiaomiRegistered) || other.xiaomiRegistered == _this.xiaomiRegistered));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as BTDeviceInfo;
-  return Object.hash(runtimeType,_this.name,_this.addr,_this.connectType);
+  return Object.hash(runtimeType,_this.name,_this.addr,_this.connectType,_this.xiaomiRegistered);
 }
 
 @override
 String toString() {
   final _this = this as BTDeviceInfo;
-  return 'BTDeviceInfo(name: ${_this.name}, addr: ${_this.addr}, connectType: ${_this.connectType})';
+  return 'BTDeviceInfo(name: ${_this.name}, addr: ${_this.addr}, connectType: ${_this.connectType}, xiaomiRegistered: ${_this.xiaomiRegistered})';
 }
 
 
@@ -54,7 +54,7 @@ abstract mixin class $BTDeviceInfoCopyWith<$Res>  {
   factory $BTDeviceInfoCopyWith(BTDeviceInfo value, $Res Function(BTDeviceInfo) _then) = _$BTDeviceInfoCopyWithImpl;
 @useResult
 $Res call({
- String name, String addr, String connectType
+ String name, String addr, String connectType, bool? xiaomiRegistered
 });
 
 
@@ -71,12 +71,13 @@ class _$BTDeviceInfoCopyWithImpl<$Res>
 
 /// Create a copy of BTDeviceInfo
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? name = null,Object? addr = null,Object? connectType = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? name = null,Object? addr = null,Object? connectType = null,Object? xiaomiRegistered = freezed,}) {
   return _then(BTDeviceInfo(
 name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,addr: null == addr ? _self.addr : addr // ignore: cast_nullable_to_non_nullable
 as String,connectType: null == connectType ? _self.connectType : connectType // ignore: cast_nullable_to_non_nullable
-as String,
+as String,xiaomiRegistered: freezed == xiaomiRegistered ? _self.xiaomiRegistered : xiaomiRegistered // ignore: cast_nullable_to_non_nullable
+as bool?,
   ));
 }
 
@@ -161,10 +162,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String name,  String addr,  String connectType)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String name,  String addr,  String connectType,  bool? xiaomiRegistered)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _BTDeviceInfo() when $default != null:
-return $default(_that.name,_that.addr,_that.connectType);case _:
+return $default(_that.name,_that.addr,_that.connectType,_that.xiaomiRegistered);case _:
   return orElse();
 
 }
@@ -182,10 +183,10 @@ return $default(_that.name,_that.addr,_that.connectType);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String name,  String addr,  String connectType)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String name,  String addr,  String connectType,  bool? xiaomiRegistered)  $default,) {final _that = this;
 switch (_that) {
 case _BTDeviceInfo():
-return $default(_that.name,_that.addr,_that.connectType);case _:
+return $default(_that.name,_that.addr,_that.connectType,_that.xiaomiRegistered);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -202,10 +203,10 @@ return $default(_that.name,_that.addr,_that.connectType);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String name,  String addr,  String connectType)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String name,  String addr,  String connectType,  bool? xiaomiRegistered)?  $default,) {final _that = this;
 switch (_that) {
 case _BTDeviceInfo() when $default != null:
-return $default(_that.name,_that.addr,_that.connectType);case _:
+return $default(_that.name,_that.addr,_that.connectType,_that.xiaomiRegistered);case _:
   return null;
 
 }
@@ -217,12 +218,13 @@ return $default(_that.name,_that.addr,_that.connectType);case _:
 @JsonSerializable()
 
 class _BTDeviceInfo implements BTDeviceInfo {
-  const _BTDeviceInfo({required this.name, required this.addr, required this.connectType});
+  const _BTDeviceInfo({required this.name, required this.addr, required this.connectType, this.xiaomiRegistered});
   factory _BTDeviceInfo.fromJson(Map<String, dynamic> json) => _$BTDeviceInfoFromJson(json);
 
 @override final  String name;
 @override final  String addr;
 @override final  String connectType;
+@override final  bool? xiaomiRegistered;
 
 /// Create a copy of BTDeviceInfo
 /// with the given fields replaced by the non-null parameter values.
@@ -237,18 +239,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _BTDeviceInfo&&(identical(other.name, name) || other.name == name)&&(identical(other.addr, addr) || other.addr == addr)&&(identical(other.connectType, connectType) || other.connectType == connectType));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _BTDeviceInfo&&(identical(other.name, name) || other.name == name)&&(identical(other.addr, addr) || other.addr == addr)&&(identical(other.connectType, connectType) || other.connectType == connectType)&&(identical(other.xiaomiRegistered, xiaomiRegistered) || other.xiaomiRegistered == xiaomiRegistered));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,name,addr,connectType);
+    return Object.hash(runtimeType,name,addr,connectType,xiaomiRegistered);
 }
 
 @override
 String toString() {
-    return 'BTDeviceInfo(name: $name, addr: $addr, connectType: $connectType)';
+    return 'BTDeviceInfo(name: $name, addr: $addr, connectType: $connectType, xiaomiRegistered: $xiaomiRegistered)';
 }
 
 
@@ -259,7 +261,7 @@ abstract mixin class _$BTDeviceInfoCopyWith<$Res> implements $BTDeviceInfoCopyWi
   factory _$BTDeviceInfoCopyWith(_BTDeviceInfo value, $Res Function(_BTDeviceInfo) _then) = __$BTDeviceInfoCopyWithImpl;
 @override @useResult
 $Res call({
- String name, String addr, String connectType
+ String name, String addr, String connectType, bool? xiaomiRegistered
 });
 
 
@@ -276,12 +278,13 @@ class __$BTDeviceInfoCopyWithImpl<$Res>
 
 /// Create a copy of BTDeviceInfo
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? name = null,Object? addr = null,Object? connectType = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? name = null,Object? addr = null,Object? connectType = null,Object? xiaomiRegistered = freezed,}) {
   return _then(_BTDeviceInfo(
 name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,addr: null == addr ? _self.addr : addr // ignore: cast_nullable_to_non_nullable
 as String,connectType: null == connectType ? _self.connectType : connectType // ignore: cast_nullable_to_non_nullable
-as String,
+as String,xiaomiRegistered: freezed == xiaomiRegistered ? _self.xiaomiRegistered : xiaomiRegistered // ignore: cast_nullable_to_non_nullable
+as bool?,
   ));
 }
 
@@ -292,7 +295,7 @@ as String,
 /// @nodoc
 mixin _$MiWearState {
 
- String get name; String get addr; String get connectType; String? get authkey; String? get codename; bool get disconnected; int get deviceCapability; int get deviceCapabilityV2;
+ String get name; String get addr; String get connectType; String? get authkey; String? get appDeviceId; String? get bindingOob; String? get codename; bool get disconnected; int get deviceCapability; int get deviceCapabilityV2;
 /// Create a copy of MiWearState
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -306,20 +309,20 @@ $MiWearStateCopyWith<MiWearState> get copyWith => _$MiWearStateCopyWithImpl<MiWe
 @override
 bool operator ==(Object other) {
   final _this = this as MiWearState;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is MiWearState&&(identical(other.name, _this.name) || other.name == _this.name)&&(identical(other.addr, _this.addr) || other.addr == _this.addr)&&(identical(other.connectType, _this.connectType) || other.connectType == _this.connectType)&&(identical(other.authkey, _this.authkey) || other.authkey == _this.authkey)&&(identical(other.codename, _this.codename) || other.codename == _this.codename)&&(identical(other.disconnected, _this.disconnected) || other.disconnected == _this.disconnected)&&(identical(other.deviceCapability, _this.deviceCapability) || other.deviceCapability == _this.deviceCapability)&&(identical(other.deviceCapabilityV2, _this.deviceCapabilityV2) || other.deviceCapabilityV2 == _this.deviceCapabilityV2));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is MiWearState&&(identical(other.name, _this.name) || other.name == _this.name)&&(identical(other.addr, _this.addr) || other.addr == _this.addr)&&(identical(other.connectType, _this.connectType) || other.connectType == _this.connectType)&&(identical(other.authkey, _this.authkey) || other.authkey == _this.authkey)&&(identical(other.appDeviceId, _this.appDeviceId) || other.appDeviceId == _this.appDeviceId)&&(identical(other.bindingOob, _this.bindingOob) || other.bindingOob == _this.bindingOob)&&(identical(other.codename, _this.codename) || other.codename == _this.codename)&&(identical(other.disconnected, _this.disconnected) || other.disconnected == _this.disconnected)&&(identical(other.deviceCapability, _this.deviceCapability) || other.deviceCapability == _this.deviceCapability)&&(identical(other.deviceCapabilityV2, _this.deviceCapabilityV2) || other.deviceCapabilityV2 == _this.deviceCapabilityV2));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as MiWearState;
-  return Object.hash(runtimeType,_this.name,_this.addr,_this.connectType,_this.authkey,_this.codename,_this.disconnected,_this.deviceCapability,_this.deviceCapabilityV2);
+  return Object.hash(runtimeType,_this.name,_this.addr,_this.connectType,_this.authkey,_this.appDeviceId,_this.bindingOob,_this.codename,_this.disconnected,_this.deviceCapability,_this.deviceCapabilityV2);
 }
 
 @override
 String toString() {
   final _this = this as MiWearState;
-  return 'MiWearState(name: ${_this.name}, addr: ${_this.addr}, connectType: ${_this.connectType}, authkey: ${_this.authkey}, codename: ${_this.codename}, disconnected: ${_this.disconnected}, deviceCapability: ${_this.deviceCapability}, deviceCapabilityV2: ${_this.deviceCapabilityV2})';
+  return 'MiWearState(name: ${_this.name}, addr: ${_this.addr}, connectType: ${_this.connectType}, authkey: ${_this.authkey}, appDeviceId: ${_this.appDeviceId}, bindingOob: ${_this.bindingOob}, codename: ${_this.codename}, disconnected: ${_this.disconnected}, deviceCapability: ${_this.deviceCapability}, deviceCapabilityV2: ${_this.deviceCapabilityV2})';
 }
 
 
@@ -330,7 +333,7 @@ abstract mixin class $MiWearStateCopyWith<$Res>  {
   factory $MiWearStateCopyWith(MiWearState value, $Res Function(MiWearState) _then) = _$MiWearStateCopyWithImpl;
 @useResult
 $Res call({
- String name, String addr, String connectType, String? authkey, String? codename, bool disconnected, int deviceCapability, int deviceCapabilityV2
+ String name, String addr, String connectType, String? authkey, String? appDeviceId, String? bindingOob, String? codename, bool disconnected, int deviceCapability, int deviceCapabilityV2
 });
 
 
@@ -347,12 +350,14 @@ class _$MiWearStateCopyWithImpl<$Res>
 
 /// Create a copy of MiWearState
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? name = null,Object? addr = null,Object? connectType = null,Object? authkey = freezed,Object? codename = freezed,Object? disconnected = null,Object? deviceCapability = null,Object? deviceCapabilityV2 = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? name = null,Object? addr = null,Object? connectType = null,Object? authkey = freezed,Object? appDeviceId = freezed,Object? bindingOob = freezed,Object? codename = freezed,Object? disconnected = null,Object? deviceCapability = null,Object? deviceCapabilityV2 = null,}) {
   return _then(MiWearState(
 name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,addr: null == addr ? _self.addr : addr // ignore: cast_nullable_to_non_nullable
 as String,connectType: null == connectType ? _self.connectType : connectType // ignore: cast_nullable_to_non_nullable
 as String,authkey: freezed == authkey ? _self.authkey : authkey // ignore: cast_nullable_to_non_nullable
+as String?,appDeviceId: freezed == appDeviceId ? _self.appDeviceId : appDeviceId // ignore: cast_nullable_to_non_nullable
+as String?,bindingOob: freezed == bindingOob ? _self.bindingOob : bindingOob // ignore: cast_nullable_to_non_nullable
 as String?,codename: freezed == codename ? _self.codename : codename // ignore: cast_nullable_to_non_nullable
 as String?,disconnected: null == disconnected ? _self.disconnected : disconnected // ignore: cast_nullable_to_non_nullable
 as bool,deviceCapability: null == deviceCapability ? _self.deviceCapability : deviceCapability // ignore: cast_nullable_to_non_nullable
@@ -442,10 +447,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String name,  String addr,  String connectType,  String? authkey,  String? codename,  bool disconnected,  int deviceCapability,  int deviceCapabilityV2)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String name,  String addr,  String connectType,  String? authkey,  String? appDeviceId,  String? bindingOob,  String? codename,  bool disconnected,  int deviceCapability,  int deviceCapabilityV2)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _MiWearState() when $default != null:
-return $default(_that.name,_that.addr,_that.connectType,_that.authkey,_that.codename,_that.disconnected,_that.deviceCapability,_that.deviceCapabilityV2);case _:
+return $default(_that.name,_that.addr,_that.connectType,_that.authkey,_that.appDeviceId,_that.bindingOob,_that.codename,_that.disconnected,_that.deviceCapability,_that.deviceCapabilityV2);case _:
   return orElse();
 
 }
@@ -463,10 +468,10 @@ return $default(_that.name,_that.addr,_that.connectType,_that.authkey,_that.code
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String name,  String addr,  String connectType,  String? authkey,  String? codename,  bool disconnected,  int deviceCapability,  int deviceCapabilityV2)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String name,  String addr,  String connectType,  String? authkey,  String? appDeviceId,  String? bindingOob,  String? codename,  bool disconnected,  int deviceCapability,  int deviceCapabilityV2)  $default,) {final _that = this;
 switch (_that) {
 case _MiWearState():
-return $default(_that.name,_that.addr,_that.connectType,_that.authkey,_that.codename,_that.disconnected,_that.deviceCapability,_that.deviceCapabilityV2);case _:
+return $default(_that.name,_that.addr,_that.connectType,_that.authkey,_that.appDeviceId,_that.bindingOob,_that.codename,_that.disconnected,_that.deviceCapability,_that.deviceCapabilityV2);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -483,10 +488,10 @@ return $default(_that.name,_that.addr,_that.connectType,_that.authkey,_that.code
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String name,  String addr,  String connectType,  String? authkey,  String? codename,  bool disconnected,  int deviceCapability,  int deviceCapabilityV2)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String name,  String addr,  String connectType,  String? authkey,  String? appDeviceId,  String? bindingOob,  String? codename,  bool disconnected,  int deviceCapability,  int deviceCapabilityV2)?  $default,) {final _that = this;
 switch (_that) {
 case _MiWearState() when $default != null:
-return $default(_that.name,_that.addr,_that.connectType,_that.authkey,_that.codename,_that.disconnected,_that.deviceCapability,_that.deviceCapabilityV2);case _:
+return $default(_that.name,_that.addr,_that.connectType,_that.authkey,_that.appDeviceId,_that.bindingOob,_that.codename,_that.disconnected,_that.deviceCapability,_that.deviceCapabilityV2);case _:
   return null;
 
 }
@@ -498,13 +503,15 @@ return $default(_that.name,_that.addr,_that.connectType,_that.authkey,_that.code
 @JsonSerializable()
 
 class _MiWearState implements MiWearState {
-  const _MiWearState({required this.name, required this.addr, required this.connectType, this.authkey, this.codename, this.disconnected = false, this.deviceCapability = 0, this.deviceCapabilityV2 = 0});
+  const _MiWearState({required this.name, required this.addr, required this.connectType, this.authkey, this.appDeviceId, this.bindingOob, this.codename, this.disconnected = false, this.deviceCapability = 0, this.deviceCapabilityV2 = 0});
   factory _MiWearState.fromJson(Map<String, dynamic> json) => _$MiWearStateFromJson(json);
 
 @override final  String name;
 @override final  String addr;
 @override final  String connectType;
 @override final  String? authkey;
+@override final  String? appDeviceId;
+@override final  String? bindingOob;
 @override final  String? codename;
 @override@JsonKey() final  bool disconnected;
 @override@JsonKey() final  int deviceCapability;
@@ -523,18 +530,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _MiWearState&&(identical(other.name, name) || other.name == name)&&(identical(other.addr, addr) || other.addr == addr)&&(identical(other.connectType, connectType) || other.connectType == connectType)&&(identical(other.authkey, authkey) || other.authkey == authkey)&&(identical(other.codename, codename) || other.codename == codename)&&(identical(other.disconnected, disconnected) || other.disconnected == disconnected)&&(identical(other.deviceCapability, deviceCapability) || other.deviceCapability == deviceCapability)&&(identical(other.deviceCapabilityV2, deviceCapabilityV2) || other.deviceCapabilityV2 == deviceCapabilityV2));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _MiWearState&&(identical(other.name, name) || other.name == name)&&(identical(other.addr, addr) || other.addr == addr)&&(identical(other.connectType, connectType) || other.connectType == connectType)&&(identical(other.authkey, authkey) || other.authkey == authkey)&&(identical(other.appDeviceId, appDeviceId) || other.appDeviceId == appDeviceId)&&(identical(other.bindingOob, bindingOob) || other.bindingOob == bindingOob)&&(identical(other.codename, codename) || other.codename == codename)&&(identical(other.disconnected, disconnected) || other.disconnected == disconnected)&&(identical(other.deviceCapability, deviceCapability) || other.deviceCapability == deviceCapability)&&(identical(other.deviceCapabilityV2, deviceCapabilityV2) || other.deviceCapabilityV2 == deviceCapabilityV2));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,name,addr,connectType,authkey,codename,disconnected,deviceCapability,deviceCapabilityV2);
+    return Object.hash(runtimeType,name,addr,connectType,authkey,appDeviceId,bindingOob,codename,disconnected,deviceCapability,deviceCapabilityV2);
 }
 
 @override
 String toString() {
-    return 'MiWearState(name: $name, addr: $addr, connectType: $connectType, authkey: $authkey, codename: $codename, disconnected: $disconnected, deviceCapability: $deviceCapability, deviceCapabilityV2: $deviceCapabilityV2)';
+    return 'MiWearState(name: $name, addr: $addr, connectType: $connectType, authkey: $authkey, appDeviceId: $appDeviceId, bindingOob: $bindingOob, codename: $codename, disconnected: $disconnected, deviceCapability: $deviceCapability, deviceCapabilityV2: $deviceCapabilityV2)';
 }
 
 
@@ -545,7 +552,7 @@ abstract mixin class _$MiWearStateCopyWith<$Res> implements $MiWearStateCopyWith
   factory _$MiWearStateCopyWith(_MiWearState value, $Res Function(_MiWearState) _then) = __$MiWearStateCopyWithImpl;
 @override @useResult
 $Res call({
- String name, String addr, String connectType, String? authkey, String? codename, bool disconnected, int deviceCapability, int deviceCapabilityV2
+ String name, String addr, String connectType, String? authkey, String? appDeviceId, String? bindingOob, String? codename, bool disconnected, int deviceCapability, int deviceCapabilityV2
 });
 
 
@@ -562,12 +569,14 @@ class __$MiWearStateCopyWithImpl<$Res>
 
 /// Create a copy of MiWearState
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? name = null,Object? addr = null,Object? connectType = null,Object? authkey = freezed,Object? codename = freezed,Object? disconnected = null,Object? deviceCapability = null,Object? deviceCapabilityV2 = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? name = null,Object? addr = null,Object? connectType = null,Object? authkey = freezed,Object? appDeviceId = freezed,Object? bindingOob = freezed,Object? codename = freezed,Object? disconnected = null,Object? deviceCapability = null,Object? deviceCapabilityV2 = null,}) {
   return _then(_MiWearState(
 name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,addr: null == addr ? _self.addr : addr // ignore: cast_nullable_to_non_nullable
 as String,connectType: null == connectType ? _self.connectType : connectType // ignore: cast_nullable_to_non_nullable
 as String,authkey: freezed == authkey ? _self.authkey : authkey // ignore: cast_nullable_to_non_nullable
+as String?,appDeviceId: freezed == appDeviceId ? _self.appDeviceId : appDeviceId // ignore: cast_nullable_to_non_nullable
+as String?,bindingOob: freezed == bindingOob ? _self.bindingOob : bindingOob // ignore: cast_nullable_to_non_nullable
 as String?,codename: freezed == codename ? _self.codename : codename // ignore: cast_nullable_to_non_nullable
 as String?,disconnected: null == disconnected ? _self.disconnected : disconnected // ignore: cast_nullable_to_non_nullable
 as bool,deviceCapability: null == deviceCapability ? _self.deviceCapability : deviceCapability // ignore: cast_nullable_to_non_nullable
@@ -1729,7 +1738,7 @@ as int,
 /// @nodoc
 mixin _$SystemInfo {
 
- String get serialNumber; String get firmwareVersion; String get imei; String get model; StorageInfo? get storageInfo;
+ String get serialNumber; String get firmwareVersion; String get imei; String get model; String? get productDevice; StorageInfo? get storageInfo;
 /// Create a copy of SystemInfo
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1743,20 +1752,20 @@ $SystemInfoCopyWith<SystemInfo> get copyWith => _$SystemInfoCopyWithImpl<SystemI
 @override
 bool operator ==(Object other) {
   final _this = this as SystemInfo;
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SystemInfo&&(identical(other.serialNumber, _this.serialNumber) || other.serialNumber == _this.serialNumber)&&(identical(other.firmwareVersion, _this.firmwareVersion) || other.firmwareVersion == _this.firmwareVersion)&&(identical(other.imei, _this.imei) || other.imei == _this.imei)&&(identical(other.model, _this.model) || other.model == _this.model)&&(identical(other.storageInfo, _this.storageInfo) || other.storageInfo == _this.storageInfo));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SystemInfo&&(identical(other.serialNumber, _this.serialNumber) || other.serialNumber == _this.serialNumber)&&(identical(other.firmwareVersion, _this.firmwareVersion) || other.firmwareVersion == _this.firmwareVersion)&&(identical(other.imei, _this.imei) || other.imei == _this.imei)&&(identical(other.model, _this.model) || other.model == _this.model)&&(identical(other.productDevice, _this.productDevice) || other.productDevice == _this.productDevice)&&(identical(other.storageInfo, _this.storageInfo) || other.storageInfo == _this.storageInfo));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
   final _this = this as SystemInfo;
-  return Object.hash(runtimeType,_this.serialNumber,_this.firmwareVersion,_this.imei,_this.model,_this.storageInfo);
+  return Object.hash(runtimeType,_this.serialNumber,_this.firmwareVersion,_this.imei,_this.model,_this.productDevice,_this.storageInfo);
 }
 
 @override
 String toString() {
   final _this = this as SystemInfo;
-  return 'SystemInfo(serialNumber: ${_this.serialNumber}, firmwareVersion: ${_this.firmwareVersion}, imei: ${_this.imei}, model: ${_this.model}, storageInfo: ${_this.storageInfo})';
+  return 'SystemInfo(serialNumber: ${_this.serialNumber}, firmwareVersion: ${_this.firmwareVersion}, imei: ${_this.imei}, model: ${_this.model}, productDevice: ${_this.productDevice}, storageInfo: ${_this.storageInfo})';
 }
 
 
@@ -1767,7 +1776,7 @@ abstract mixin class $SystemInfoCopyWith<$Res>  {
   factory $SystemInfoCopyWith(SystemInfo value, $Res Function(SystemInfo) _then) = _$SystemInfoCopyWithImpl;
 @useResult
 $Res call({
- String serialNumber, String firmwareVersion, String imei, String model, StorageInfo? storageInfo
+ String serialNumber, String firmwareVersion, String imei, String model, String? productDevice, StorageInfo? storageInfo
 });
 
 
@@ -1784,13 +1793,14 @@ class _$SystemInfoCopyWithImpl<$Res>
 
 /// Create a copy of SystemInfo
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? serialNumber = null,Object? firmwareVersion = null,Object? imei = null,Object? model = null,Object? storageInfo = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? serialNumber = null,Object? firmwareVersion = null,Object? imei = null,Object? model = null,Object? productDevice = freezed,Object? storageInfo = freezed,}) {
   return _then(SystemInfo(
 serialNumber: null == serialNumber ? _self.serialNumber : serialNumber // ignore: cast_nullable_to_non_nullable
 as String,firmwareVersion: null == firmwareVersion ? _self.firmwareVersion : firmwareVersion // ignore: cast_nullable_to_non_nullable
 as String,imei: null == imei ? _self.imei : imei // ignore: cast_nullable_to_non_nullable
 as String,model: null == model ? _self.model : model // ignore: cast_nullable_to_non_nullable
-as String,storageInfo: freezed == storageInfo ? _self.storageInfo : storageInfo // ignore: cast_nullable_to_non_nullable
+as String,productDevice: freezed == productDevice ? _self.productDevice : productDevice // ignore: cast_nullable_to_non_nullable
+as String?,storageInfo: freezed == storageInfo ? _self.storageInfo : storageInfo // ignore: cast_nullable_to_non_nullable
 as StorageInfo?,
   ));
 }
@@ -1888,10 +1898,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String serialNumber,  String firmwareVersion,  String imei,  String model,  StorageInfo? storageInfo)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String serialNumber,  String firmwareVersion,  String imei,  String model,  String? productDevice,  StorageInfo? storageInfo)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SystemInfo() when $default != null:
-return $default(_that.serialNumber,_that.firmwareVersion,_that.imei,_that.model,_that.storageInfo);case _:
+return $default(_that.serialNumber,_that.firmwareVersion,_that.imei,_that.model,_that.productDevice,_that.storageInfo);case _:
   return orElse();
 
 }
@@ -1909,10 +1919,10 @@ return $default(_that.serialNumber,_that.firmwareVersion,_that.imei,_that.model,
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String serialNumber,  String firmwareVersion,  String imei,  String model,  StorageInfo? storageInfo)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String serialNumber,  String firmwareVersion,  String imei,  String model,  String? productDevice,  StorageInfo? storageInfo)  $default,) {final _that = this;
 switch (_that) {
 case _SystemInfo():
-return $default(_that.serialNumber,_that.firmwareVersion,_that.imei,_that.model,_that.storageInfo);case _:
+return $default(_that.serialNumber,_that.firmwareVersion,_that.imei,_that.model,_that.productDevice,_that.storageInfo);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -1929,10 +1939,10 @@ return $default(_that.serialNumber,_that.firmwareVersion,_that.imei,_that.model,
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String serialNumber,  String firmwareVersion,  String imei,  String model,  StorageInfo? storageInfo)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String serialNumber,  String firmwareVersion,  String imei,  String model,  String? productDevice,  StorageInfo? storageInfo)?  $default,) {final _that = this;
 switch (_that) {
 case _SystemInfo() when $default != null:
-return $default(_that.serialNumber,_that.firmwareVersion,_that.imei,_that.model,_that.storageInfo);case _:
+return $default(_that.serialNumber,_that.firmwareVersion,_that.imei,_that.model,_that.productDevice,_that.storageInfo);case _:
   return null;
 
 }
@@ -1944,13 +1954,14 @@ return $default(_that.serialNumber,_that.firmwareVersion,_that.imei,_that.model,
 @JsonSerializable()
 
 class _SystemInfo implements SystemInfo {
-  const _SystemInfo({required this.serialNumber, required this.firmwareVersion, required this.imei, required this.model, this.storageInfo});
+  const _SystemInfo({required this.serialNumber, required this.firmwareVersion, required this.imei, required this.model, this.productDevice, this.storageInfo});
   factory _SystemInfo.fromJson(Map<String, dynamic> json) => _$SystemInfoFromJson(json);
 
 @override final  String serialNumber;
 @override final  String firmwareVersion;
 @override final  String imei;
 @override final  String model;
+@override final  String? productDevice;
 @override final  StorageInfo? storageInfo;
 
 /// Create a copy of SystemInfo
@@ -1966,18 +1977,18 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SystemInfo&&(identical(other.serialNumber, serialNumber) || other.serialNumber == serialNumber)&&(identical(other.firmwareVersion, firmwareVersion) || other.firmwareVersion == firmwareVersion)&&(identical(other.imei, imei) || other.imei == imei)&&(identical(other.model, model) || other.model == model)&&(identical(other.storageInfo, storageInfo) || other.storageInfo == storageInfo));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is _SystemInfo&&(identical(other.serialNumber, serialNumber) || other.serialNumber == serialNumber)&&(identical(other.firmwareVersion, firmwareVersion) || other.firmwareVersion == firmwareVersion)&&(identical(other.imei, imei) || other.imei == imei)&&(identical(other.model, model) || other.model == model)&&(identical(other.productDevice, productDevice) || other.productDevice == productDevice)&&(identical(other.storageInfo, storageInfo) || other.storageInfo == storageInfo));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
 int get hashCode {
-    return Object.hash(runtimeType,serialNumber,firmwareVersion,imei,model,storageInfo);
+    return Object.hash(runtimeType,serialNumber,firmwareVersion,imei,model,productDevice,storageInfo);
 }
 
 @override
 String toString() {
-    return 'SystemInfo(serialNumber: $serialNumber, firmwareVersion: $firmwareVersion, imei: $imei, model: $model, storageInfo: $storageInfo)';
+    return 'SystemInfo(serialNumber: $serialNumber, firmwareVersion: $firmwareVersion, imei: $imei, model: $model, productDevice: $productDevice, storageInfo: $storageInfo)';
 }
 
 
@@ -1988,7 +1999,7 @@ abstract mixin class _$SystemInfoCopyWith<$Res> implements $SystemInfoCopyWith<$
   factory _$SystemInfoCopyWith(_SystemInfo value, $Res Function(_SystemInfo) _then) = __$SystemInfoCopyWithImpl;
 @override @useResult
 $Res call({
- String serialNumber, String firmwareVersion, String imei, String model, StorageInfo? storageInfo
+ String serialNumber, String firmwareVersion, String imei, String model, String? productDevice, StorageInfo? storageInfo
 });
 
 
@@ -2005,13 +2016,14 @@ class __$SystemInfoCopyWithImpl<$Res>
 
 /// Create a copy of SystemInfo
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? serialNumber = null,Object? firmwareVersion = null,Object? imei = null,Object? model = null,Object? storageInfo = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? serialNumber = null,Object? firmwareVersion = null,Object? imei = null,Object? model = null,Object? productDevice = freezed,Object? storageInfo = freezed,}) {
   return _then(_SystemInfo(
 serialNumber: null == serialNumber ? _self.serialNumber : serialNumber // ignore: cast_nullable_to_non_nullable
 as String,firmwareVersion: null == firmwareVersion ? _self.firmwareVersion : firmwareVersion // ignore: cast_nullable_to_non_nullable
 as String,imei: null == imei ? _self.imei : imei // ignore: cast_nullable_to_non_nullable
 as String,model: null == model ? _self.model : model // ignore: cast_nullable_to_non_nullable
-as String,storageInfo: freezed == storageInfo ? _self.storageInfo : storageInfo // ignore: cast_nullable_to_non_nullable
+as String,productDevice: freezed == productDevice ? _self.productDevice : productDevice // ignore: cast_nullable_to_non_nullable
+as String?,storageInfo: freezed == storageInfo ? _self.storageInfo : storageInfo // ignore: cast_nullable_to_non_nullable
 as StorageInfo?,
   ));
 }

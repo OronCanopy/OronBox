@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:oronbox/src/app/widgets/app_scaffold_messenger.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:file_picker/file_picker.dart';
@@ -10,7 +11,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oronbox/src/app/generated/app_localizations.dart';
 import 'package:oronbox/src/app/widgets/sys_app_bar.dart';
 import 'package:oronbox/src/app/widgets/page_container.dart';
+import 'package:dio/dio.dart';
 import 'package:oronbox/src/core/constants/style_constants.dart';
+import 'package:oronbox/src/core/logging/logging_service.dart';
+import 'package:oronbox/src/core/network/app_http_transport.dart';
 import 'package:oronbox/src/features/devices/health/health_cards.dart';
 
 import 'package:oronbox/src/features/devices/controllers/device_manager.dart';
@@ -301,12 +305,12 @@ Future<void> _exportWorkout(
     );
     if (!context.mounted || saved == null) return;
     final path = saved.scheme == 'file' ? saved.toFilePath() : saved.toString();
-    ScaffoldMessenger.of(context).showSnackBar(
+    appScaffoldMessengerOf(context).showSnackBar(
       SnackBar(content: Text(l10n.deviceHealthWorkoutExported(path))),
     );
   } catch (error) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    appScaffoldMessengerOf(context).showSnackBar(
       SnackBar(
         content: Text(l10n.deviceHealthWorkoutExportFailed(error.toString())),
       ),
@@ -732,20 +736,102 @@ class WorkoutRouteCard extends StatefulWidget {
   State<WorkoutRouteCard> createState() => _WorkoutRouteCardState();
 }
 
+class _TileSource {
+  const _TileSource({
+    required this.name,
+    required this.urlTemplate,
+    required this.probeUrl,
+    this.maxNativeZoom = 19,
+  });
+
+  final String name;
+  final String urlTemplate;
+  final String probeUrl;
+  final int maxNativeZoom;
+}
+
 class _WorkoutRouteCardState extends State<WorkoutRouteCard> {
+  static final _log = getLogger('WorkoutMap');
+  static const _tileSources = <_TileSource>[
+    _TileSource(
+      name: 'osm',
+      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      probeUrl: 'https://tile.openstreetmap.org/0/0/0.png',
+      maxNativeZoom: 19,
+    ),
+    _TileSource(
+      name: 'carto',
+      urlTemplate:
+          'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+      probeUrl: 'https://basemaps.cartocdn.com/rastertiles/voyager/0/0/0.png',
+      maxNativeZoom: 19,
+    ),
+  ];
+
+  // Cache the reachable tile source for the current session so subsequent
+  // workout pages do not stall on an unreachable primary host.
+  static int _preferredTileSourceIndex = 0;
+  static bool _tileSourceProbed = false;
+
   late final MapController _mapController;
+  late final NetworkTileProvider _tileProvider;
   bool _showOsmMap = true;
+  int _tileSourceIndex = _preferredTileSourceIndex;
 
   @override
   void initState() {
     super.initState();
     _mapController = MapController();
+    _tileProvider = NetworkTileProvider(silenceExceptions: true);
+    if (!_tileSourceProbed) {
+      unawaited(_resolveReachableTileSource());
+    }
   }
 
   @override
   void dispose() {
+    unawaited(_tileProvider.dispose());
     _mapController.dispose();
     super.dispose();
+  }
+
+  Future<void> _resolveReachableTileSource() async {
+    _tileSourceProbed = true;
+    final dio = createAppHttpTransport(
+      options: BaseOptions(
+        connectTimeout: const Duration(seconds: 3),
+        receiveTimeout: const Duration(seconds: 3),
+      ),
+    );
+    try {
+      for (var i = 0; i < _tileSources.length; i++) {
+        final source = _tileSources[i];
+        try {
+          final response = await dio.get<void>(
+            source.probeUrl,
+            options: Options(
+              headers: const {'User-Agent': 'org.zxor.oronbox'},
+              responseType: ResponseType.bytes,
+            ),
+          );
+          if (response.statusCode == 200) {
+            _preferredTileSourceIndex = i;
+            if (i != _tileSourceIndex && mounted) {
+              _log.warning(
+                'Primary map tile source unreachable, switching to ${source.name}',
+              );
+              setState(() => _tileSourceIndex = i);
+            }
+            return;
+          }
+        } on Object {
+          // Try next fallback tile source.
+        }
+      }
+      _log.warning('All map tile sources are unreachable; tiles silenced');
+    } finally {
+      dio.close();
+    }
   }
 
   @override
@@ -855,9 +941,17 @@ class _WorkoutRouteCardState extends State<WorkoutRouteCard> {
                         ),
                         children: [
                           TileLayer(
-                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            key: ValueKey(_tileSourceIndex),
+                            urlTemplate:
+                                _tileSources[_tileSourceIndex].urlTemplate,
+                            fallbackUrl: _tileSourceIndex == 0
+                                ? _tileSources[1].urlTemplate
+                                : null,
                             userAgentPackageName: 'org.zxor.oronbox',
                             maxZoom: 19,
+                            maxNativeZoom:
+                                _tileSources[_tileSourceIndex].maxNativeZoom,
+                            tileProvider: _tileProvider,
                             tileBuilder: isDark
                                 ? (context, tileWidget, tile) => ColorFiltered(
                                     colorFilter: darkMapColorFilter,

@@ -77,6 +77,9 @@ Uint8List normalizeXiaomiActivityFile(Uint8List data) {
   );
 }
 
+bool isXiaomiWorkoutSummaryFlags(int flags) =>
+    ((flags >> 7) & 1) == 1 && (flags & 3) == 1;
+
 XiaomiParsedActivityFile parseXiaomiActivityFile(Uint8List data) {
   if (data.length < 11) {
     throw ProtocolException('Xiaomi activity file is too short to parse');
@@ -130,7 +133,7 @@ XiaomiParsedActivityFile parseXiaomiActivityFile(Uint8List data) {
       abnormalHealthRecords: dailyParser.parseAbnormalHealth(data, version),
     );
   }
-  if (type == 1 && detail == 1) {
+  if (isXiaomiWorkoutSummaryFlags(flags)) {
     final workout = workoutParser.parseWorkoutSummary(
       data,
       timestamp,

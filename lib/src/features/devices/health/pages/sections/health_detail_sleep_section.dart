@@ -13,7 +13,13 @@ extension _HealthDetailSleepSection on _XiaomiHealthDetailPageState {
         })
         .toList(growable: false);
     if (sleeps.isEmpty) {
-      return _DetailCard(child: Text(l10n.deviceHealthNoSleep));
+      return _DetailCard(
+        child: Text(
+          l10n.deviceHealthNoSleep,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+      );
     }
     final sortedSleeps = [...sleeps]
       ..sort((left, right) {
@@ -178,7 +184,12 @@ extension _HealthDetailSleepSection on _XiaomiHealthDetailPageState {
           ),
           const SizedBox(height: 14),
           if (values.isEmpty)
-            Text(l10n.deviceHealthSleepNoStages)
+            Text(
+              l10n.deviceHealthSleepNoStages,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            )
           else
             for (final (index, value) in values.indexed) ...[
               if (index > 0) const SizedBox(height: 12),

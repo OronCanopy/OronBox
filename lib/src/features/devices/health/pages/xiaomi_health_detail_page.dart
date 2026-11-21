@@ -437,7 +437,14 @@ class _XiaomiHealthDetailPageState extends State<XiaomiHealthDetailPage> {
               if (!hasTrend)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 48),
-                  child: Center(child: Text(l10n.deviceHealthNoSamples)),
+                  child: Center(
+                    child: Text(
+                      l10n.deviceHealthNoSamples,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
                 )
               else if (_period == HealthChartPeriod.day)
                 ActivityTimelineChart(
@@ -494,7 +501,13 @@ class _XiaomiHealthDetailPageState extends State<XiaomiHealthDetailPage> {
     final moderate = _sum(days.map((value) => value.vitalityIncreaseModerate));
     final high = _sum(days.map((value) => value.vitalityIncreaseHigh));
     if (day == null) {
-      return _DetailCard(child: Text(l10n.deviceHealthNoData));
+      return _DetailCard(
+        child: Text(
+          l10n.deviceHealthNoData,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+      );
     }
     // The device's embedded 7-day field is not reliable when a day is zero
     // (it is sometimes calculated over the last seven non-zero days). Build
@@ -681,7 +694,13 @@ class _XiaomiHealthDetailPageState extends State<XiaomiHealthDetailPage> {
         )
         .toList();
     if (workouts.isEmpty) {
-      return _DetailCard(child: Text(l10n.deviceHealthNoWorkouts));
+      return _DetailCard(
+        child: Text(
+          l10n.deviceHealthNoWorkouts,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+      );
     }
     workouts.sort((left, right) => right.startedAt.compareTo(left.startedAt));
     return Column(

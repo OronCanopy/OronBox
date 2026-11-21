@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:oronbox/src/app/widgets/app_state_view.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:segmented_list/segmented_list.dart';
@@ -34,6 +35,9 @@ class _XiaomiHealthPageState extends ConsumerState<XiaomiHealthPage> {
   bool _loading = true;
   bool _syncing = false;
   bool _autoSync = false;
+  Future<void>? _loadFuture;
+  int _loadGeneration = 0;
+  bool _reloadRequested = false;
   List<Widget Function()> _cardBuildersForRender = const [];
 
   @override
@@ -41,8 +45,18 @@ class _XiaomiHealthPageState extends ConsumerState<XiaomiHealthPage> {
     super.initState();
     _autoSync = XiaomiSyncPreferences.healthAutoSync;
     healthDataRevision.addListener(_onHealthDataPersisted);
+    ref.listenManual(
+      deviceManagerProvider.select((state) => state.currentDevice?.addr),
+      (previous, next) {
+        setState(() {
+          _data = null;
+          _cardBuildersForRender = const [];
+        });
+        unawaited(_load());
+      },
+    );
 
-    unawaited(_load(silent: false));
+    unawaited(_load());
   }
 
   @override
@@ -54,6 +68,7 @@ class _XiaomiHealthPageState extends ConsumerState<XiaomiHealthPage> {
 
   @override
   void dispose() {
+    _loadGeneration++;
     healthDataRevision.removeListener(_onHealthDataPersisted);
     super.dispose();
   }
@@ -66,49 +81,64 @@ class _XiaomiHealthPageState extends ConsumerState<XiaomiHealthPage> {
     unawaited(_load(silent: _data != null));
   }
 
-  Future<void> _load({bool silent = false}) async {
-    if (mounted && !silent) {
+  Future<void> _load({bool silent = false}) {
+    if (!mounted) return Future<void>.value();
+    _loadGeneration++;
+    _reloadRequested = true;
+    if (!silent) {
       setState(() {
         _loading = true;
         _error = null;
       });
     }
-    try {
+    return _loadFuture ??= _drainLoads().whenComplete(() => _loadFuture = null);
+  }
+
+  Future<void> _drainLoads() async {
+    while (mounted && _reloadRequested) {
+      _reloadRequested = false;
+      final generation = _loadGeneration;
       final deviceId = ref.read(deviceManagerProvider).currentDevice?.addr;
-      final data = deviceId == null
-          ? const XiaomiHealthData()
-          : await HealthStore().overview(deviceId);
-      unawaited(updateHealthStatusSurface(healthStatusSurfaceData(data)));
-      if (!mounted) return;
-      _showData(data);
-    } catch (error) {
-      if (!mounted) return;
-      if (!silent || _data == null) {
-        setState(() => _error = _healthErrorMessage(error));
+      try {
+        final data = deviceId == null
+            ? const XiaomiHealthData()
+            : await HealthStore().overview(deviceId);
+        if (!mounted || generation != _loadGeneration) continue;
+        _showData(data);
+        unawaited(updateHealthStatusSurface(healthStatusSurfaceData(data)));
+      } catch (error) {
+        if (!mounted || generation != _loadGeneration) continue;
+        if (_loading || _data == null) {
+          setState(() => _error = _healthErrorMessage(error));
+        }
+      } finally {
+        if (mounted && generation == _loadGeneration && _loading) {
+          setState(() => _loading = false);
+        }
       }
-    } finally {
-      if (mounted && !silent) setState(() => _loading = false);
     }
   }
 
   Future<void> _sync() async {
     if (_syncing) return;
+    final deviceId = ref.read(deviceManagerProvider).currentDevice?.addr;
     setState(() {
       _syncing = true;
       _error = null;
     });
     try {
-      final result = await XiaomiAutomaticSyncService(
-        ref.read(deviceManagerProvider.notifier),
-      ).runHealthSync();
-      unawaited(
-        updateHealthStatusSurface(healthStatusSurfaceData(result.data)),
-      );
-      if (!mounted) return;
-      final deviceId = ref.read(deviceManagerProvider).currentDevice?.addr;
-      if (deviceId != null) _showData(await HealthStore().overview(deviceId));
+      await XiaomiAutomaticSyncService(ref.read(deviceManagerProvider.notifier))
+          .runHealthSync();
+      if (!mounted ||
+          ref.read(deviceManagerProvider).currentDevice?.addr != deviceId) {
+        return;
+      }
+      await _load(silent: true);
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted ||
+          ref.read(deviceManagerProvider).currentDevice?.addr != deviceId) {
+        return;
+      }
       setState(() => _error = _healthErrorMessage(error));
     } finally {
       if (mounted) setState(() => _syncing = false);
@@ -142,8 +172,11 @@ class _XiaomiHealthPageState extends ConsumerState<XiaomiHealthPage> {
     final l10n = AppLocalizations.of(context)!;
     final data = _data;
     final cardBuilders = _cardBuildersForRender;
-    final ready =
-        ref.watch(deviceManagerProvider).protocolState == ProtocolState.ready;
+    final ready = ref.watch(
+      deviceManagerProvider.select(
+        (state) => state.protocolState == ProtocolState.ready,
+      ),
+    );
     return Scaffold(
       appBar: SysAppBar(
         secondary: true,
@@ -228,7 +261,11 @@ class _XiaomiHealthPageState extends ConsumerState<XiaomiHealthPage> {
                     CustomSegmentedSection(
                       child: SizedBox(
                         height: 220,
-                        child: Center(child: Text(l10n.deviceHealthNoData)),
+                        child: EmptyStateView(
+                          compact: true,
+                          icon: Icons.monitor_heart_outlined,
+                          title: l10n.deviceHealthNoData,
+                        ),
                       ),
                     )
                   else if (data != null)

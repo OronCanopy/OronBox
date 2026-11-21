@@ -76,7 +76,14 @@ class _HealthTrendSection extends StatelessWidget {
               else
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 48),
-                  child: Center(child: Text(l10n.deviceHealthNoSamples)),
+                  child: Center(
+                    child: Text(
+                      l10n.deviceHealthNoSamples,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
                 ),
             ],
           ),

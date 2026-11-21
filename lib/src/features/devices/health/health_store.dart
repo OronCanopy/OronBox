@@ -102,8 +102,6 @@ class SnapshotArchiveTooLarge implements Exception {
 
 /// Incremental persistence for health summaries and activity files.
 class HealthStore {
-  static final _persisted = <String, XiaomiHealthData>{};
-  static final _persistErrors = <String, Object>{};
   static bool _maintenance = false;
 
   static String? _maintenanceOwner;
@@ -163,14 +161,16 @@ class HealthStore {
 
   static final _memoryCache = <String, XiaomiHealthData>{};
   static final _decodedThrough = <String, DateTime>{};
+  static final _decoding = <String, Future<void>>{};
+  static final _latestWorkouts = <String, Future<HealthWorkoutSummary?>>{};
 
   static XiaomiHealthData? getCached(String deviceId) => _memoryCache[deviceId];
 
   static void clearCache() {
     _memoryCache.clear();
     _decodedThrough.clear();
-    _persisted.clear();
-    _persistErrors.clear();
+    _decoding.clear();
+    _latestWorkouts.clear();
   }
 
   final _prefs = SharedPrefsService.instance;
@@ -239,50 +239,52 @@ class HealthStore {
       );
     }
 
-    final cached = _memoryCache[deviceId] ?? _persisted[deviceId];
-    final coverage = _decodedThrough[deviceId];
-    if (cached != null && coverage != null && !start.isBefore(coverage)) {
-      return _filterCached(
-        cached,
-        start: start,
-        end: end,
-        kinds: kinds,
-        limit: limit,
-        offset: offset,
-      );
-    }
-
-    if (cached != null) {
-      final decoded = await _decodeRecentActivities(deviceId, since: start);
-      final normalized = await write(
-        deviceId,
-        _mergeHealthData(cached, decoded),
-      );
-      _decodedThrough[deviceId] = coverage == null || start.isBefore(coverage)
-          ? start
-          : coverage;
-      return _filterCached(
-        normalized,
-        start: start,
-        end: end,
-        kinds: kinds,
-        limit: limit,
-        offset: offset,
-      );
-    }
-
-    // Lazy backward streaming decoding of activity files from disk
-    final decoded = await _decodeRecentActivities(deviceId, since: start);
-    final normalized = await write(deviceId, decoded);
-    _decodedThrough[deviceId] = start;
+    await _ensureDecoded(deviceId, start);
     return _filterCached(
-      normalized,
+      _memoryCache[deviceId] ?? const XiaomiHealthData(),
       start: start,
       end: end,
       kinds: kinds,
       limit: limit,
       offset: offset,
     );
+  }
+
+  Future<void> _ensureDecoded(String deviceId, DateTime start) async {
+    while (true) {
+      final coverage = _decodedThrough[deviceId];
+      if (_memoryCache.containsKey(deviceId) &&
+          coverage != null &&
+          !start.isBefore(coverage)) {
+        return;
+      }
+      final pending = _decoding[deviceId];
+      if (pending != null) {
+        await pending;
+        continue;
+      }
+
+      late final Future<void> decoding;
+      decoding = () async {
+        final decoded = await _decodeRecentActivities(deviceId, since: start);
+        if (!identical(_decoding[deviceId], decoding)) return;
+        // A synchronization may have updated the cache while files were read.
+        final current = _memoryCache[deviceId];
+        _cacheData(
+          deviceId,
+          current == null ? decoded : _mergeHealthData(current, decoded),
+        );
+        _decodedThrough[deviceId] = start;
+      }();
+      _decoding[deviceId] = decoding;
+      try {
+        await decoding;
+      } finally {
+        if (identical(_decoding[deviceId], decoding)) {
+          _decoding.remove(deviceId);
+        }
+      }
+    }
   }
 
   XiaomiHealthData _filterCached(
@@ -339,15 +341,45 @@ class HealthStore {
 
   Future<XiaomiHealthData> overview(String deviceId) async {
     final now = DateTime.now();
-    final recent = await query(
-      deviceId,
-      start: DateTime(now.year, now.month, now.day - 7),
-      end: DateTime(now.year, now.month, now.day + 1),
-    );
+    final start = DateTime(now.year, now.month, now.day - 7);
+    final end = DateTime(now.year, now.month, now.day + 1);
+    final recent = await query(deviceId, start: start, end: end);
     if (recent.workouts.isNotEmpty) return recent;
-    final latest = await _decodeLatestWorkout(deviceId);
-    if (latest == null) return recent;
-    return write(deviceId, _mergeHealthData(recent, latest));
+    final pending = _latestWorkouts.putIfAbsent(
+      deviceId,
+      () => _decodeLatestWorkout(deviceId),
+    );
+    HealthWorkoutSummary? latest;
+    try {
+      latest = await pending;
+    } catch (_) {
+      if (identical(_latestWorkouts[deviceId], pending)) {
+        _latestWorkouts.remove(deviceId);
+      }
+      rethrow;
+    }
+    if (!identical(_latestWorkouts[deviceId], pending)) {
+      return overview(deviceId);
+    }
+    final cachedLatest = _memoryCache[deviceId]?.workouts.firstOrNull;
+    if (cachedLatest != null &&
+        (latest == null || cachedLatest.startedAt.isAfter(latest.startedAt))) {
+      latest = cachedLatest;
+    }
+    final current = _filterCached(
+      _memoryCache[deviceId] ?? recent,
+      start: start,
+      end: end,
+      offset: 0,
+    );
+    if (latest == null || current.workouts.isNotEmpty) return current;
+    return _mergeHealthData(
+      current,
+      XiaomiHealthData(
+        workouts: [latest],
+        capabilities: const XiaomiHealthCapabilities(workouts: true),
+      ),
+    );
   }
 
   Future<HealthWorkoutTotals> workoutTotals(
@@ -443,15 +475,20 @@ class HealthStore {
       start: DateTime(now.year, now.month, now.day - 30),
       end: DateTime(now.year, now.month, now.day + 1),
     );
-    _memoryCache[deviceId] = decoded;
-    return decoded;
+    return _memoryCache[deviceId] ?? decoded;
   }
 
   Future<XiaomiHealthData> write(
     String deviceId,
     XiaomiHealthData data, {
     bool flushImmediately = false,
-  }) async {
+  }) async => _cacheData(deviceId, data, notify: true);
+
+  XiaomiHealthData _cacheData(
+    String deviceId,
+    XiaomiHealthData data, {
+    bool notify = false,
+  }) {
     if (_maintenance || _externallyPaused) {
       throw StateError('Health data maintenance is active');
     }
@@ -555,8 +592,7 @@ class HealthStore {
       lastSyncedAt: data.lastSyncedAt,
     );
     _memoryCache[deviceId] = normalized;
-    _persisted[deviceId] = normalized;
-    healthDataRevision.value++;
+    if (notify) healthDataRevision.value++;
 
     return normalized;
   }
@@ -693,6 +729,9 @@ class HealthStore {
       );
       final next = [batch, ...previous.where((item) => item.id != batch.id)];
       await _commitActivityIndex(storage, next);
+      _decodedThrough.remove(deviceId);
+      _decoding.remove(deviceId);
+      _latestWorkouts.remove(deviceId);
     });
   }
 
@@ -706,13 +745,48 @@ class HealthStore {
     return _parseRawFilesToHealthData(rawFiles);
   }
 
-  Future<XiaomiHealthData?> _decodeLatestWorkout(String deviceId) async {
-    final rawFiles = await _readActivityFiles(deviceId);
-    for (final rawFile in rawFiles) {
-      final decoded = _parseRawFilesToHealthData([rawFile]);
-      if (decoded.workouts.isNotEmpty) return decoded;
+  Future<HealthWorkoutSummary?> _decodeLatestWorkout(String deviceId) async {
+    final storage = await _openActivityStorage();
+    return storage.exclusive(() async {
+      final files = await _indexedActivityFiles(storage, deviceId);
+      for (final file in files) {
+        if (file.id.length != 14 || int.tryParse(file.id, radix: 16) == null) {
+          continue;
+        }
+        final flags = int.parse(file.id.substring(12), radix: 16);
+        if (!isXiaomiWorkoutSummaryFlags(flags)) continue;
+        final bytes = await storage.read(file.path);
+        if (bytes == null || bytes.length != file.bytes) continue;
+        final decoded = _parseRawFilesToHealthData([
+          XiaomiActivityRawFile(id: file.id, data: bytes),
+        ]);
+        if (decoded.workouts.isNotEmpty) {
+          return decoded.workouts.reduce(
+            (left, right) =>
+                left.startedAt.isAfter(right.startedAt) ? left : right,
+          );
+        }
+      }
+      return null;
+    });
+  }
+
+  Future<List<HealthActivityFile>> _indexedActivityFiles(
+    AppDataDirectory storage,
+    String deviceId,
+  ) async {
+    final batches = await _loadActivityIndex(storage);
+    final uniqueFiles = <String, HealthActivityFile>{};
+    for (final batch in batches.where((b) => b.deviceId == deviceId)) {
+      for (final file in batch.files) {
+        uniqueFiles.putIfAbsent(file.id, () => file);
+      }
     }
-    return null;
+    return uniqueFiles.values.toList()..sort((a, b) {
+      final left = a.timestamp?.millisecondsSinceEpoch ?? 0;
+      final right = b.timestamp?.millisecondsSinceEpoch ?? 0;
+      return right.compareTo(left);
+    });
   }
 
   Future<List<XiaomiActivityRawFile>> _readActivityFiles(
@@ -721,19 +795,7 @@ class HealthStore {
   }) async {
     final storage = await _openActivityStorage();
     return storage.exclusive(() async {
-      final batches = await _loadActivityIndex(storage);
-      final uniqueFiles = <String, HealthActivityFile>{};
-      for (final batch in batches.where((b) => b.deviceId == deviceId)) {
-        for (final file in batch.files) {
-          uniqueFiles.putIfAbsent(file.id, () => file);
-        }
-      }
-      final sorted = uniqueFiles.values.toList()
-        ..sort((a, b) {
-          final left = a.timestamp?.millisecondsSinceEpoch ?? 0;
-          final right = b.timestamp?.millisecondsSinceEpoch ?? 0;
-          return right.compareTo(left);
-        });
+      final sorted = await _indexedActivityFiles(storage, deviceId);
       final safeBoundary = since?.subtract(const Duration(days: 1));
       final rawFiles = <XiaomiActivityRawFile>[];
       for (final entry in sorted) {
@@ -777,7 +839,11 @@ class HealthStore {
 
   static Future<void> clearActivityFiles() async {
     final storage = await _openActivityStorage();
-    await storage.exclusive(() => _commitActivityIndex(storage, const []));
+    await storage.exclusive(() async {
+      await _commitActivityIndex(storage, const []);
+      clearCache();
+      healthDataRevision.value++;
+    });
   }
 
   static Future<void> deleteActivityBatch(String id) async {
@@ -786,6 +852,8 @@ class HealthStore {
       final current = await _loadActivityIndex(storage);
       final next = current.where((item) => item.id != id).toList();
       await _commitActivityIndex(storage, next);
+      clearCache();
+      healthDataRevision.value++;
     });
   }
 

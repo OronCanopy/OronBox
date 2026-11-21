@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
-import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart' as pb;
+import 'package:oronbox/src/device/xiaomi/protocol/generated/wear.pb.dart'
+    as pb;
 import 'package:oronbox/src/device/xiaomi/protocol/generated/wear_account.pb.dart'
     as pb_account;
 import 'package:oronbox/src/device/xiaomi/protocol/crypto/miwear_crypto.dart';
@@ -22,9 +25,17 @@ class XiaomiAuthKeys {
   V2L2Cipher get cipher => V2L2Cipher(encKey: encKey, decKey: decKey);
 }
 
-pb.WearPacket buildAuthStep1(Uint8List appRandom) {
+pb.WearPacket buildAuthStep1(
+  Uint8List appRandom, {
+  String? appDeviceId,
+  String? oob,
+}) {
   final account = pb_account.Account(
-    authAppVerify: pb_account.Auth_AppVerify(appRandom: appRandom),
+    authAppVerify: pb_account.Auth_AppVerify(
+      appRandom: appRandom,
+      appDeviceId: appDeviceId,
+      checkDynamicCode: appDeviceId == null ? null : oob?.isNotEmpty == true,
+    ),
   );
   return pb.WearPacket(
     type: pb.WearPacket_Type.ACCOUNT,
@@ -37,6 +48,7 @@ pb.WearPacket buildAuthStep1(Uint8List appRandom) {
   required String authKeyHex,
   required Uint8List appRandom,
   required pb_account.Auth_DeviceVerify deviceVerify,
+  String? oob,
 }) {
   final watchRandom = Uint8List.fromList(deviceVerify.deviceRandom);
   final watchSign = Uint8List.fromList(deviceVerify.deviceSign);
@@ -56,7 +68,11 @@ pb.WearPacket buildAuthStep1(Uint8List appRandom) {
   final decNonce = Uint8List.sublistView(block64, 32, 36);
   final encNonce = Uint8List.sublistView(block64, 36, 40);
 
-  final expectedSign = hmacSha256(decKey, [watchRandom, appRandom]);
+  final expectedSign = hmacSha256(decKey, [
+    watchRandom,
+    appRandom,
+    if (oob != null && oob.isNotEmpty) Uint8List.fromList(utf8.encode(oob)),
+  ]);
   if (!_constantTimeEquals(watchSign, expectedSign)) {
     throw ArgumentError(
       'Auth HMAC mismatch. Check that the auth key is correct.',

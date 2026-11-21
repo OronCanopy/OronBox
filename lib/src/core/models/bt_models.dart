@@ -11,6 +11,7 @@ abstract class BTDeviceInfo with _$BTDeviceInfo {
     required String name,
     required String addr,
     required String connectType,
+    bool? xiaomiRegistered,
   }) = _BTDeviceInfo;
 
   factory BTDeviceInfo.fromJson(Map<String, dynamic> json) =>
@@ -24,6 +25,8 @@ abstract class MiWearState with _$MiWearState {
     required String addr,
     required String connectType,
     String? authkey,
+    String? appDeviceId,
+    String? bindingOob,
     String? codename,
     @Default(false) bool disconnected,
     @Default(0) int deviceCapability,
@@ -89,6 +92,7 @@ abstract class SystemInfo with _$SystemInfo {
     required String firmwareVersion,
     required String imei,
     required String model,
+    String? productDevice,
     StorageInfo? storageInfo,
   }) = _SystemInfo;
 

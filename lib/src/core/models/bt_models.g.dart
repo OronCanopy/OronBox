@@ -11,6 +11,7 @@ _BTDeviceInfo _$BTDeviceInfoFromJson(Map<String, dynamic> json) =>
       name: json['name'] as String,
       addr: json['addr'] as String,
       connectType: json['connectType'] as String,
+      xiaomiRegistered: json['xiaomiRegistered'] as bool?,
     );
 
 Map<String, dynamic> _$BTDeviceInfoToJson(_BTDeviceInfo instance) =>
@@ -18,6 +19,7 @@ Map<String, dynamic> _$BTDeviceInfoToJson(_BTDeviceInfo instance) =>
       'name': instance.name,
       'addr': instance.addr,
       'connectType': instance.connectType,
+      'xiaomiRegistered': instance.xiaomiRegistered,
     };
 
 _MiWearState _$MiWearStateFromJson(Map<String, dynamic> json) => _MiWearState(
@@ -25,6 +27,8 @@ _MiWearState _$MiWearStateFromJson(Map<String, dynamic> json) => _MiWearState(
   addr: json['addr'] as String,
   connectType: json['connectType'] as String,
   authkey: json['authkey'] as String?,
+  appDeviceId: json['appDeviceId'] as String?,
+  bindingOob: json['bindingOob'] as String?,
   codename: json['codename'] as String?,
   disconnected: json['disconnected'] as bool? ?? false,
   deviceCapability: (json['deviceCapability'] as num?)?.toInt() ?? 0,
@@ -37,6 +41,8 @@ Map<String, dynamic> _$MiWearStateToJson(_MiWearState instance) =>
       'addr': instance.addr,
       'connectType': instance.connectType,
       'authkey': instance.authkey,
+      'appDeviceId': instance.appDeviceId,
+      'bindingOob': instance.bindingOob,
       'codename': instance.codename,
       'disconnected': instance.disconnected,
       'deviceCapability': instance.deviceCapability,
@@ -117,6 +123,7 @@ _SystemInfo _$SystemInfoFromJson(Map<String, dynamic> json) => _SystemInfo(
   firmwareVersion: json['firmwareVersion'] as String,
   imei: json['imei'] as String,
   model: json['model'] as String,
+  productDevice: json['productDevice'] as String?,
   storageInfo: json['storageInfo'] == null
       ? null
       : StorageInfo.fromJson(json['storageInfo'] as Map<String, dynamic>),
@@ -128,6 +135,7 @@ Map<String, dynamic> _$SystemInfoToJson(_SystemInfo instance) =>
       'firmwareVersion': instance.firmwareVersion,
       'imei': instance.imei,
       'model': instance.model,
+      'productDevice': instance.productDevice,
       'storageInfo': instance.storageInfo,
     };
 
