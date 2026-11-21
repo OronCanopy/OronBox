@@ -11,6 +11,11 @@ const localServerCapabilities = <String>{
   'device.list',
   'device.current',
   'device.control',
+  'interconnect.send',
+  'canopusconnect.send',
+  'module.list',
+  'module.enable',
+  'module.remove',
   'app.list',
   'app.launch',
   'app.uninstall',
@@ -29,6 +34,10 @@ const localServerCapabilities = <String>{
 const localServerScopes = <String>{
   'device.read',
   'device.control',
+  'interconnect.send',
+  'canopusconnect.send',
+  'module.read',
+  'module.control',
   'app.read',
   'app.control',
   'watchface.read',
@@ -353,7 +362,7 @@ class LocalServerSession {
 class LocalServerInstallRequest {
   const LocalServerInstallRequest({
     required this.fileName,
-    required this.type,
+    this.type = 'auto',
     required this.sha256,
     required this.size,
     this.deviceId,
@@ -367,7 +376,7 @@ class LocalServerInstallRequest {
 
   factory LocalServerInstallRequest.fromJson(Map<String, Object?> json) {
     final fileName = json['fileName']?.toString().trim() ?? '';
-    final type = json['type']?.toString().trim() ?? '';
+    final type = json['type']?.toString().trim() ?? 'auto';
     final sha256 = json['sha256']?.toString().trim() ?? '';
     final size = json['size'];
     if (fileName.isEmpty || type.isEmpty || sha256.isEmpty || size is! num) {

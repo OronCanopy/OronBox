@@ -84,6 +84,14 @@ void main() {
       });
       expect(valid.fileName, 'app.rpk');
       expect(valid.size, 1024);
+      expect(
+        LocalServerInstallRequest.fromJson({
+          'fileName': 'resource.bin',
+          'sha256': 'a' * 64,
+          'size': 1024,
+        }).type,
+        'auto',
+      );
 
       expect(
         () => LocalServerInstallRequest.fromJson({

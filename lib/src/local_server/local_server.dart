@@ -1,13 +1,15 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../commands/command_protocol.dart';
+import '../core/storage/managed_temporary_files.dart';
+import '../device/xiaomi/systems/canopus_system.dart';
 import '../features/devices/services/device_log_archive.dart';
 import 'local_server_auth.dart';
 import 'local_server_mdns.dart';
@@ -27,15 +29,12 @@ class LocalServer {
     required this.commandBus,
     this.port = defaultLocalServerPort,
     this.maxUploadBytes = 256 * 1024 * 1024,
-    Future<Directory> Function()? temporaryDirectoryProvider,
     DateTime Function()? now,
     this.onChanged,
     Iterable<LocalAuthorizedClient> authorizedClients = const [],
     this.onAuthorizationChanged,
     this.onPairingRequested,
-  }) : _temporaryDirectoryProvider =
-           temporaryDirectoryProvider ?? getTemporaryDirectory,
-       _now = now ?? DateTime.now,
+  }) : _now = now ?? DateTime.now,
        authenticator = LocalServerAuthenticator(
          serverId: serverId,
          serverIdentity: identity,
@@ -55,16 +54,14 @@ class LocalServer {
   final void Function()? onAuthorizationChanged;
   final void Function(LocalServerPairingRequest pairing)? onPairingRequested;
   final LocalServerAuthenticator authenticator;
-  final Future<Directory> Function() _temporaryDirectoryProvider;
   final DateTime Function() _now;
 
   final _logOperations = <String, _LocalLogOperation>{};
-  final _activeSseClients = <HttpResponse>[];
+  final _activeSseClients = <HttpResponse, _LocalEventSubscription>{};
 
   StreamSubscription<CommandEvent>? _commandBusEventsSub;
   LocalServerMdnsAdvertiser? _mdns;
   HttpServer? _httpServer;
-  Directory? _stagingDirectory;
   Timer? _maintenanceTimer;
   Timer? _ssePingTimer;
   bool _mdnsAvailable = false;
@@ -92,12 +89,6 @@ class LocalServer {
 
   Future<LocalServerInfo> start() async {
     if (_httpServer != null) return info;
-    final staging = await _temporaryDirectoryProvider();
-    _stagingDirectory = Directory(
-      '${staging.path}${Platform.pathSeparator}oronbox-local-server',
-    );
-    await _stagingDirectory!.create(recursive: true);
-
     _httpServer = await HttpServer.bind(host, port, shared: true);
     _httpServer!.listen(_handleRequest, onError: (_) {});
 
@@ -114,7 +105,7 @@ class LocalServer {
 
     _maintenanceTimer = Timer.periodic(
       const Duration(minutes: 1),
-      (_) => _purgeExpiredState(),
+      (_) => unawaited(_purgeExpiredState()),
     );
 
     _ssePingTimer = Timer.periodic(
@@ -139,14 +130,14 @@ class LocalServer {
     await _commandBusEventsSub?.cancel();
     _commandBusEventsSub = null;
 
-    final clients = List<HttpResponse>.of(_activeSseClients);
-    _activeSseClients.clear();
-    for (final client in clients) {
-      try {
-        await client.close();
-      } catch (_) {}
+    for (final client in _activeSseClients.keys.toList()) {
+      _closeEventStream(client);
     }
+    final logs = _logOperations.values.toList();
     _logOperations.clear();
+    for (final operation in logs) {
+      await _releaseLogFiles(operation);
+    }
 
     await _mdns?.stop();
     _mdns = null;
@@ -186,54 +177,111 @@ class LocalServer {
     onChanged?.call();
   }
 
-  void _purgeExpiredState() {
+  Future<void> _purgeExpiredState() async {
     authenticator.clearExpired();
     final current = _now().toUtc();
-    _logOperations.removeWhere(
-      (_, op) =>
-          op.finishedAt != null &&
-          current.difference(op.finishedAt!) > const Duration(hours: 1),
-    );
+    final expired = _logOperations.values
+        .where(
+          (op) =>
+              op.finishedAt != null &&
+              current.difference(op.finishedAt!) > const Duration(hours: 1),
+        )
+        .toList();
+    for (final operation in expired) {
+      _logOperations.remove(operation.id);
+      await _releaseLogFiles(operation);
+    }
+  }
+
+  Future<void> _releaseLogFiles(_LocalLogOperation operation) async {
+    final files = [operation.archiveFile, operation.currentLogFile];
+    operation.archiveFile = null;
+    operation.currentLogFile = null;
+    for (final file in files.nonNulls) {
+      try {
+        await ManagedTemporaryFiles.release(file.path);
+      } on FileSystemException {
+        // Expired files can also be reclaimed by temporary storage cleanup.
+      }
+    }
   }
 
   void _broadcastSseEvent(CommandEvent event) {
     if (_activeSseClients.isEmpty) return;
     final message =
         'event: ${event.event}\ndata: ${jsonEncode(event.data)}\n\n';
-    final deadClients = <HttpResponse>[];
-    for (final client in List<HttpResponse>.of(_activeSseClients)) {
-      try {
-        client.write(message);
-        client.flush().catchError((_) {});
-      } catch (_) {
-        deadClients.add(client);
+    for (final entry in _activeSseClients.entries.toList()) {
+      final client = entry.key;
+      final subscription = entry.value;
+      final session = authenticator.verifySession(subscription.token);
+      if (session == null) {
+        _closeEventStream(client);
+        continue;
       }
-    }
-    for (final dead in deadClients) {
-      _activeSseClients.remove(dead);
-      try {
-        dead.close();
-      } catch (_) {}
+      final device = event.data['deviceId'];
+      if (device is String && !_allowsDevice(session, device)) continue;
+      if (subscription.matches(event)) _writeEventFrame(client, message);
     }
   }
 
   void _pingSseClients() {
-    if (_activeSseClients.isEmpty) return;
-    final deadClients = <HttpResponse>[];
-    for (final client in List<HttpResponse>.of(_activeSseClients)) {
-      try {
-        client.write(': ping\n\n');
-        client.flush().catchError((_) {});
-      } catch (_) {
-        deadClients.add(client);
+    for (final entry in _activeSseClients.entries.toList()) {
+      if (authenticator.verifySession(entry.value.token) == null) {
+        _closeEventStream(entry.key);
+      } else {
+        _writeEventFrame(entry.key, ': ping\n\n');
       }
     }
-    for (final dead in deadClients) {
-      _activeSseClients.remove(dead);
-      try {
-        dead.close();
-      } catch (_) {}
+  }
+
+  void _writeEventFrame(HttpResponse client, String frame) {
+    final subscription = _activeSseClients[client];
+    if (subscription == null) return;
+    if (subscription.frames.length >= 256 ||
+        (subscription.frames.isNotEmpty &&
+            subscription.pendingCharacters + frame.length > 4 * 1024 * 1024)) {
+      _closeEventStream(client);
+      return;
     }
+    subscription.frames.addLast(frame);
+    subscription.pendingCharacters += frame.length;
+    if (subscription.writing) return;
+    subscription.writing = true;
+    unawaited(_drainEventFrames(client, subscription));
+  }
+
+  Future<void> _drainEventFrames(
+    HttpResponse client,
+    _LocalEventSubscription subscription,
+  ) async {
+    try {
+      while (subscription.frames.isNotEmpty) {
+        final frame = subscription.frames.removeFirst();
+        subscription.pendingCharacters -= frame.length;
+        client.write(frame);
+        await client.flush();
+      }
+    } catch (_) {
+      _closeEventStream(client);
+    } finally {
+      subscription.writing = false;
+      if (!_activeSseClients.containsKey(client)) {
+        await _finishEventStream(client);
+      }
+    }
+  }
+
+  void _closeEventStream(HttpResponse client) {
+    final subscription = _activeSseClients.remove(client);
+    if (subscription == null) return;
+    subscription.frames.clear();
+    if (!subscription.writing) unawaited(_finishEventStream(client));
+  }
+
+  Future<void> _finishEventStream(HttpResponse client) async {
+    try {
+      await client.close();
+    } catch (_) {}
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
@@ -282,7 +330,17 @@ class LocalServer {
         if (!_hasScope(session, 'events.subscribe')) {
           return _sendError(request, 403, 'scope_required');
         }
-        return await _handleSseStream(request);
+        return await _handleSseStream(request, session);
+      }
+
+      final selectedDevice = request.uri.queryParameters['deviceId'];
+      if (!_allowsDevice(session, selectedDevice)) {
+        return _sendError(request, 403, 'device_not_authorized');
+      }
+      if (selectedDevice != null &&
+          selectedDevice.isNotEmpty &&
+          !_hasScope(session, 'device.control')) {
+        return _sendError(request, 403, 'scope_required');
       }
 
       // 4. Devices
@@ -296,19 +354,13 @@ class LocalServer {
         if (!_hasScope(session, 'device.read')) {
           return _sendError(request, 403, 'scope_required');
         }
-        return await _executeJson(
-          request,
-          const OronBoxCommand(method: 'device.info'),
-        );
+        return await _executeDeviceCommand(request, 'device.info');
       }
       if (method == 'GET' && path == '/v1/devices/current') {
         if (!_hasScope(session, 'device.read')) {
           return _sendError(request, 403, 'scope_required');
         }
-        return await _executeJson(
-          request,
-          const OronBoxCommand(method: 'device.status'),
-        );
+        return await _executeDeviceCommand(request, 'device.status');
       }
       if (method == 'POST' && path == '/v1/devices/connect') {
         if (!_hasScope(session, 'device.control')) {
@@ -322,7 +374,10 @@ class LocalServer {
         final result = await commandBus.execute(
           OronBoxCommand(
             method: 'device.connect',
-            params: {'device': deviceId},
+            params: {
+              'device': deviceId,
+              '_localApiDeviceAllowlist': session.deviceAllowlist,
+            },
           ),
         );
         if (!result.ok) return _sendCommandFailure(request, result);
@@ -337,14 +392,12 @@ class LocalServer {
         }
         final body = await _readJson(request, maxBytes: 64 * 1024);
         final deviceId = body['deviceId']?.toString().trim();
-        return await _executeJson(
+        return await _executeDeviceCommand(
           request,
-          OronBoxCommand(
-            method: 'device.disconnect',
-            params: {
-              if (deviceId != null && deviceId.isNotEmpty) 'device': deviceId,
-            },
-          ),
+          'device.disconnect',
+          params: {
+            if (deviceId != null && deviceId.isNotEmpty) 'device': deviceId,
+          },
         );
       }
 
@@ -354,7 +407,14 @@ class LocalServer {
           return _sendError(request, 403, 'scope_required');
         }
         final result = await commandBus.execute(
-          const OronBoxCommand(method: 'app.list'),
+          OronBoxCommand(
+            method: 'app.list',
+            params: {
+              if (request.uri.queryParameters['deviceId'] case final target?)
+                'device': target,
+              '_localApiDeviceAllowlist': session.deviceAllowlist,
+            },
+          ),
         );
         if (!result.ok) return _sendCommandFailure(request, result);
         return await _sendJson(request, 200, {'items': result.value});
@@ -398,7 +458,14 @@ class LocalServer {
           return _sendError(request, 403, 'scope_required');
         }
         final result = await commandBus.execute(
-          const OronBoxCommand(method: 'watchface.list'),
+          OronBoxCommand(
+            method: 'watchface.list',
+            params: {
+              if (request.uri.queryParameters['deviceId'] case final target?)
+                'device': target,
+              '_localApiDeviceAllowlist': session.deviceAllowlist,
+            },
+          ),
         );
         if (!result.ok) return _sendCommandFailure(request, result);
         return await _sendJson(request, 200, {'items': result.value});
@@ -427,6 +494,101 @@ class LocalServer {
           request,
           'watchface.remove',
           params: {'id': id},
+        );
+      }
+
+      if (method == 'GET' && path == '/v1/modules') {
+        if (!_hasScope(session, 'module.read')) {
+          return _sendError(request, 403, 'scope_required');
+        }
+        return await _executeDeviceCommand(request, 'device.module.list');
+      }
+
+      final moduleMatch = RegExp(r'^/v1/modules/([^/]+)(/enabled)?$')
+          .firstMatch(path);
+      if (moduleMatch != null) {
+        final moduleId = Uri.decodeComponent(moduleMatch.group(1)!);
+        final settingEnabled = moduleMatch.group(2) != null;
+        if (method != (settingEnabled ? 'PUT' : 'DELETE')) {
+          return _sendError(request, 405, 'method_not_allowed');
+        }
+        if (!_hasScope(session, 'module.control')) {
+          return _sendError(request, 403, 'scope_required');
+        }
+        final body = settingEnabled
+            ? await _readJson(request, maxBytes: 64 * 1024)
+            : const <String, Object?>{};
+        if (!XiaomiCanopusSystem.isValidModuleId(moduleId) ||
+            (settingEnabled && body['enabled'] is! bool)) {
+          return _sendError(request, 400, 'invalid_module_operation');
+        }
+        return await _executeDeviceCommand(
+          request,
+          settingEnabled ? 'device.module.enable' : 'device.module.remove',
+          params: {
+            'moduleId': moduleId,
+            if (settingEnabled) 'enabled': body['enabled'],
+          },
+        );
+      }
+
+      if (method == 'POST' && path == '/v1/canopus-connect/send') {
+        if (!_hasScope(session, 'canopusconnect.send')) {
+          return _sendError(request, 403, 'scope_required');
+        }
+        final body = await _readJson(request, maxBytes: 64 * 1024);
+        final moduleId = body['moduleId'];
+        final payload = body['payload'];
+        final isText = body['isText'];
+        if (moduleId is! String ||
+            !XiaomiCanopusSystem.isValidModuleId(moduleId) ||
+            (isText != null && isText is! bool) ||
+            payload is! List ||
+            payload.length > XiaomiCanopusSystem.maxConnectPayloadBytes ||
+            payload.any((byte) => byte is! int || byte < 0 || byte > 255)) {
+          return _sendError(request, 400, 'invalid_canopus_message');
+        }
+        if (isText == true) {
+          try {
+            utf8.decode(payload.cast<int>());
+          } on FormatException {
+            return _sendError(request, 400, 'invalid_canopus_message');
+          }
+        }
+        return await _executeDeviceCommand(
+          request,
+          'device.canopus.send',
+          params: {
+            'moduleId': moduleId,
+            'payload': payload,
+            if (isText != null) 'isText': isText,
+            if (body['deviceId'] case final target?) 'device': target,
+          },
+        );
+      }
+
+      if (method == 'POST' && path == '/v1/interconnect/send') {
+        if (!_hasScope(session, 'interconnect.send')) {
+          return _sendError(request, 403, 'scope_required');
+        }
+        final body = await _readJson(request, maxBytes: 1024 * 1024);
+        final packageName = body['packageName'];
+        final payload = body['payload'];
+        if (packageName is! String ||
+            packageName.trim().isEmpty ||
+            packageName.contains(RegExp(r'\s')) ||
+            payload is! List ||
+            payload.any((byte) => byte is! int || byte < 0 || byte > 255)) {
+          return _sendError(request, 400, 'invalid_interconnect_message');
+        }
+        return await _executeDeviceCommand(
+          request,
+          'device.interconnect.send',
+          params: {
+            'package': packageName,
+            'payload': payload,
+            if (body['deviceId'] case final target?) 'device': target,
+          },
         );
       }
 
@@ -493,13 +655,18 @@ class LocalServer {
           if (method != 'POST') {
             return _sendError(request, 405, 'method_not_allowed');
           }
-          await commandBus.execute(
-            const OronBoxCommand(method: 'device.logs.cancel'),
-          );
-          operation.state = LocalServerOperationState.cancelled;
-          operation.stage = 'cancelled';
-          operation.finishedAt = _now().toUtc();
-          operation.message = 'cancelled';
+          if (operation.finishedAt == null) {
+            operation.state = LocalServerOperationState.cancelled;
+            operation.stage = 'cancelled';
+            operation.finishedAt = _now().toUtc();
+            operation.message = 'cancelled';
+            await commandBus.execute(
+              OronBoxCommand(
+                method: 'device.logs.cancel',
+                params: {'operationId': operation.id},
+              ),
+            );
+          }
           return await _sendJson(request, 200, operation.toJson());
         }
         if (suffix == null) {
@@ -601,7 +768,25 @@ class LocalServer {
 
   // --- SSE Handler ---
 
-  Future<void> _handleSseStream(HttpRequest request) async {
+  Future<void> _handleSseStream(
+    HttpRequest request,
+    LocalServerSession session,
+  ) async {
+    final query = request.uri.queryParametersAll;
+    final events = query['event']?.toSet() ?? <String>{};
+    final fields = <String, Set<String>>{
+      for (final entry in query.entries)
+        if (entry.key.startsWith('filter.'))
+          entry.key.substring(7): entry.value.toSet(),
+    };
+    if (events.contains('') || fields.containsKey('')) {
+      return _sendError(request, 400, 'invalid_event_filter');
+    }
+    final subscription = _LocalEventSubscription(
+      token: session.token,
+      events: events,
+      fields: fields,
+    );
     final response = request.response;
     response.statusCode = HttpStatus.ok;
     response.bufferOutput = false;
@@ -614,25 +799,20 @@ class LocalServer {
     response.headers.set('connection', 'keep-alive');
     response.headers.set('x-accel-buffering', 'no');
 
-    _activeSseClients.add(response);
+    _activeSseClients[response] = subscription;
 
     final readyPayload = jsonEncode({
       'serverId': serverId,
       'protocolVersion': localServerProtocolVersion,
       'connectedAt': _now().toUtc().toIso8601String(),
     });
-    response.write('event: ready\ndata: $readyPayload\n\n');
-    await response.flush();
-
     unawaited(
-      request.response.done
-          .then((_) {
-            _activeSseClients.remove(response);
-          })
-          .catchError((_) {
-            _activeSseClients.remove(response);
-          }),
+      response.done.then<void>(
+        (_) => _closeEventStream(response),
+        onError: (Object _) => _closeEventStream(response),
+      ),
     );
+    _writeEventFrame(response, 'event: ready\ndata: $readyPayload\n\n');
   }
 
   // --- Devices & Execution ---
@@ -662,6 +842,7 @@ class LocalServer {
       if (item is! Map) continue;
       final m = item.cast<String, Object?>();
       final addr = (m['address'] ?? '').toString();
+      if (!_allowsDevice(_sessionFor(request)!, addr)) continue;
       final isCurrent =
           currentAddr != null && currentAddr == addr.toLowerCase();
       devices.add({
@@ -680,40 +861,80 @@ class LocalServer {
   }
 
   Future<void> _handleInstallUpload(HttpRequest request) async {
-    final fileName =
-        request.headers.value('x-oronbox-file-name') ?? 'resource.rpk';
-    final type = request.headers.value('x-oronbox-type') ?? 'app';
+    final fileName = Uri.decodeComponent(
+      request.headers.value('x-oronbox-file-name') ?? 'resource.bin',
+    );
+    final type = request.headers.value('x-oronbox-type') ?? 'auto';
+    if (!const {
+      'auto',
+      'app',
+      'quickapp',
+      'miniprogram',
+      'watchface',
+      'firmware',
+      'canopus',
+      'module',
+      'res_pack',
+      'resPack',
+    }.contains(type)) {
+      return _sendError(request, 400, 'invalid_install_type');
+    }
     final sha256Header = request.headers.value('x-oronbox-sha256') ?? '';
     final sizeHeader = request.headers.value('x-oronbox-size');
     final declaredSize =
         int.tryParse(sizeHeader ?? '') ?? request.headers.contentLength;
-    final deviceId = request.headers.value('x-oronbox-device-id');
-
+    if (sizeHeader != null &&
+        (int.tryParse(sizeHeader) == null || int.parse(sizeHeader) < 0)) {
+      return _sendError(request, 400, 'invalid_upload_size');
+    }
+    final requestedDevice = request.headers
+        .value('x-oronbox-device-id')
+        ?.trim();
+    final session = _sessionFor(request)!;
+    if (requestedDevice?.isNotEmpty == true &&
+        !_hasScope(session, 'device.control')) {
+      return _sendError(request, 403, 'scope_required');
+    }
     if (declaredSize > maxUploadBytes) {
       return _sendError(request, 413, 'upload_too_large');
     }
 
+    final deviceId = requestedDevice?.isNotEmpty == true
+        ? requestedDevice
+        : await _currentDeviceId();
+    if (deviceId == null) return _sendError(request, 409, 'no_device');
+    if (!_allowsDevice(session, deviceId)) {
+      return _sendError(request, 403, 'device_not_authorized');
+    }
     final safeName = _safeFileName(fileName);
-    final file = File(
-      '${_stagingDirectory!.path}${Platform.pathSeparator}${_newToken()}-$safeName',
-    );
     final digestSink = _DigestSink();
     final digestInput = sha256.startChunkedConversion(digestSink);
-    final output = file.openWrite();
-    var received = 0;
-
+    String? ownedPath;
     try {
-      await for (final chunk in request) {
-        received += chunk.length;
-        if (received > maxUploadBytes) {
-          throw const _UploadFailure(413, 'upload_size_exceeded');
-        }
-        digestInput.add(chunk);
-        output.add(chunk);
-      }
-      digestInput.close();
-      await output.close();
-
+      final path = ownedPath = await ManagedTemporaryFiles.create(
+        TemporaryFilePurpose.installs,
+        safeName,
+        (path) async {
+          final output = await File(path).open(mode: FileMode.write);
+          var received = 0;
+          try {
+            await for (final chunk in request) {
+              received += chunk.length;
+              if (received > maxUploadBytes) {
+                throw const _UploadFailure(413, 'upload_size_exceeded');
+              }
+              digestInput.add(chunk);
+              await output.writeFrom(chunk);
+            }
+          } finally {
+            await output.close();
+          }
+          digestInput.close();
+          if (declaredSize >= 0 && received != declaredSize) {
+            throw const _UploadFailure(400, 'size_mismatch');
+          }
+        },
+      );
       final actualSha256 = digestSink.value.toString().toLowerCase();
       if (sha256Header.isNotEmpty &&
           actualSha256 != sha256Header.toLowerCase().trim()) {
@@ -727,47 +948,61 @@ class LocalServer {
             'command': {
               'method': 'install.local',
               'params': {
-                'path': file.path,
+                'path': path,
                 'fileName': safeName,
                 'type': type,
                 'deleteAfter': true,
-                if (deviceId != null && deviceId.isNotEmpty) 'device': deviceId,
+                '_localApiDeviceAllowlist': session.deviceAllowlist,
+                'device': deviceId,
                 'title': 'Local install $safeName',
               },
             },
           },
         ),
       );
-
-      if (!queued.ok) {
-        await file.delete();
-        return _sendCommandFailure(request, queued);
-      }
+      if (!queued.ok) return _sendCommandFailure(request, queued);
+      ownedPath = null;
 
       final taskId = (queued.value as Map)['taskId'];
       return await _sendJson(request, 202, {
         'taskId': taskId,
-        'deviceId': deviceId ?? '',
+        'deviceId': deviceId,
         'status': 'queued',
         'fileName': safeName,
         'sha256': actualSha256,
       });
-    } on _UploadFailure catch (e) {
-      await output.close();
-      await _deleteIfExists(file);
-      return _sendError(request, e.status, e.code);
-    } catch (_) {
-      await output.close();
-      await _deleteIfExists(file);
-      rethrow;
+    } on _UploadFailure catch (error) {
+      return _sendError(request, error.status, error.code);
+    } finally {
+      if (ownedPath != null) await ManagedTemporaryFiles.release(ownedPath);
     }
+  }
+
+  Future<String?> _currentDeviceId() async {
+    final result = await commandBus.execute(
+      const OronBoxCommand(method: 'device.status'),
+    );
+    if (!result.ok || result.value is! Map) return null;
+    final device = (result.value as Map)['device'];
+    if (device is! Map) return null;
+    final id = device['address'];
+    return id is String && id.isNotEmpty ? id : null;
   }
 
   Future<void> _startDeviceLogExport(HttpRequest request) async {
     final body = await _readJson(request, maxBytes: 64 * 1024);
+    final session = _sessionFor(request)!;
+    final deviceId = body['deviceId']?.toString();
+    if (!_allowsDevice(session, deviceId)) {
+      return _sendError(request, 403, 'device_not_authorized');
+    }
+    if (deviceId != null && !_hasScope(session, 'device.control')) {
+      return _sendError(request, 403, 'scope_required');
+    }
     final operation = _LocalLogOperation(
       id: _newToken(),
-      deviceId: body['deviceId']?.toString(),
+      deviceId: deviceId,
+      allowedDevices: session.deviceAllowlist,
     );
     _logOperations[operation.id] = operation;
     unawaited(_runDeviceLogExport(operation));
@@ -775,10 +1010,14 @@ class LocalServer {
   }
 
   Future<void> _runDeviceLogExport(_LocalLogOperation operation) async {
+    bool isCurrent() =>
+        operation.finishedAt == null &&
+        identical(_logOperations[operation.id], operation);
     operation.state = LocalServerOperationState.running;
     operation.stage = 'preparing';
     final subscription = commandBus.events.listen((event) {
-      if (event.event != 'device.log.progress' ||
+      if (!isCurrent() ||
+          event.event != 'device.log.progress' ||
           event.data['operationId']?.toString() != operation.id) {
         return;
       }
@@ -799,10 +1038,15 @@ class LocalServer {
           method: 'device.logs.pull',
           params: {
             'operationId': operation.id,
-            if (operation.deviceId != null) 'deviceId': operation.deviceId,
+            '_localApiDeviceAllowlist': operation.allowedDevices,
+            if (operation.deviceId != null) ...{
+              'deviceId': operation.deviceId,
+              'device': operation.deviceId,
+            },
           },
         ),
       );
+      if (!isCurrent()) return;
       if (!result.ok) {
         operation.state = LocalServerOperationState.failed;
         operation.finishedAt = _now().toUtc();
@@ -821,11 +1065,8 @@ class LocalServer {
         throw StateError('device returned an empty log archive');
       }
       final extension = _archiveExtension(value['name']?.toString() ?? '');
-      final archive = File(
-        '${_stagingDirectory!.path}${Platform.pathSeparator}device-log-${operation.id}$extension',
-      );
-      await _writeAtomic(archive, bytes);
-      operation.archiveFile = archive;
+      operation.archiveFile = await _stageLog('device-log$extension', bytes);
+      if (!isCurrent()) return;
 
       final currentBytes = Uint8List.fromList(
         (value['currentLogBytes'] as List? ?? const [])
@@ -837,11 +1078,8 @@ class LocalServer {
           ? currentBytes
           : extractCurrentDeviceLog(bytes);
       if (extracted != null && extracted.isNotEmpty) {
-        final current = File(
-          '${_stagingDirectory!.path}${Platform.pathSeparator}device-log-${operation.id}-tmp.log',
-        );
-        await _writeAtomic(current, extracted);
-        operation.currentLogFile = current;
+        operation.currentLogFile = await _stageLog('device-tmp.log', extracted);
+        if (!isCurrent()) return;
       }
 
       operation.state = LocalServerOperationState.completed;
@@ -855,6 +1093,7 @@ class LocalServer {
         operation.currentPart = operation.totalParts;
       }
     } catch (error) {
+      if (!isCurrent()) return;
       operation.state = LocalServerOperationState.failed;
       operation.finishedAt = _now().toUtc();
       operation.stage = 'failed';
@@ -862,7 +1101,21 @@ class LocalServer {
       operation.error = {'code': 'internal', 'message': error.toString()};
     } finally {
       await subscription.cancel();
+      if (operation.state != LocalServerOperationState.completed) {
+        await _releaseLogFiles(operation);
+      }
     }
+  }
+
+  Future<File> _stageLog(String name, List<int> bytes) async {
+    final path = await ManagedTemporaryFiles.create(
+      TemporaryFilePurpose.deviceLogs,
+      name,
+      (path) async {
+        await File(path).writeAsBytes(bytes, flush: true);
+      },
+    );
+    return File(path);
   }
 
   Future<void> _executeDeviceCommand(
@@ -870,22 +1123,39 @@ class LocalServer {
     String method, {
     Map<String, Object?> params = const {},
   }) async {
-    final deviceId = request.uri.queryParameters['deviceId'];
-    if (deviceId != null && deviceId.trim().isNotEmpty) {
-      final session = _sessionFor(request);
-      if (session == null || !_hasScope(session, 'device.control')) {
-        return _sendError(request, 403, 'scope_required');
-      }
-      final connected = await commandBus.execute(
-        OronBoxCommand(method: 'device.connect', params: {'device': deviceId}),
-      );
-      if (!connected.ok) return _sendCommandFailure(request, connected);
+    final deviceId =
+        (params['device'] ?? request.uri.queryParameters['deviceId'])
+            ?.toString()
+            .trim();
+    final session = _sessionFor(request)!;
+    if (!_allowsDevice(session, deviceId)) {
+      return _sendError(request, 403, 'device_not_authorized');
+    }
+    if (deviceId != null &&
+        deviceId.isNotEmpty &&
+        !_hasScope(session, 'device.control')) {
+      return _sendError(request, 403, 'scope_required');
     }
     return _executeJson(
       request,
-      OronBoxCommand(method: method, params: params),
+      OronBoxCommand(
+        method: method,
+        params: {
+          ...params,
+          if (deviceId != null && deviceId.isNotEmpty) 'device': deviceId,
+          '_localApiDeviceAllowlist': session.deviceAllowlist,
+        },
+      ),
     );
   }
+
+  bool _allowsDevice(LocalServerSession session, String? deviceId) =>
+      deviceId == null ||
+      deviceId.isEmpty ||
+      session.deviceAllowlist.isEmpty ||
+      session.deviceAllowlist.any(
+        (allowed) => allowed.toLowerCase() == deviceId.toLowerCase(),
+      );
 
   LocalServerSession? _sessionFor(HttpRequest request) {
     final value = request.headers.value('authorization');
@@ -921,7 +1191,14 @@ class LocalServer {
   }
 
   void _sendCommandFailure(HttpRequest request, CommandResult result) {
-    _sendJson(request, 502, {'error': result.error?.toJson()});
+    final status = switch (result.error?.code) {
+      'forbidden' => 403,
+      'no_device' => 409,
+      'canopus_transport_unavailable' => 409,
+      'canopus_timeout' => 504,
+      _ => 502,
+    };
+    _sendJson(request, status, {'error': result.error?.toJson()});
   }
 
   void _sendError(
@@ -963,19 +1240,18 @@ class LocalServer {
     await response.addStream(file.openRead());
     await response.close();
   }
-
-  Future<void> _writeAtomic(File target, List<int> bytes) async {
-    final temporary = File('${target.path}.part');
-    await temporary.writeAsBytes(bytes, flush: true);
-    await temporary.rename(target.path);
-  }
 }
 
 class _LocalLogOperation {
-  _LocalLogOperation({required this.id, this.deviceId});
+  _LocalLogOperation({
+    required this.id,
+    this.deviceId,
+    this.allowedDevices = const [],
+  });
 
   final String id;
   final String? deviceId;
+  final List<String> allowedDevices;
   LocalServerOperationState state = LocalServerOperationState.queued;
   String? stage;
   String? message;
@@ -1037,17 +1313,13 @@ class _DigestSink implements Sink<Digest> {
 String _safeFileName(String value) {
   final normalized = value.replaceAll('\\', '/');
   final name = normalized.split('/').last.trim();
-  if (name.isEmpty || name == '.' || name == '..') return 'resource.rpk';
-  return name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+  if (name.isEmpty || name.startsWith('.')) return 'resource.bin';
+  return name.replaceAll(RegExp(r'[\x00-\x1f\x7f<>:"|?*]'), '_');
 }
 
 String _newToken() {
   final random = List<int>.generate(32, (_) => Random.secure().nextInt(256));
   return base64Url.encode(random).replaceAll('=', '');
-}
-
-Future<void> _deleteIfExists(File file) async {
-  if (await file.exists()) await file.delete();
 }
 
 String _archiveExtension(String name) {
@@ -1056,4 +1328,28 @@ String _archiveExtension(String name) {
   if (lower.endsWith('.tgz')) return '.tgz';
   if (lower.endsWith('.zip')) return '.zip';
   return '.bin';
+}
+
+class _LocalEventSubscription {
+  _LocalEventSubscription({
+    required this.token,
+    required this.events,
+    required this.fields,
+  });
+
+  final String token;
+  final Set<String> events;
+  final Map<String, Set<String>> fields;
+  final frames = Queue<String>();
+  int pendingCharacters = 0;
+  bool writing = false;
+
+  bool matches(CommandEvent event) {
+    if (events.isNotEmpty && !events.contains(event.event)) return false;
+    return fields.entries.every((entry) {
+      final value = event.data[entry.key];
+      return (value is String || value is bool || value is num) &&
+          entry.value.contains(value.toString());
+    });
+  }
 }

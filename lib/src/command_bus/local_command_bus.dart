@@ -130,6 +130,31 @@ class LocalCommandBus
       ),
     );
     _deviceEventSubscription = _manager.deviceEvents.listen((event) {
+      if (event is CanopusConnectMessage) {
+        _events.add(
+          CommandEvent(
+            canopusConnectMessageEvent,
+            data: {
+              'deviceId': event.deviceId,
+              'moduleId': event.module,
+              'payload': event.payload.toList(growable: false),
+              'isText': event.isText,
+            },
+          ),
+        );
+      } else if (event is CanopusCommandResponse) {
+        _events.add(
+          CommandEvent(
+            canopusResponseEvent,
+            data: {
+              'deviceId': event.deviceId,
+              'opcode': event.opcode,
+              'requestId': event.requestId,
+              'result': event.result,
+            },
+          ),
+        );
+      }
       if (event case XiaomiFindPhoneRequested(:final finding)) {
         // Handle the native reaction at the backend boundary. The GUI adapter
         // can be paused or absent while Android is in the background, but the

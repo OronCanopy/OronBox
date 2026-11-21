@@ -59,7 +59,6 @@ void main() {
         identityStore: LocalServerIdentityStore(
           directoryProvider: () async => root,
         ),
-        temporaryDirectoryProvider: () async => root,
         onChanged: () => changedCount++,
       );
 

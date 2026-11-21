@@ -117,7 +117,6 @@ class LocalServerRuntime {
     this.platform = 'unknown',
     this.port = defaultLocalServerPort,
     LocalServerIdentityStore? identityStore,
-    this.temporaryDirectoryProvider,
     this.onChanged,
     this.onPairingRequested,
   }) : _identityStore = identityStore ?? LocalServerIdentityStore();
@@ -127,7 +126,6 @@ class LocalServerRuntime {
   final String platform;
   final int port;
   final LocalServerIdentityStore _identityStore;
-  final Future<Directory> Function()? temporaryDirectoryProvider;
   final void Function()? onChanged;
   final void Function(LocalServerPairingRequest pairing)? onPairingRequested;
 
@@ -161,7 +159,6 @@ class LocalServerRuntime {
       host: InternetAddress.anyIPv4,
       port: port,
       commandBus: commandBus,
-      temporaryDirectoryProvider: temporaryDirectoryProvider,
       authorizedClients: authorized,
       onAuthorizationChanged: () => _queueSaveAuthorizedClients(server),
       onChanged: onChanged,

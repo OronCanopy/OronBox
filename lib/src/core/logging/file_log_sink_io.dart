@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:oronbox/src/core/services/build_info_service.dart';
 
-const _androidLogsChannel = MethodChannel('oronbox/logs');
+const _androidLogsChannel = MethodChannel('org.oroncanopy.oronbox/logs');
 
 bool _isManagedLogFile(File file) {
   final name = file.uri.pathSegments.last;
