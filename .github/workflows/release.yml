@@ -243,12 +243,6 @@ jobs:
             libbluetooth-dev libayatana-appindicator3-dev \
             dpkg-dev rpm flatpak flatpak-builder
 
-      - name: Install ARM64 audio dependencies
-        if: matrix.arch == 'arm64'
-        run: |
-          source tool/build_common.sh
-          retry_cmd sudo apt-get install -y libflac-dev libogg-dev libopus-dev libvorbis-dev
-
       - name: Install dependencies
         run: |
           source tool/build_common.sh

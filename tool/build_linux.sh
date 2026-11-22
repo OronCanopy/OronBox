@@ -221,17 +221,13 @@ build_deb() {
 
   local deb_version
   deb_version="$(deb_upstream_version "${VERSION}")-1"
-  local deb_audio_depends=""
-  if [[ "${ABI}" == "aarch64" ]]; then
-    deb_audio_depends=", libflac12 | libflac12t64, libogg0, libopus0, libvorbis0a, libvorbisfile3"
-  fi
   cat > "${deb_root}/DEBIAN/control" <<EOF
 Package: ${APP_NAME}
 Version: ${deb_version}
 Section: utils
 Priority: optional
 Architecture: ${DEB_ARCH}
-Depends: libsecret-1-0, libgtk-3-0, libblkid1, liblzma5, libasound2 | libasound2t64${deb_audio_depends}, libwebkit2gtk-4.1-0, bluez
+Depends: libsecret-1-0, libgtk-3-0, libblkid1, liblzma5, libasound2 | libasound2t64, libwebkit2gtk-4.1-0, bluez
 Maintainer: ${MAINTAINER}
 Description: ${DESCRIPTION}
 EOF
@@ -260,10 +256,6 @@ build_rpm() {
   local rpm_top="${STAGING_ROOT}/rpm"
   local rpm_version rpm_release
   read -r rpm_version rpm_release <<< "$(rpm_version_release "${VERSION}")"
-  local rpm_audio_requires=""
-  if [[ "${ABI}" == "aarch64" ]]; then
-    rpm_audio_requires=$'Requires:       flac-libs\nRequires:       libogg\nRequires:       opus\nRequires:       libvorbis'
-  fi
   rm -rf "${rpm_top}"
   mkdir -p "${rpm_top}"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
   mkdir -p "${rpm_top}/rpmdb"
@@ -279,7 +271,6 @@ URL:            ${HOMEPAGE}
 BuildArch:      ${RPM_ARCH}
 Requires:       libsecret
 Requires:       alsa-lib
-${rpm_audio_requires}
 
 %description
 ${DESCRIPTION}
@@ -333,10 +324,6 @@ build_arch() {
 
   local arch_root="${STAGING_ROOT}/arch"
   local arch_pkgext=".pkg.tar.zst"
-  local arch_audio_deps="'alsa-lib'"
-  if [[ "${ABI}" == "aarch64" ]]; then
-    arch_audio_deps="${arch_audio_deps} 'flac' 'libogg' 'opus' 'libvorbis'"
-  fi
   rm -rf "${arch_root}"
   mkdir -p "${arch_root}"
   prepare_desktop_file "${STAGING_ROOT}/arch-desktop/${DESKTOP_FILE}"
@@ -350,7 +337,7 @@ pkgdesc="${DESCRIPTION}"
 arch=('${RPM_ARCH}')
 url="${HOMEPAGE}"
 license=('${LICENSE}')
-depends=('libsecret' 'gtk3' 'libblockdev' 'xz' ${arch_audio_deps} 'webkit2gtk-4.1' 'bluez')
+depends=('libsecret' 'gtk3' 'libblockdev' 'xz' 'alsa-lib' 'webkit2gtk-4.1' 'bluez')
 options=('!debug')
 source=()
 

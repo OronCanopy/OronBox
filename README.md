@@ -121,27 +121,11 @@ npx oronbox-cli pair
 fvm flutter pub get --enforce-lockfile
 ```
 
-Debian / Ubuntu 依赖：
-
-```sh
-sudo apt install libsecret-1-dev clang cmake ninja-build pkg-config zip curl \
-  libgtk-3-dev libx11-dev libxi-dev libblkid-dev liblzma-dev libasound2-dev libwebkit2gtk-4.1-dev \
-  libbluetooth-dev libayatana-appindicator3-dev dpkg-dev rpm flatpak flatpak-builder
-```
-
-aarch64 另需以下依赖：
-
-```sh
-sudo apt install libflac-dev libogg-dev libopus-dev libvorbis-dev
-```
-
-其他发行版请按上面的清单安装对应的软件包，并按打包格式准备 `dpkg-deb`、`rpmbuild`、`makepkg`、`linuxdeploy`、`appimagetool` 或 `flatpak-builder`
-
-Windows：Visual Studio 2022（C++ 桌面工作负载）；WebView2 SDK 由 `webview_all` 插件管理
-
-macOS：Xcode，仅能在 macOS 主机上构建
-
-Android / Web：无额外依赖
+- **Linux**　`libsecret-1-dev` `clang` `cmake` `ninja-build` `pkg-config` `zip` `curl` `libgtk-3-dev` `libx11-dev` `libxi-dev` `libblkid-dev` `liblzma-dev` `libasound2-dev` `libwebkit2gtk-4.1-dev` `libbluetooth-dev` `libayatana-appindicator3-dev`
+  - 按打包格式准备 `dpkg-deb`（DEB）、`rpmbuild`（RPM）、`makepkg`（Arch）、`linuxdeploy` 或 `appimagetool`（AppImage）、`flatpak-builder` 与 GNOME SDK（Flatpak）
+- **Windows**　Visual Studio 2022（C++ 桌面工作负载），WebView2 SDK 由 `webview_all` 插件管理
+- **macOS**　Xcode，仅能在 macOS 主机上构建
+- **Android / Web**　无额外依赖
 
 ### 一键构建
 
@@ -169,7 +153,7 @@ tool/build_linux.sh [--format tar.gz|deb|rpm|arch|appimage|flatpak|all] [--abi x
 ```
 
 - 缺省时打包全部可用格式，`--abi` 缺省取宿主架构
-- 在 x86_64 上交叉编译 aarch64 时，将 `ORONBOX_LINUX_ARM64_SYSROOT` 指向 arm64 sysroot。Debian / Ubuntu 的 sysroot 需包含 `libgtk-3-dev`、`libx11-dev`、`libxi-dev`、`libwebkit2gtk-4.1-dev`、`libasound2-dev`、`libflac-dev`、`libogg-dev`、`libopus-dev`、`libvorbis-dev`。交叉模式产出 tar.gz / deb / rpm / arch
+- 在 x86_64 上交叉编译 aarch64 时，将 `ORONBOX_LINUX_ARM64_SYSROOT` 指向包含 Linux 目标架构开发库的 arm64 sysroot。交叉模式可产出 `tar.gz`、DEB、RPM 和 Arch 包
 
 #### macOS（仅 macOS 宿主）
 

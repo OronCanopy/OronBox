@@ -120,27 +120,11 @@ Install the Flutter version specified in `.fvmrc` with [FVM](https://fvm.app), t
 fvm flutter pub get --enforce-lockfile
 ```
 
-Debian / Ubuntu dependencies:
-
-```sh
-sudo apt install libsecret-1-dev clang cmake ninja-build pkg-config zip curl \
-  libgtk-3-dev libx11-dev libxi-dev libblkid-dev liblzma-dev libasound2-dev libwebkit2gtk-4.1-dev \
-  libbluetooth-dev libayatana-appindicator3-dev dpkg-dev rpm flatpak flatpak-builder
-```
-
-aarch64 also requires these packages:
-
-```sh
-sudo apt install libflac-dev libogg-dev libopus-dev libvorbis-dev
-```
-
-On other distributions, install the equivalents of the packages above and the tools for your package formats (`dpkg-deb`, `rpmbuild`, `makepkg`, `linuxdeploy`, `appimagetool`, or `flatpak-builder`).
-
-Windows: Visual Studio 2022 (Desktop development with C++); the WebView2 SDK is managed by the `webview_all` plugin
-
-macOS: Xcode, macOS hosts only
-
-Android / Web: no extra dependencies
+- **Linux** — `libsecret-1-dev` `clang` `cmake` `ninja-build` `pkg-config` `zip` `curl` `libgtk-3-dev` `libx11-dev` `libxi-dev` `libblkid-dev` `liblzma-dev` `libasound2-dev` `libwebkit2gtk-4.1-dev` `libbluetooth-dev` `libayatana-appindicator3-dev`
+  - For packaging, use `dpkg-deb` (DEB), `rpmbuild` (RPM), `makepkg` (Arch), `linuxdeploy` or `appimagetool` (AppImage), or `flatpak-builder` with the GNOME SDK (Flatpak)
+- **Windows** — Visual Studio 2022 (Desktop development with C++). The `webview_all` plugin manages the WebView2 SDK
+- **macOS** — Xcode, macOS hosts only
+- **Android / Web** — No extra dependencies
 
 ### Build everything
 
@@ -168,7 +152,7 @@ tool/build_linux.sh [--format tar.gz|deb|rpm|arch|appimage|flatpak|all] [--abi x
 ```
 
 - By default builds all available formats; `--abi` defaults to the host architecture
-- To cross-build Linux aarch64 on x86_64, point `ORONBOX_LINUX_ARM64_SYSROOT` to an arm64 sysroot. A Debian / Ubuntu sysroot needs `libgtk-3-dev`, `libx11-dev`, `libxi-dev`, `libwebkit2gtk-4.1-dev`, `libasound2-dev`, `libflac-dev`, `libogg-dev`, `libopus-dev`, and `libvorbis-dev`. Cross-builds produce tar.gz / deb / rpm / arch packages.
+- To cross-build Linux aarch64 on x86_64, point `ORONBOX_LINUX_ARM64_SYSROOT` to an arm64 sysroot containing the Linux development libraries for the target architecture. Cross-builds can produce `tar.gz`, DEB, RPM, and Arch packages.
 
 #### macOS (macOS hosts only)
 
